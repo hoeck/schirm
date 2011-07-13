@@ -160,96 +160,122 @@ ShellInABox.prototype.reconnect = function() {
 };
 
 ShellInABox.prototype.sendRequest = function(request) {
-  if (request == undefined) {
-    request                  = new XMLHttpRequest();
-  }
-  request.open('POST', this.url + '?', true);
-  request.setRequestHeader('Cache-Control', 'no-cache');
-  request.setRequestHeader('Content-Type',
-                           'application/x-www-form-urlencoded; charset=utf-8');
-  var content                = 'width=' + this.terminalWidth +
-                               '&height=' + this.terminalHeight +
-                               (this.session ? '&session=' +
-                                encodeURIComponent(this.session) : '&rooturl='+
-                                encodeURIComponent(this.rooturl));
-  request.setRequestHeader('Content-Length', content.length);
+  // if (request == undefined) {
+  //   request                  = new XMLHttpRequest();
+  // }
+  // request.open('POST', this.url + '?', true);
+  // request.setRequestHeader('Cache-Control', 'no-cache');
+  // request.setRequestHeader('Content-Type',
+  //                          'application/x-www-form-urlencoded; charset=utf-8');
+  // var content                = 'width=' + this.terminalWidth +
+  //                              '&height=' + this.terminalHeight +
+  //                              (this.session ? '&session=' +
+  //                               encodeURIComponent(this.session) : '&rooturl='+
+  //                               encodeURIComponent(this.rooturl));
+  // request.setRequestHeader('Content-Length', content.length);
 
-  request.onreadystatechange = function(shellInABox) {
-    return function() {
-             try {
-               return shellInABox.onReadyStateChange(request);
-             } catch (e) {
-               shellInABox.sessionClosed();
-             }
-           }
-    }(this);
-  request.send(content);
+  // request.onreadystatechange = function(shellInABox) {
+  //   return function() {
+  //            try {
+  //              return shellInABox.onReadyStateChange(request);
+  //            } catch (e) {
+  //              shellInABox.sessionClosed();
+  //            }
+  //          }
+  //   }(this);
+  // request.send(content);
+
+  // use console.log to talk to the python backend
+  var content = {'width':this.terminalWidth,
+                 'height':this.terminalHeight,
+                 'session':this.session};
+  console.log("schirm" + JSON.stringify(content));
 };
 
 ShellInABox.prototype.onReadyStateChange = function(request) {
-  if (request.readyState == 4 /* XHR_LOADED */) {
-    if (request.status == 200) {
-      this.connected = true;
-      var response   = eval('(' + request.responseText + ')');
-      if (response.data) {
-        this.vt100(response.data);
-      }
+  // if (request.readyState == 4 /* XHR_LOADED */) {
+  //   if (request.status == 200) {
+  //     this.connected = true;
+  //     var response   = eval('(' + request.responseText + ')');
+  //     if (response.data) {
+  //       this.vt100(response.data);
+  //     }
 
-      if (!response.session ||
-          this.session && this.session != response.session) {
-        this.sessionClosed();
-      } else {
-        this.session = response.session;
-        this.sendRequest(request);
-      }
-    } else if (request.status == 0) {
-      // Time Out
-      this.sendRequest(request);
-    } else {
-      this.sessionClosed();
-    }
-  }
+  //     if (!response.session ||
+  //         this.session && this.session != response.session) {
+  //       this.sessionClosed();
+  //     } else {
+  //       this.session = response.session;
+  //       this.sendRequest(request);
+  //     }
+  //   } else if (request.status == 0) {
+  //     // Time Out
+  //     this.sendRequest(request);
+  //   } else {
+  //     this.sessionClosed();
+  //   }
+  // }
+    
+  // the python backend uses webkit_wrapper.Webkit.exec_js to invoke:
+  //   this.schirmBackendResponse(data);
+  // where response data is a json-encoded string read from the pty
 };
 
+ShellInABox.prototype.schirmBackendResponse = function(data) {
+    // make ShellInABox think its 'connected'
+    this.connected = true;
+    this.session = "fakesession";
+    this.keysInFlight = false;
+    // interprets a string as terminal data
+    this.vt100(data);
+}
+
 ShellInABox.prototype.sendKeys = function(keys) {
-  if (!this.connected) {
-    return;
-  }
-  if (this.keysInFlight || this.session == undefined) {
-    this.pendingKeys          += keys;
-  } else {
-    this.keysInFlight          = true;
-    keys                       = this.pendingKeys + keys;
-    this.pendingKeys           = '';
-    var request                = new XMLHttpRequest();
-    request.open('POST', this.url + '?', true);
-    request.setRequestHeader('Cache-Control', 'no-cache');
-    request.setRequestHeader('Content-Type',
-                           'application/x-www-form-urlencoded; charset=utf-8');
-    var content                = 'width=' + this.terminalWidth +
-                                 '&height=' + this.terminalHeight +
-                                 '&session=' +encodeURIComponent(this.session)+
-                                 '&keys=' + encodeURIComponent(keys);
-    request.setRequestHeader('Content-Length', content.length);
-    request.onreadystatechange = function(shellInABox) {
-      return function() {
-               try {
-                 return shellInABox.keyPressReadyStateChange(request);
-               } catch (e) {
-               }
-             }
-      }(this);
-    request.send(content);
-  }
+  // if (!this.connected) {
+  //   return;
+  // }
+  // if (this.keysInFlight || this.session == undefined) {
+  //   this.pendingKeys          += keys;
+  // } else {
+  //   this.keysInFlight          = true;
+  //   keys                       = this.pendingKeys + keys;
+  //   this.pendingKeys           = '';
+  //   var request                = new XMLHttpRequest();
+  //   request.open('POST', this.url + '?', true);
+  //   request.setRequestHeader('Cache-Control', 'no-cache');
+  //   request.setRequestHeader('Content-Type',
+  //                          'application/x-www-form-urlencoded; charset=utf-8');
+  //   var content                = 'width=' + this.terminalWidth +
+  //                                '&height=' + this.terminalHeight +
+  //                                '&session=' +encodeURIComponent(this.session)+
+  //                                '&keys=' + encodeURIComponent(keys);
+  //   request.setRequestHeader('Content-Length', content.length);
+  //   request.onreadystatechange = function(shellInABox) {
+  //     return function() {
+  //              try {
+  //                return shellInABox.keyPressReadyStateChange(request);
+  //              } catch (e) {
+  //              }
+  //            }
+  //     }(this);
+  //   request.send(content);
+
+  // send the keys using console.log
+  // no answer required
+  var content = {'width': this.terminalWidth,
+                 'height': this.terminalHeight,
+                 'session': this.session,
+                 'keys': keys};
+  console.log("schirm" + JSON.stringify(content));
 };
 
 ShellInABox.prototype.keyPressReadyStateChange = function(request) {
-  if (request.readyState == 4 /* XHR_LOADED */) {
-    this.keysInFlight = false;
-    if (this.pendingKeys) {
-      this.sendKeys('');
-    }
-  }
+  // if (request.readyState == 4 /* XHR_LOADED */) {
+  //   this.keysInFlight = false;
+  //   if (this.pendingKeys) {
+  //     this.sendKeys('');
+  //   }
+  // }
 };
 
 ShellInABox.prototype.keysPressed = function(ch) {
@@ -286,6 +312,7 @@ ShellInABox.prototype.keysPressed = function(ch) {
 };
 
 ShellInABox.prototype.resized = function(w, h) {
+  console.log("RESIZED");
   // Do not send a resize request until we are fully initialized.
   if (this.session) {
     // sendKeys() always transmits the current terminal size. So, flush all

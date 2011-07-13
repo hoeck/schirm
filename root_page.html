@@ -50,31 +50,31 @@
     <title>Shell In A Box</title>
     <script type="text/javascript"><!--
       // Check that our URL is well-formed. Redirect to HTTPS if necessary
-      (function() {
-        var hasSSL = %s;
-        var path   = document.location.pathname;
-        var proto  = (hasSSL || (document.location.protocol == 'https:'))
-                     ? 'https:' : 'http:';
-        if (path.match(/plain/)) {
-          proto   = 'http:';
-        }
-        path      = path.replace(/\/+/, '/').replace(/\/$/, '');
-        if (!path.match(/(?:\/|\/plain)$/)) {
-          path   += '/';
-        }
-        var url   = proto + '//' + document.location.host + path;
-        if (document.location.search != '' &&
-            document.location.search != '?') {
-          url    += document.location.search;
-        }
-        if (document.location.hash != '' &&
-            document.location.hash != '#') {
-          url    += document.location.hash;
-        }
-        if (url != document.location.href) {
-          document.location.replace(url);
-        }
-      })();
+//      (function() {
+//        var hasSSL = %s;
+//        var path   = document.location.pathname;
+//        var proto  = (hasSSL || (document.location.protocol == 'https:'))
+//                     ? 'https:' : 'http:';
+//        if (path.match(/plain/)) {
+//          proto   = 'http:';
+//        }
+//        path      = path.replace(/\/+/, '/').replace(/\/$/, '');
+//        if (!path.match(/(?:\/|\/plain)$/)) {
+//          path   += '/';
+//        }
+//        var url   = proto + '//' + document.location.host + path;
+//        if (document.location.search != '' &&
+//            document.location.search != '?') {
+//          url    += document.location.search;
+//        }
+//        if (document.location.hash != '' &&
+//            document.location.hash != '#') {
+//          url    += document.location.hash;
+//        }
+//        if (url != document.location.href) {
+//          document.location.replace(url);
+//        }
+//      })();
     --></script>
     <link rel="stylesheet" href="styles.css" type="text/css">
     <style type="text/css">
@@ -100,14 +100,14 @@
         }
       })();
     --></script>
-    <link rel="shortcut icon" href="favicon.ico" type="image/x-icon">
-    <script type="text/javascript" src="ShellInABox.js"></script>
+    <script type="text/javascript" src="vt100.js"></script>
+    <script type="text/javascript" src="shell_in_a_box.js"></script>
   </head>
   <!-- Load ShellInABox from a timer as Konqueror sometimes fails to
        correctly deal with the enclosing frameset (if any), if we do not
        do this
    -->
-  <body onload="setTimeout('new ShellInABox()', 100)"
+  <body onload="setTimeout('document.my_shellinabox = new ShellInABox()', 100)"
         scroll="no"><noscript>JavaScript
     must be enabled for ShellInABox</noscript></body>
 </html>

@@ -110,7 +110,7 @@ function VT100(container) {
     '(?:[1-9][0-9]{0,2}(?:[.][1-9][0-9]{0,2}){3}|' +
     '[0-9a-fA-F]{0,4}(?::{1,2}[0-9a-fA-F]{1,4})+|' +
     '(?!-)[^[!"#$%&\'()*+,/:;<=>?@\\^_`{|}~\u0000- \u007F-\u00A0]+)' +
-
+    // '" font lock
     // Port
     '(?::[1-9][0-9]*)?' +
 
@@ -840,24 +840,24 @@ VT100.prototype.initializeElements = function(container) {
     // we might get a pointless warning that a suitable plugin is not yet
     // installed. If in doubt, we'd rather just stay silent.
     var embed                  = '';
-    try {
-      if (typeof navigator.mimeTypes["audio/x-wav"].enabledPlugin.name !=
-          'undefined') {
-        embed                  = typeof suppressAllAudio != 'undefined' &&
-                                 suppressAllAudio ? "" :
-        '<embed classid="clsid:02BF25D5-8C17-4B23-BC80-D3488ABDDC6B" ' +
-                       'id="beep_embed" ' +
-                       'src="beep.wav" ' +
-                       'autostart="false" ' +
-                       'volume="100" ' +
-                       'enablejavascript="true" ' +
-                       'type="audio/x-wav" ' +
-                       'height="16" ' +
-                       'width="200" ' +
-                       'style="position:absolute;left:-1000px;top:-1000px" />';
-      }
-    } catch (e) {
-    }
+    // try {
+    //   if (typeof navigator.mimeTypes["audio/x-wav"].enabledPlugin.name !=
+    //       'undefined') {
+    //     embed                  = typeof suppressAllAudio != 'undefined' &&
+    //                              suppressAllAudio ? "" :
+    //     '<embed classid="clsid:02BF25D5-8C17-4B23-BC80-D3488ABDDC6B" ' +
+    //                    'id="beep_embed" ' +
+    //                    'src="beep.wav" ' +
+    //                    'autostart="false" ' +
+    //                    'volume="100" ' +
+    //                    'enablejavascript="true" ' +
+    //                    'type="audio/x-wav" ' +
+    //                    'height="16" ' +
+    //                    'width="200" ' +
+    //                    'style="position:absolute;left:-1000px;top:-1000px" />';
+    //   }
+    // } catch (e) {
+    // }
 
     this.container.innerHTML   =
                        '<div id="reconnect" style="visibility: hidden">' +
@@ -892,7 +892,7 @@ VT100.prototype.initializeElements = function(container) {
                          (typeof suppressAllAudio != 'undefined' &&
                           suppressAllAudio ? "" :
                          embed + '<bgsound id="beep_bgsound" loop=1 />') +
-                          '<iframe id="layout" src="keyboard.html" />' +
+                          '<iframe id="layout" src="keyboard-layout.html" />' +
                         '</div>';
   }
 

@@ -16,6 +16,9 @@
 #   typical session stuff?
 #   body: "\007"
 
+
+
+# shellinabox server functions
 def decode_keyparam(keys): # 'keys' from the ajax GET
     # def no_hex_digit(c):
     #     return \
@@ -28,7 +31,8 @@ def decode_keyparam(keys): # 'keys' from the ajax GET
     #     return None
 
     try:
-        return map(int(map(str, keys[0::2], keys[1::2])))
+        ret = "".join(map(lambda a,b: chr(int(str(a) + str(b), 16)), keys[0::2], keys[1::2]))
+        return ret
     except ValueError:
         return None
     
@@ -53,9 +57,7 @@ def decode_keyparam(keys): # 'keys' from the ajax GET
   #                               (c1 & 0xF) + 9*(c1 > '9');
   #   }
 
-import os
-def write_keys(pty, keyparam):
-    os.write(pty, decode_keyparam(keys))
+
 
 # keycodes are written directly to the pty
 # if (write(session->pty, keyCodes, len) < 0 && errno == EAGAIN) {
@@ -127,44 +129,82 @@ def read_pty(pty):
 def json_escape(src):
     hexDigit = "0123456789ABCDEF"
 
-    if isinstance(src, str):
-        src = src.decode('utf-8') # to make ord working with unicode chars
-
     #// Encode the buffer using JSON string escaping
     dst = ""
     # char *dst                   = result;  the pointer into the string
     #ptr                         = buf;
     def unicode_escape(c):
-        return "u00" + ord(c)
+        return "\\u00%s" % ("%x" % ord(c)).rjust(2,'0')
 
     for c in src:
-        if x < ord(c):
+        if c < ord(' '):
             dst += "\\"
-            if x == "\b":
+            if c == "\b":
                 dst += "b"
-            elif x == "\f":
+            elif c == "\f":
                 dst += "f"
-            elif x == "\b":
+            elif c == "\b":
                 dst += "b"
-            elif x == "\r":
+            elif c == "\r":
                 dst += "r"
-            elif x == "\t":
+            elif c == "\t":
                 dst += "t"
             else:
-                dst = unicode_escape(c)
-        elif c == '"' or c == '\\' or c == '/':
+                dst += unicode_escape(c)
+        elif c in ['"','\\','/']:
             dst += "\\" + c
         elif ord(c) > 0x7f:
-            dst += \\ + unicode_escape(c)
+            dst += "\\" + unicode_escape(c)
         else:
             dst += c
+
     return dst
 
 
-# === getting a pty ===
-import os
-# man openpty
+def json_escape_all_u(src):
+    dst = ""
+    for c in src:
+        dst += "\\u00%s" % ("%x" % ord(c)).rjust(2,'0')
+    return dst
 
+import simplejson
+class Pty(object):
+            
+    def __init__(self):
+        pid, master = os.forkpty()
+        if pid == 0:
+            # child
+            os.execl("/bin/bash", "bash")
+        else:
+            # parent
+            pass
+        self._size = [0,0]
+        self._pty = master
 
-master, pty = os.openpty(...)
+    def write_keys(self, keyparam):
+        os.write(self._pty, decode_keyparam(keyparam))
 
+    def set_size(self, w, h):
+        oldw, oldh = self._size
+        if oldw != w or oldh != h and w > 0 and h > 0:
+            # TIOCSSIZE
+            #win = struct.pack('HHHH',0,0,0,0)
+            #fcntl.ioctl(pty, termios.TIOCGSIZE, win)
+            #w,h,x,y = struct.unpack('HHHH', win)
+            #win = struct.pack('HHHH', widht, height, x, y)
+            #fcntl.ioctl(pty, termios.TIOCSSIZE, win)
+
+            # TIOCGWINSZ
+            empty_win = struct.pack('HHHH',0,0,0,0)
+            win = fcntl.ioctl(self._pty, termios.TIOCGWINSZ, empty_win)
+            _h,_w,x,y = struct.unpack('HHHH', win)
+            #print "set size is:", [_w, _h], "my size is:", [w, h], "(",[oldw, oldh],")"
+            win = struct.pack('HHHH', h, w, x, y)
+            fcntl.ioctl(self._pty, termios.TIOCSWINSZ, win)
+
+            self._size = [w, h]
+    
+    def read(self):
+        #return json_escape(os.read(self._pty, 1024))
+        return json_escape_all_u(os.read(self._pty, 2048))
+        #return simplejson.dumps(os.read(self._pty, 1024))
