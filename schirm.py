@@ -8,8 +8,11 @@ import urllib
 import threading
 import simplejson
 
-from webkit_wrapper import GtkThread, launch_browser, establish_browser_channel
-import shellinabox
+from webkit_wrapper import GtkThread, launch_browser, establish_browser_channel, install_key_events
+# import shellinabox
+
+import term
+
 
 state = None
 gtkthread = None
@@ -66,21 +69,24 @@ def receive_handler(msg, pty):
 
         if d.get('keys'):
             pty.write_keys(d.get('keys'))
+        return True
     else:
-        return None
+        return False # not handled
 
+def keypress_cb(widget, event):
+    print "keypress:",event.time, event.keyval, event.string, event.string and ord(event.string)
 
 def webkit_event_loop():
-
-    pty = shellinabox.Pty()
 
     global run
     global gtkthread
     gtkthread = GtkThread()
       
-    browser = gtkthread.invoke_s(launch_browser)
+    window, browser = gtkthread.invoke_s(launch_browser)
     receive, execute = establish_browser_channel(gtkthread, browser)
 
+    #install_key_events(window, keypress_cb)
+    
     # handle links
     #gtkthread.invoke(lambda : browser.browser.connect('navigation-requested', lambda view, frame, networkRequest: 0))
     #gtkthread.invoke(lambda : browser.connect_navigation_requested(my_navigation_request_handler))
@@ -88,33 +94,51 @@ def webkit_event_loop():
     gtkthread.invoke(lambda : browser.connect('destroy', lambda *args, **kwargs: quit()))
     gtkthread.invoke(lambda : browser.connect('resource-request-starting', my_resource_requested_handler))
 
-    global state
-    state = dict(browser=browser, receive=receive, execute=execute)
-
+    pty = term.Pty()
+    gtkthread.invoke(lambda : install_key_events(window, lambda widget, event: pty.write(event.string)))
+    
+    global state # to make interactive development and debugging easier
+    state = dict(browser=browser,
+                 receive=receive,
+                 execute=execute,
+                 pty=pty)
+    
     # load shellinabox
-    file = os.path.abspath('root_page.html')
+    #file = os.path.abspath('root_page.html')
     #file = os.path.abspath("/var/www/index.html")
-    #file = os.path.abspath("foo.html")
+    file = os.path.abspath("foo.html")
     uri = 'file://' + urllib.pathname2url(file)
     browser.open_uri(uri)
 
-    t = threading.Thread(target=lambda : read_pty_loop(pty, execute))
+    t = threading.Thread(target=lambda : pty_loop(pty, execute))
     t.start()
 
     while run:
         msg = receive(block=True, timeout=1) # timeout to make waiting for events interruptible
         if msg:
             #print "received:", msg
-            receive_handler(msg, pty)
+            if receive_handler(msg, pty):
+                pass
+            elif msg == "show_webkit_inspector": # shows a blank window :/
+                gtkthread.invoke(browser.show_inspector)
 
 
-def read_pty_loop(pty, execute):
+def pty_loop(pty, execute):
     global run
     while run:
         #print "reading ...."
         response = pty.read()
+        pty.stream.feed(response.decode('utf-8','replace'))
+        #print "response-len", len(response)
+        #print "response:", response.decode('utf-8','replace').__repr__()
+        #print "response: ", response.__repr__()
+        #pty.stream.feed(response)
         #print "read response:", len(response), "bytes, type:", type(response), '"' in response
-        execute('''document.my_shellinabox.schirmBackendResponse("%s");''' % response)
+        #print "display-len:", len(pty.screen.display)
+        #print term.json_escape_all_u("\n".join(pty.screen.display))
+        #print "\n".join(pty.screen.display)
+        #print pty.screen.display.__repr__()
+        execute('''writeTerminalScreen("%s");''' % term.json_escape_all_u("\n".join(pty.screen.display)))
         #execute("console.log([document.my_shellinabox.terminalWidth, document.my_shellinabox.terminalHeight]);")
 
 
@@ -134,17 +158,41 @@ if __name__ == '__main__':
     main()
 
 
+## how to implement the html functionality:
+# use the 'set mode' and 'reset mode' to turn html-mode on (embed the output in this mode in an <iframe>
 
-# todo next:
-# connect gtkthread.invoke(lambda : state['browser'].browser.connect('navigation-requested', lambda *args, **kwargs: False))
-# to not follw links automatically
+# RM - Reset Mode: ESC [ Ps ; Ps ; . . . ; Ps l
+# SM - Set Mode:   ESC [ Ps ; . . . ; Ps h
+
+# where ps are mode params
+# ?;number .. DEC private modes
+
+# normal-modes:
+# 0 .. error (ignored) ???
+# 20 .. line feed newline mode ???
+
+# how should the other terminal commands treat the embedded iframe?
+# new modes:
+# html-iframe, 21 .. inserts an <iframe><html><head/><body>
+#                    resettinig that mode inserts </body></html></iframe>
+#                    iframes to isolate used javascript
+#                    do not escape html chars (<,>,")
+# html-div, 22 .. wrap all output in a div, do not escape html chars (<,>,")
+#                 resetting closes the <div>
+#
+# treat all stuff created while a html-* mode was active as a single line???
 
 
-# don't follow links
-#gtkthread.invoke(lambda : browser.browser.connect('navigation-requested', lambda view, frame, networkRequest: 0))
+def enterIframeMode():
+    sys.stdout.write("\033[21h");
 
+def leaveIframeMode():
+    sys.stdout.write("\033[21l");
 
-# webtty (http://code.google.com/p/webtty) - no full terminal support, does only work in IE (---)
-# anyterm - technically the best but all C (-) -> hard to integrate (different plattforms??)
-# web-shell, ajaxterm (http://antony.lesuisse.org/software/ajaxterm/) - python (+), updates always the whole screen (--) -> no scroll history, anyterm has no utf-9 support (-)
-# shell-in-a-box - c (-), renders terminal in the browser, allows for fullscreen
+def testIframeMode():
+    try:
+        enterIframeMode()
+        print "<h1>a small step for a terminal</h1>"
+    finally:
+        leaveIframeMode()
+

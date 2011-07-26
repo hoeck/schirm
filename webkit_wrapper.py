@@ -23,6 +23,7 @@ class Webkit(object):
     def __init__(self, browser):
         self.browser = browser
         self.my_settings()
+        self._inspector = Inspector(self.browser.get_web_inspector())
 
     def exec_js(self, script):
         self.browser.execute_script(script)
@@ -52,12 +53,13 @@ class Webkit(object):
     def my_settings(self):
         # from https://github.com/mackstann/htpicker/blob/dabf5cb377dce9e4b05b39d2b2afa7bb1f11baa7/htpicker/browser.py (public domain)
         settings_values = (
-            ("enable-default-context-menu",           False, '1.1.18'),
+            ("enable-default-context-menu",           True,  '1.1.18'),
             ("enable-java-applet",                    False, '1.1.22'),
             ("enable-plugins",                        False, '???'   ),
             ("enable-universal-access-from-file-uris", True, '1.1.13'),
             ("enable-xss-auditor",                    False, '1.1.11'),
             ("tab-key-cycles-through-elements",       False, '1.1.17'),
+            ("enable-developer-extras",               True,  '1.1.17'),
         )
 
         settings = self.browser.get_settings()
@@ -70,6 +72,80 @@ class Webkit(object):
                     "{1}.  For best compatibility, use at least version "
                     "1.1.22.").format(key, version))
 
+    def _get_inspector(self):
+        if not hasattr(self,'_inspector'):
+            self._inspector = Inspector(self.browser.get_web_inspector())
+        return self._inspector
+
+    def show_inspector(self):
+        self._get_inspector().inspect()
+
+
+# from the python-webkit examples, gpl
+class Inspector (gtk.Window):
+    def __init__ (self, inspector):
+        """initialize the WebInspector class"""
+        gtk.Window.__init__(self)
+        self.set_default_size(600, 480)
+
+        self._web_inspector = inspector
+
+        self._web_inspector.connect("inspect-web-view",
+                                    self._inspect_web_view_cb)
+        self._web_inspector.connect("show-window",
+                                    self._show_window_cb)
+        self._web_inspector.connect("attach-window",
+                                    self._attach_window_cb)
+        self._web_inspector.connect("detach-window",
+                                    self._detach_window_cb)
+        self._web_inspector.connect("close-window",
+                                    self._close_window_cb)
+        self._web_inspector.connect("finished",
+                                    self._finished_cb)
+
+        self.connect("delete-event", self._close_window_cb)
+
+    def _inspect_web_view_cb (self, inspector, web_view):
+        """Called when the 'inspect' menu item is activated"""
+        scrolled_window = gtk.ScrolledWindow()
+        scrolled_window.props.hscrollbar_policy = gtk.POLICY_AUTOMATIC
+        scrolled_window.props.vscrollbar_policy = gtk.POLICY_AUTOMATIC
+        webview = webkit.WebView()
+        scrolled_window.add(webview)
+        scrolled_window.show_all()
+
+        self.add(scrolled_window)
+        return webview
+
+    def _show_window_cb (self, inspector):
+        """Called when the inspector window should be displayed"""
+        self.present()
+        return True
+
+    def _attach_window_cb (self, inspector):
+        """Called when the inspector should displayed in the same
+        window as the WebView being inspected
+        """
+        return False
+
+    def _detach_window_cb (self, inspector):
+        """Called when the inspector should appear in a separate window"""
+        return False
+
+    def _close_window_cb (self, inspector, view):
+        """Called when the inspector window should be closed"""
+        self.hide()
+        return True
+
+    def _finished_cb (self, inspector):
+        """Called when inspection is done"""
+        self._web_inspector = 0
+        self.destroy()
+        return False
+
+    def inspect(self):
+        self._show_window_cb(None)
+        self._inspect_web_view_cb(None, None)
 
 
 class GtkThread(object):
@@ -113,6 +189,10 @@ class GtkThread(object):
 def launch_browser():
 
     window = gtk.Window()
+    # prepare to receive keyboard and mouse events
+    window.set_events(gtk.gdk.KEY_PRESS_MASK
+                      | gtk.gdk.KEY_RELEASE_MASK)
+
     browser = Webkit.create()
 
     box = gtk.VBox(homogeneous=False, spacing=0)
@@ -153,7 +233,7 @@ def launch_browser():
 
     #browser.open_uri(uri)
 
-    return browser
+    return window, browser
 
 
 def establish_browser_channel(gtkthread, browser):
@@ -172,7 +252,8 @@ def establish_browser_channel(gtkthread, browser):
 
     def console_message(msg):
         message_queue.put(msg)
-        return 1 # do not invoke the default console message handler
+        #return 1 # do not invoke the default console message handler
+        return 0
 
     #browser.connect_title_changed(title_changed)
     browser.connect('console-message', lambda view, msg, *args: console_message(msg))
@@ -192,3 +273,23 @@ def establish_browser_channel(gtkthread, browser):
 
     return receive, execute
 
+
+def install_key_events(window, press_cb=None, release_cb=None):
+    """
+    Install keypress and keyrelease signal handlers on the given gtk
+    window.
+    
+    callback example:
+    def callback(widget, event):
+       # event has the following attributes:
+       print event.time, event.state, event.keyval, event.string
+    
+    see: http://www.pygtk.org/pygtk2tutorial/sec-EventHandling.html
+
+    window.set_events(gtk.gdk.KEY_PRESS_MASK | gtk.gdk.KEY_RELEASE_MASK)
+    must have been called immediately after creating the window
+    """
+    if press_cb:
+        window.connect('key_press_event', press_cb)
+    if release_cb:
+        window.connect('key_release_event', release_cb)

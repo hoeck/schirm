@@ -110,10 +110,10 @@ function VT100(container) {
     '(?:[1-9][0-9]{0,2}(?:[.][1-9][0-9]{0,2}){3}|' +
     '[0-9a-fA-F]{0,4}(?::{1,2}[0-9a-fA-F]{1,4})+|' +
     '(?!-)[^[!"#$%&\'()*+,/:;<=>?@\\^_`{|}~\u0000- \u007F-\u00A0]+)' +
-    // '" font lock
+    // '''''' font lock
     // Port
     '(?::[1-9][0-9]*)?' +
-
+ 
     // Path.
     '(?:/(?:(?![/ \u00A0]|[,.)}"\u0027!]+[ \u00A0]|[,.)}"\u0027!]+$).)*)*|' +
 
@@ -1317,6 +1317,7 @@ VT100.prototype.mousePosition = function(event) {
 };
 
 VT100.prototype.mouseEvent = function(event, type) {
+
   // If any text is currently selected, do not move the focus as that would
   // invalidate the selection.
   var selection    = this.selection();
@@ -1521,7 +1522,7 @@ VT100.prototype.insertBlankLine = function(y, color, style) {
     this.setTextContent(span, this.spaces(this.terminalWidth));
     line.appendChild(span);
   }
-  line.style.height      = this.cursorHeight + 'px';
+  // line.style.height      = this.cursorHeight + 'px';
   var console            = this.console[this.currentScreen];
   if (console.childNodes.length > y) {
     console.insertBefore(line, console.childNodes[y]);
@@ -1621,7 +1622,47 @@ VT100.prototype.truncateLines = function(width) {
   }
 };
 
+// like putString, but instead of inserting a string, insert a (closed, empty)
+// html node into the current line
+// switch into the iframe-mode to use this
+VT100.prototype.iframeModeWrite = function(string) {
+  this.currentIframe.contentDocument.write(string);
+}
+
+// vt100 speak: 'set'ing a mode: enable/enter that mode
+VT100.prototype.setIframeMode = function() {
+
+  this.putString(this.cursorX, this.cursorY, '\n', undefined);
+
+  var iframe                        = document.createElement('iframe');
+  var yIdx                          = this.cursorY + this.numScrollbackLines;
+  var vt_console                    = this.console[this.currentScreen];
+  // replace the current lines content with an iframe
+  line                              = vt_console.childNodes[yIdx];
+  line.replaceChild(iframe, line.firstChild);
+  this.currentIframe                = iframe; // indicates that the iframeMode is enabled
+  line.style.height = "auto";
+}
+
+// vt100 speak: 'reset'ting a mode: disable/leave that mode
+VT100.prototype.resetIframeMode = function() {
+  this.currentIframe                = undefined;
+  // moves the cursor to the next line?
+  this.putString(this.cursorX, this.cursorY, '\n', undefined);
+}
+
+// inserts the given text into the console window
+// it consists of DIVs containing SPANs for each styled text or a
+// single PRE + \r\n
+// todo: make it possible to insert complete html documents (wrapped in an iframe)
+// or single divs
 VT100.prototype.putString = function(x, y, text, color, style) {
+
+  if (this.currentIframe) {
+    this.iframeModeWrite(text);
+    return
+  }
+
   if (!color) {
     color                           = 'ansi0 bgAnsi15';
   }
@@ -3375,6 +3416,7 @@ VT100.prototype.set80_132Mode = function(state) {
 VT100.prototype.setMode = function(state) {
   for (var i = 0; i <= this.npar; i++) {
     if (this.isQuestionMark) {
+      // vt100 dec private modes
       switch (this.par[i]) {
       case  1: this.cursorKeyMode      = state;                      break;
       case  3: this.set80_132Mode(state);                            break;
@@ -3396,6 +3438,10 @@ VT100.prototype.setMode = function(state) {
       case  3: this.dispCtrl           = state;                      break;
       case  4: this.insertMode         = state;                      break;
       case  20:this.crLfMode           = state;                      break;
+      case  21:
+        // iframe mode
+        if (state) { this.setIframeMode();   }
+        else       { this.resetIframeMode(); }                       break;
       default:                                                       break;
       }
     }
@@ -3736,6 +3782,7 @@ VT100.prototype.csiM = function(number) {
   needWrap = false;
 };
 
+// note: handles colorcodes
 VT100.prototype.csim = function() {
   for (var i = 0; i <= this.npar; i++) {
     switch (this.par[i]) {
@@ -3815,6 +3862,8 @@ VT100.prototype.settermCommand = function() {
 };
 
 VT100.prototype.doControl = function(ch) {
+  // handles control characters, all non-control characters are
+  // processed in the vt100 function
   if (this.printing) {
     this.sendControlToPrinter(ch);
     return '';

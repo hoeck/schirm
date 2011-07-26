@@ -312,7 +312,6 @@ ShellInABox.prototype.keysPressed = function(ch) {
 };
 
 ShellInABox.prototype.resized = function(w, h) {
-  console.log("RESIZED");
   // Do not send a resize request until we are fully initialized.
   if (this.session) {
     // sendKeys() always transmits the current terminal size. So, flush all
@@ -381,7 +380,12 @@ ShellInABox.prototype.extendContextMenu = function(entries, actions) {
       }
     }
   }
-  
+
+  menuitem = document.createElement("li");
+  menuitem.innerText = "webkit inspector";
+  entries.appendChild(menuitem);
+  actions[actions.length] = function() { console.log("show_webkit_inspector"); }; // ipc call, see schirm.py
+
 };
 
 ShellInABox.prototype.about = function() {
