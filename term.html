@@ -1,0 +1,66 @@
+<html>
+<head>
+<link rel="stylesheet" href="term.css" type="text/css">
+<!--<script type="text/javascript" src="jquery-1.6.2.js">-->
+<!--<script type="text/javascript" src="term.js">-->
+<style type="text/css">
+#termdiv {
+  position: absolute;
+  top:0px;
+  bottom:0px;
+  left:0px;
+  right:0px;
+}
+
+pre {
+  margin:0px;
+}
+</style>
+
+<script type="text/javascript">
+function set_line(linenumber, content) {
+  var term = document.getElementById('term')
+  
+  if (!term.childNodes || !term.childNodes[linenumber]) {
+    for (var i=term.childNodes.length; i <= linenumber; i++) {
+      term.appendChild(document.createElement("span"));
+    }
+  }
+
+  term.childNodes[linenumber].innerHTML = content + "\n";
+};
+
+
+function resize_handler(event) {
+  var term = document.getElementById("termdiv");
+  var pre = document.getElementById("termpre");
+  var specimen = document.createElement("span");
+  specimen.innerHTML = "a";
+  //specimen.style = "display:noneg";
+  pre.appendChild(specimen);
+  
+  var cols  = Math.floor(term.clientWidth/specimen.offsetWidth);
+  var lines = Math.floor(term.clientHeight/specimen.offsetHeight);
+  //console.log("resized to [lines, cols]: [" + lines + " ," + cols + "]");
+  pre.removeChild(specimen);
+  
+  // IPC
+  console.log('schirm{"width":'+cols+',"height":'+lines+'}');
+}
+
+//function writeTerminalScreen(string) {
+//  var t = document.getElementById("term");
+//  t.textContent = string;
+//}
+//
+// $(document).ready(function() {
+//   // $("#button").click(function(){ console.log("clicked") });
+//   console.log("BLA");
+// });
+</script>
+
+</head>
+<body onresize="resize_handler()">
+<div id="termdiv" style="overflow-y:scroll"><pre id="termpre"><div id="term" style="overflow-x:hide;font-family:monospace"></div></pre></div>
+</body>
+</html>

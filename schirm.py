@@ -62,13 +62,11 @@ def receive_handler(msg, pty):
         d = simplejson.loads(msg[6:])
 
         # always set size
-        w = d.get('width',0)
-        h = d.get('height',0)
+        w = d.get('width')
+        h = d.get('height')
         if w and h:
             pty.set_size(int(w), int(h))
 
-        if d.get('keys'):
-            pty.write_keys(d.get('keys'))
         return True
     else:
         return False # not handled
@@ -94,7 +92,7 @@ def webkit_event_loop():
     gtkthread.invoke(lambda : browser.connect('destroy', lambda *args, **kwargs: quit()))
     gtkthread.invoke(lambda : browser.connect('resource-request-starting', my_resource_requested_handler))
 
-    pty = term.Pty()
+    pty = term.Pty([80,24])
     gtkthread.invoke(lambda : install_key_events(window, lambda widget, event: pty.write(event.string)))
     
     global state # to make interactive development and debugging easier
@@ -106,7 +104,8 @@ def webkit_event_loop():
     # load shellinabox
     #file = os.path.abspath('root_page.html')
     #file = os.path.abspath("/var/www/index.html")
-    file = os.path.abspath("foo.html")
+    #file = os.path.abspath("foo.html")
+    file = os.path.abspath("term.html")
     uri = 'file://' + urllib.pathname2url(file)
     browser.open_uri(uri)
 
@@ -125,21 +124,16 @@ def webkit_event_loop():
 
 def pty_loop(pty, execute):
     global run
+    execute("resize_handler();")
     while run:
         #print "reading ...."
         response = pty.read()
         pty.stream.feed(response.decode('utf-8','replace'))
-        #print "response-len", len(response)
-        #print "response:", response.decode('utf-8','replace').__repr__()
-        #print "response: ", response.__repr__()
-        #pty.stream.feed(response)
-        #print "read response:", len(response), "bytes, type:", type(response), '"' in response
-        #print "display-len:", len(pty.screen.display)
-        #print term.json_escape_all_u("\n".join(pty.screen.display))
+        #execute('''writeTerminalScreen("%s");''' % term.json_escape_all_u("\n".join(pty.screen.display)))
+        #js = term.render_all_js(pty.screen)
+        js = term.render_different(pty.screen)
         #print "\n".join(pty.screen.display)
-        #print pty.screen.display.__repr__()
-        execute('''writeTerminalScreen("%s");''' % term.json_escape_all_u("\n".join(pty.screen.display)))
-        #execute("console.log([document.my_shellinabox.terminalWidth, document.my_shellinabox.terminalHeight]);")
+        execute(js)
 
 
 def main():
