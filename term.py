@@ -19,6 +19,21 @@ def json_escape_all_u(src):
     return dst
 
 
+class Screen(pyte.DiffScreen):
+    
+    def __init__(self, columns, lines):
+        self.history = []
+        super(Screen, self).__init__(columns, lines)
+
+    def pop(self, index):
+        # everything that gets popped from the top of the terminal
+        # window is a good candidate for the scroll history
+        if index == 0:
+            self.history.append(self[index])
+
+        return super(Screen, self).pop(index)
+    
+
 class Pty(object):
             
     def __init__(self, size=(80, 24)):
@@ -32,7 +47,7 @@ class Pty(object):
         self._size = [0,0]
         self._pty = master
 
-        self.screen = pyte.DiffScreen(*size)
+        self.screen = Screen(*size)
         self.stream = pyte.Stream()
         self.stream.attach(self.screen)
 
@@ -148,6 +163,14 @@ def render_all_js(screen):
 def set_line_to(i, content):
     return """set_line({0}, {1});""".format(i, json.dumps(content))
 
+def append_history_line(content):
+    return """history_append({0});""".format(json.dumps(content))
+
+def render_history(screen):
+    ret = "\n".join(append_history_line(renderline(h)) for h in screen.history)
+    screen.history = []
+    return ret
+    
 def render_different(screen):
     ret = "\n".join(set_line_to(i, renderline(screen[i])) for i in screen.dirty if i < len(screen))
     screen.dirty.clear()

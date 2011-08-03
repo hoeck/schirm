@@ -132,8 +132,14 @@ def pty_loop(pty, execute):
         #execute('''writeTerminalScreen("%s");''' % term.json_escape_all_u("\n".join(pty.screen.display)))
         #js = term.render_all_js(pty.screen)
         js = term.render_different(pty.screen)
-        #print "\n".join(pty.screen.display)
-        execute(js)
+        if js:
+            execute(js)
+
+        js = term.render_history(pty.screen)
+        if js:
+            execute(js)
+
+        execute('scroll_to_bottom();')
 
 
 def main():

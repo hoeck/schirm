@@ -18,8 +18,13 @@ pre {
 </style>
 
 <script type="text/javascript">
+function scroll_to_bottom() {
+  var termdiv = document.getElementById('termdiv');
+  termdiv.scrollTop = termdiv.scrollHeight;
+}
+
 function set_line(linenumber, content) {
-  var term = document.getElementById('term')
+  var term = document.getElementById('term');
   
   if (!term.childNodes || !term.childNodes[linenumber]) {
     for (var i=term.childNodes.length; i <= linenumber; i++) {
@@ -30,6 +35,12 @@ function set_line(linenumber, content) {
   term.childNodes[linenumber].innerHTML = content + "\n";
 };
 
+function history_append(content) {
+  var hist = document.getElementById('history');
+  var span = document.createElement("span");
+  span.innerHTML = content + "\n";
+  hist.appendChild(span);
+}
 
 function resize_handler(event) {
   var term = document.getElementById("termdiv");
@@ -61,6 +72,6 @@ function resize_handler(event) {
 
 </head>
 <body onresize="resize_handler()">
-<div id="termdiv" style="overflow-y:scroll"><pre id="termpre"><div id="term" style="overflow-x:hide;font-family:monospace"></div></pre></div>
+<div id="termdiv" style="overflow-y:scroll"><pre id="historypre"><div id="history" style="overflow-x:hide;font-family:monospace"></div></pre><pre id="termpre"><div id="term" style="overflow-x:hide;font-family:monospace"></div></pre></div>
 </body>
 </html>
