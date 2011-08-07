@@ -13,6 +13,7 @@ from webkit_wrapper import GtkThread, launch_browser, establish_browser_channel,
 
 import term
 
+import gtk # for key handler
 
 state = None
 gtkthread = None
@@ -74,6 +75,30 @@ def receive_handler(msg, pty):
 def keypress_cb(widget, event):
     print "keypress:",event.time, event.keyval, event.string, event.string and ord(event.string)
 
+
+def handle_keypress(event, pty):
+    """
+    Map gtk keyvals/strings to terminal keys.
+    """
+    # KEY_PRESS
+    # KEY_RELEASE            time
+    #                        state
+    #                        keyval
+    #                        string
+    name = gtk.gdk.keyval_name(event.keyval)
+    key = pty.map_key(name)
+    print name
+    if not key:
+        # if len(event.string) == 1:
+        #     print "string-ord:", ord(event.string), event.string
+        # else:
+        #     print "string-ord:", 'not a char:', event.string
+        key = event.string
+    
+    if key:
+        pty.write(key)
+
+
 def webkit_event_loop():
 
     global run
@@ -93,7 +118,7 @@ def webkit_event_loop():
     gtkthread.invoke(lambda : browser.connect('resource-request-starting', my_resource_requested_handler))
 
     pty = term.Pty([80,24])
-    gtkthread.invoke(lambda : install_key_events(window, lambda widget, event: pty.write(event.string)))
+    gtkthread.invoke(lambda : install_key_events(window, lambda widget, event: handle_keypress(event, pty)))
     
     global state # to make interactive development and debugging easier
     state = dict(browser=browser,
