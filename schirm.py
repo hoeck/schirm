@@ -156,7 +156,8 @@ def pty_loop(pty, execute):
         pty.stream.feed(response.decode('utf-8','replace'))
         #execute('''writeTerminalScreen("%s");''' % term.json_escape_all_u("\n".join(pty.screen.display)))
         #js = term.render_all_js(pty.screen)
-        js = term.render_different(pty.screen)
+        #js = term.render_different(pty.screen)
+        js = pty.render()
         if js:
             execute(js)
 

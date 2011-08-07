@@ -28,7 +28,7 @@
 .b-red               { background-color: #cd0000; }
 .b-green             { background-color: #00cd00; }
 .b-brown             { background-color: #cdcd00; }
-.b-blue              { background-color: #0000ee; }
+.b-blue              { background-color: #0000aa; }
 .b-magenta           { background-color: #cd00cd; }
 .b-cyan              { background-color: #00cdcd; }
 .b-white             { background-color: #e5e5e5; }
@@ -62,3 +62,6 @@
     text-decoration: line-through;
 }
 
+.cursor {
+    background-color: #ff00b0;
+}

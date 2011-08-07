@@ -48,6 +48,7 @@ class Pty(object):
         self._pty = master
 
         self.screen = Screen(*size)
+        self.last_cursor_line = 0
         self.stream = pyte.Stream()
         self.stream.attach(self.screen)
 
@@ -180,11 +181,24 @@ class Pty(object):
                 return keydef[0]
         else:
             return keydef
-        
+
+    def render(self):
+        """
+        Return a string of javascript expressions.
+        """
+        ret = "\n".join(set_line_to(i,
+                                    renderline(self.screen[i], 
+                                               self.screen.cursor.x if (i==self.screen.cursor.y and not self.screen.cursor.hidden) else None))
+                        for i in (self.screen.dirty | set([self.screen.cursor.y, self.last_cursor_line]))
+                        if i < len(self.screen))
+        self.screen.dirty.clear()
+        self.last_cursor_line = self.screen.cursor.y
+        return ret
+
 
 ### creating html to render the terminal contents
 
-def create_class_string(chartuple):
+def create_class_string(chartuple, additional_classes=[]):
     data, fg, bg, bold, italics, underscore, strikethrough, reverse = chartuple
     c = []
     if reverse:
@@ -204,6 +218,7 @@ def create_class_string(chartuple):
     if strikethrough: c.append("strikethrough")
     if reverse:
         c.append("reverse")
+    c.extend(additional_classes)
     return " ".join(c)
 
 def equal_attrs(chartuple0, chartuple1):
@@ -216,37 +231,48 @@ def equal_attrs(chartuple0, chartuple1):
         and (chartuple0._replace(data="") \
                  == chartuple1._replace(data=""))
 
-def group_by_attrs(line):
+class CursorMarker():
+    def __init__(self, ch):
+        self.char = ch
+
+def group_by_attrs(line, cursorpos=None):
     """
     Return a list of groups of _Char tuples having the same attributes.
     """
     prev_tuple = None
     groups = []
-    for chartuple in line:
-        if equal_attrs(prev_tuple, chartuple):
+    for i, chartuple in enumerate(line):
+        if cursorpos and cursorpos==i:
+            groups.append(CursorMarker(chartuple))
+            prev_tuple = None
+        elif equal_attrs(prev_tuple, chartuple):
             groups[-1].append(chartuple)
+            prev_tuple = chartuple
         else:
             groups.append([chartuple])
-        prev_tuple = chartuple
+            prev_tuple = chartuple
 
     return groups
 
 def unicode_escape_char(c):
     return "\\u%s" % ("%x" % ord(c)).rjust(4,'0')
 
-def group_to_span(group):
+def create_span(group):
     tmpl = '<span class="{0}">{1}</span>'
-    if group:
+    if isinstance(group, list):
         cl = create_class_string(group[0])
         return tmpl.format(cl, cgi.escape("".join(map(lambda ch: ch.data, group))))
+    elif isinstance(group, CursorMarker):
+        cl = create_class_string(group.char, ["cursor"])
+        return tmpl.format(cl, cgi.escape(group.char.data))
     else:
         return tmpl.format("", "")
-        
-def renderline(line):
+
+def renderline(line, cursorpos=None):
     """
     Given a line of pyte.Chars, create a string of spans with appropriate style.
     """
-    return "".join(map(group_to_span, group_by_attrs(line)))
+    return "".join(map(create_span, group_by_attrs(line, cursorpos)))
 
 def wrap_in_span(s):
     return '<span>{0}</span>'.format(s)
@@ -265,8 +291,11 @@ def render_history(screen):
     screen.history = []
     return ret
     
-def render_different(screen):
-    ret = "\n".join(set_line_to(i, renderline(screen[i])) for i in screen.dirty if i < len(screen))
-    screen.dirty.clear()
-    return ret
-
+# def render_different(screen):
+#     ret = "\n".join(set_line_to(i,
+#                                 renderline(screen[i], 
+#                                            screen.cursor.x if (i==screen.cursor.y and not screen.cursor.hidden) else None))
+#                     for i in (screen.dirty | set([screen.cursor.y]))
+#                     if i < len(screen))
+#     screen.dirty.clear()
+#     return ret
