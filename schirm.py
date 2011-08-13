@@ -87,7 +87,7 @@ def handle_keypress(event, pty):
     #                        string
     name = gtk.gdk.keyval_name(event.keyval)
     key = pty.map_key(name)
-    print name
+    #print name
     if not key:
         # if len(event.string) == 1:
         #     print "string-ord:", ord(event.string), event.string
@@ -152,20 +152,22 @@ def pty_loop(pty, execute):
     execute("resize_handler();")
     while run:
         #print "reading ...."
-        response = pty.read()
-        pty.stream.feed(response.decode('utf-8','replace'))
+        #response = pty.read()
+        #pty.stream.feed(response.decode('utf-8','replace'))
         #execute('''writeTerminalScreen("%s");''' % term.json_escape_all_u("\n".join(pty.screen.display)))
         #js = term.render_all_js(pty.screen)
         #js = term.render_different(pty.screen)
-        js = pty.render()
-        if js:
-            execute(js)
+        # js = pty.render()
+        # if js:
+        #     execute(js)
+        # js = term.render_history(pty.screen)
+        # if js:
+        #     execute(js)
 
-        js = term.render_history(pty.screen)
-        if js:
-            execute(js)
-
-        execute('scroll_to_bottom();')
+        jslist = pty.read_and_feed_and_render()
+        ##print jslist
+        execute("\n".join(jslist))
+        #execute('scroll_to_bottom();')
 
 
 def main():
@@ -200,7 +202,7 @@ if __name__ == '__main__':
 # how should the other terminal commands treat the embedded iframe?
 # new modes:
 # html-iframe, 21 .. inserts an <iframe><html><head/><body>
-#                    resettinig that mode inserts </body></html></iframe>
+#                    resetting that mode inserts </body></html></iframe>
 #                    iframes to isolate used javascript
 #                    do not escape html chars (<,>,")
 # html-div, 22 .. wrap all output in a div, do not escape html chars (<,>,")
@@ -221,4 +223,11 @@ def testIframeMode():
         print "<h1>a small step for a terminal</h1>"
     finally:
         leaveIframeMode()
+
+
+
+
+
+
+
 

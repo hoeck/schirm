@@ -33,14 +33,42 @@ function set_line(linenumber, content) {
   }
 
   term.childNodes[linenumber].innerHTML = content + "\n";
-};
+}
 
-function history_append(content) {
+function insert_line(linenumber, content) {
+  var term = document.getElementById('term');
+  var span = document.createElement('span');
+  span.innerHTML = content;
+  term.insertBefore(span, term.childNodes[linenumber]);
+}
+
+function pop_to_history() {
+  var term = document.getElementById('term');
   var hist = document.getElementById('history');
+  var topmost = term.childNodes[0];
+  term.removeChild(topmost);
+  hist.appendChild(topmost);
+}
+
+function pop_line(i) {
+  var term = document.getElementById('term');
+  var line = term.childNodes[i];
+  term.removeChild(line);
+}
+
+function append_line(content) {
+  var term = document.getElementById('term');
   var span = document.createElement("span");
   span.innerHTML = content + "\n";
-  hist.appendChild(span);
+  term.appendChild(span);
 }
+
+// function history_append(content) {
+//   var hist = document.getElementById('history');
+//   var span = document.createElement("span");
+//   span.innerHTML = content + "\n";
+//   hist.appendChild(span);
+// }
 
 function resize_handler(event) {
   var term = document.getElementById("termdiv");
