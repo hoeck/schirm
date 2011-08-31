@@ -1,4 +1,3 @@
-
 # -*- coding: utf-8 -*-
 import sys; sys.path.append("/home/timmy-turner/src/pyte")
 
@@ -16,6 +15,7 @@ from UserList import UserList
 
 import pyte
 
+import termscreen
 from termscreen import TermScreen
 
 def json_escape_all_u(src):
@@ -23,14 +23,6 @@ def json_escape_all_u(src):
     for c in src:
         dst += "\\u00%s" % ("%x" % ord(c)).rjust(2,'0')
     return dst
-
-
-# TODO:
-# history must move lines into the history div __in the browser__
-# because we don't know the contents of an iframe line
-
-# make sure that when lines walk up the terminal, that iframes are not
-# overwritten, that means keep track which lines are in the browser
 
 
 ### creating html to render the terminal contents
@@ -118,41 +110,50 @@ def render_all_js(screen):
     return """document.getElementById("term").innerHTML = {0};""".format(json.dumps("\n".join(map(wrap_in_span, map(renderline, screen)))))
 
 def set_line_to(i, content):
-    return """set_line({0}, {1});""".format(i, json.dumps(content))
+    return """term.setLine({0}, {1});""".format(i, json.dumps(content))
 
-def append_history_line(content):
-    return """history_append({0});""".format(json.dumps(content))
-
-def render_history(screen):
-    ret = "\n".join(append_history_line(renderline(h)) for h in screen.history)
-    screen.history = []
-    return ret
-    
 
 # screen events, return a js string
 class EventRenderer():
 
     @staticmethod
     def reset(lines):
-        return "\n".join([set_line_to(i,renderline(l)) for i,l in enumerate(lines)])
+        if lines:
+            return "term.reset();\n{}" \
+                .format("\n".join([set_line_to(i,renderline(l))
+                                   for i,l in enumerate(lines)]))
+        else:
+            return "term.reset();"
 
     @staticmethod
-    def pop(index):
+    def pop(index, line):
         if index == 0:
-            # move the top line to the history
-            return "pop_to_history();"
+            # do not remove, let it become part of the history, but
+            # apply its chages first
+            return set_line_to(index, renderline(line))
         else:
-            return "pop_line({});".format(index)
+            return "term.removeLine({});".format(index)
+
+    @staticmethod
+    def pop_bottom():
+        return "term.removeLastLine();"
 
     @staticmethod
     def append(line):
         content = renderline(line)
-        return "append_line({0});".format(json.dumps(content))
+        return "term.appendLine({});".format(json.dumps(content))
 
     @staticmethod
     def insert(index, line):
-        content = renderline(line)
-        return "insert_line({0});".format(json.dumps(content))
+        if isinstance(line, termscreen.IframeLine):
+            return 'term.insertIframe({}); '.format(index)
+        else:
+            content = renderline(line)
+            return "term.insertLine({}, {});".format(index, json.dumps(content))
+
+    @staticmethod
+    def iframe(content):
+        return 'term.iframeWrite({})'.format(json.dumps(content))
 
 
 class Pty(object):
@@ -161,6 +162,7 @@ class Pty(object):
         pid, master = os.forkpty()
         if pid == 0:
             # child
+            os.putenv('TERM', 'linux')
             os.execl("/bin/bash", "bash") # todo: use the users default shell
         else:
             # parent
@@ -178,7 +180,7 @@ class Pty(object):
     def write(self, s):
         os.write(self._pty, s)
 
-    def set_size(self, w, h): # w/columns, h/lines
+    def set_size(self, h, w): # h/lines, w/columns
         """
         Use the TIOCSWINSZ ioctl to change the size of _pty if neccessary.
         """
@@ -195,19 +197,49 @@ class Pty(object):
             empty_win = struct.pack('HHHH',0,0,0,0)
             win = fcntl.ioctl(self._pty, termios.TIOCGWINSZ, empty_win)
             _h,_w,x,y = struct.unpack('HHHH', win)
-            #print "set size is:", [_w, _h], "my size is:", [w, h], "(",[oldw, oldh],")"
             win = struct.pack('HHHH', h, w, x, y)
             fcntl.ioctl(self._pty, termios.TIOCSWINSZ, win)
 
             self._size = [w, h]
-        self.screen.resize(h, w)
-    
+
+    def resize(self, lines, cols):
+        self.screen.resize(lines, cols)
+
+        # don't emit sigwinch when in normal mode, because it makes
+        # bash (any shell?) redraw the (unchanged) prompt to be at the
+        # top of the terminal, but we want it to stay where it
+        # currently is
+        #if self.screen._application_mode():
+        self.set_size(lines, cols)
+
+
     def read(self):
         return os.read(self._pty, 2048)
 
     def read_and_feed(self):
         response = self.read()
         self.stream.feed(response.decode('utf-8','replace'))       
+
+    def render_changes(self):
+        js = []
+        lines = self.screen.linecontainer
+        events = lines.get_and_clear_events()
+
+        for e in events:
+            js.append(getattr(EventRenderer, e[0])(*e[1:]))
+            
+        for i,line in enumerate(lines):
+            if line.changed:
+                line.changed = False
+                js.append(set_line_to(i, renderline(line)))
+
+        return js
+
+
+    def read_and_feed_and_render(self):
+        self.read_and_feed()
+        return self.render_changes()
+
 
 # VT100 Key    Standard    Applications     IBM Keypad
 # =====================================================
@@ -301,170 +333,4 @@ class Pty(object):
                 return keydef[0]
         else:
             return keydef
-
-    # def render_tick(self, execute):
-    #     response = self.read()
-
-    #     if self
-    #     self.stream.feed(response.decode('utf-8','replace'))
-    #     js = self.stream.render()
-    #     if js:
-    #         execute(js)
-            
-    #     js = self.stream.render_history(pty.screen)
-    #     if js:
-    #         execute(js)
-            
-    #     execute('scroll_to_bottom();')
-
-    def render_changes(self):
-        js = []
-        lines = self.screen.linecontainer
-        events = lines.get_and_clear_events()
-
-        for e in events:
-            js.append(getattr(EventRenderer, e[0])(*e[1:]))
-            
-        for i,line in enumerate(lines):
-            if line.changed:
-                line.changed = False
-                js.append(set_line_to(i, renderline(line)))
-
-        return js
-
-
-    def read_and_feed_and_render(self):
-        self.read_and_feed()
-        return self.render_changes()
-
-
-
-
-
-##############################################
-# def render_different(screen):
-#     ret = "\n".join(set_line_to(i,
-#                                 renderline(screen[i], 
-#                                            screen.cursor.x if (i==screen.cursor.y and not screen.cursor.hidden) else None))
-#                     for i in (screen.dirty | set([screen.cursor.y]))
-#                     if i < len(screen))
-#     screen.dirty.clear()
-#     return ret
-
-
-    # @classmethod
-    # def render(line, cursorpos=None):
-    #     """
-    #     Given a list of pyte.Chars, create a string of spans with
-    #     appropriate style and wrap it in a Line object.
-    #     """
-    #     return self("".join(map(create_span, group_by_attrs(line, cursorpos))))
-
-# class Screen(pyte.DiffScreen):
-    
-#     def __init__(self, columns, lines):
-#         self.iframe_mode = None
-#         #self.last_cursor_line = 0 # to be able redraw the line where the cursor has been before
-#         self.events = []
-#         super(Screen, self).__init__(columns, lines)
-
-#     def __get_and_clear_events(self):
-#         self.dirty.add(self.cursor.y)
-#         self.events.append(self.dirty)
-#         ev = self.events
-
-#         self.dirty = set([self.cursor.y]) # mark the current cursor line as dirty, in case the cursor changes
-#         self.events = []
-
-#         return ev
-
-#     # def pop(self, index):
-#     #     # everything that gets popped from the top of the terminal
-#     #     # window is a good candidate for the scroll history
-
-#     #     #HERE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-#     #     # or use event model with (pop) event and a dirty-set between
-#     #     # them??????? as history-moves are always 'pop top item from
-#     #     # screen'
-#     #     if index == 0:
-#     #         self.history.append(self[index])
-#     #     else:
-#     #         super(Screen, self).pop(index)
-
-#     def index(self):
-#         if self.cursor.y == (self.lines - 1):
-#             # inserted new line at the bottom
-#             # all lines above move -1
-#             # top line becomes history
-#             self.events.append(self.dirty)
-#             self.events.append(('pop',))
-
-#             self.dirty = set()
-#             super(Screen, self).index()
-#             self.dirty = set([self.lines - 1])
-
-#         else:
-#             super(Screen, self).index()
-
-
-#     # When iframe mode is set, use another screen
-#     IFRAME_MODE = 21
-    
-#     def set_mode(self, *modes, **kwargs):
-#         if kwargs.get("private"):
-#             modes = [mode << 5 for mode in modes]
-        
-#         if self.IFRAME_MODE in modes:
-#             self.iframe_mode = True
-
-#         super(Screen, self).set_mode(*modes, **kwargs)
-
-
-#     def render_batch(self, dirty):
-#         """
-#         Return a string of javascript expressions setting recently
-#         changed screen lines.
-#         """
-#         ret = "\n".join(set_line_to(i,
-#                                     renderline(self[i], 
-#                                                self.cursor.x if (i==self.cursor.y and not self.cursor.hidden) else None))
-#                         for i in dirty
-#                         if i < len(self))
-
-#         ##self.dirty.clear()
-#         ##self.last_cursor_line = self.cursor.y
-#         return ret
-
-#     def render_changes(self):
-#         js = []
-#         events = self.__get_and_clear_events()
-#         print "events:", events
-#         for ev in events:
-#             if isinstance(ev, tuple):
-#                 if ev == ('pop',):
-#                     js.append("pop_to_history();");
-#                     js.append('set_line(%d,"");' % self.lines)
-#                 else:
-#                     assert False
-#             elif isinstance(ev, set):
-#                 js.append(self.render_batch(ev))
-#             else:
-#                 assert False
-#         return js
-
-
-#     def __setitem__(self, arg):
-#         pass
-
-#     def __setslice__(self, start, end, src):
-#         pass
-
-#     def __getitem__(self, arg):
-#         pass
-    
-#     def pop(self, index):
-#         pass
-    
-#     def append(self, data):
-#         pass
 

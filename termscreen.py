@@ -1,9 +1,23 @@
+# -*- coding: utf-8 -*-
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! HERE !!!
+# works great so far except for resizing lines:
+
+# create a screen proxy which dispatches calls to different screens
+# depending on the current mode ?????
+# allows better iframe mode support?
+
+# also: change the resizte function to take into account how the
+#  browser already handles the resizing!!!!
+
 
 from UserList import UserList
 
 import pyte
 from pyte.screens import Char, Margins, Cursor
 from pyte import modes as mo, graphics as g, charsets as cs
+
+# When iframe mode is set, use another screen??
+IFRAME_MODE = 21
 
 
 # create an explicit interface to Lines and the seq of Lines to be
@@ -84,26 +98,65 @@ class Line(UserList):
             self[column] = char
 
 
+class IframeLine(Line):
+  
+    def __init__(self):
+        self.changed = False
+
+    def set_size(self, size):
+        pass
+
+    def reverse(self):
+        pass
+
+    def insert_characters(self, pos, count, char):
+        pass
+
+    def replace_character(self, pos, char):
+        pass
+
+    def delete_characters(self, pos, count, char):
+        pass
+
+    def erase_characters(self, pos, count, char):
+        pass
+
+    def erase_in_line(self, type_of, pos, char):
+        pass
+
+
 class LineContainer():
     
     def __init__(self):
+        self.height = 0
+        self.lines  = []
         self.events = []
 
+    def realLineIndex(self, i):
+        return len(self.lines) - self.height + i
+       
     def get_and_clear_events(self):
         ret = self.events
         self.events = []
         return ret
 
     def reset(self, lines):
+        self.height = len(lines)
         self.lines = lines # a list of Line objects
         for l in lines:
             l.changed = False
         self.events.append(('reset', lines))
 
     def pop(self, index):
-        ret = self.lines.pop(index)
+        ri = self.realLineIndex(index)
+        line = self.lines.pop(ri)
         self.events.append(('pop', index))
-        return ret
+        return line
+
+    def pop_bottom(self):
+        line = self.lines.pop(len(self.lines)-1)
+        self.events.append(('pop_bottom',))
+        return line
 
     def append(self, line):
         self.lines.append(line)
@@ -111,16 +164,20 @@ class LineContainer():
         self.events.append(('append', line))
 
     def insert(self, index, line):
-        self.lines.insert(index, line)
+        ri = self.realLineIndex(index)
+        self.lines.insert(ri, line)
         line.changed = False
         self.events.append(('insert', index, line))
 
     def __getitem__(self, index):
-        return self.lines[index]
+        return self.lines[self.realLineIndex(index)]
 
     def __iter__(self):
-        return self.lines.__iter__()
+        return self.lines[self.realLineIndex(0):].__iter__() #???
     
+    def iframecharinsert(self, char):
+        self.events.append(('iframe', char))
+
 
 # highlight-regexp:
 # self\(\.extend\|\.append\|\.pop\|\.insert\|\.remove\|\[.*\]\)
@@ -139,8 +196,12 @@ class TermScreen(pyte.Screen):
     def __after__(self, command):
         pass
 
-    def _create_line(self, default_char=Char(data=" ", fg="default", bg="default")):
-        return Line(self.columns, default_char)
+    _default_char = Char(data=" ", fg="default", bg="default")
+    def _create_line(self):
+        return Line(self.columns, self._default_char)
+
+    def _is_empty_line(self, line):
+        return all(c == self._default_char for c in line)
 
     def reset(self):
         """Resets the terminal to its initial state.
@@ -164,6 +225,7 @@ class TermScreen(pyte.Screen):
         lines = [self._create_line() for _ in range(self.lines)]
         self.linecontainer.reset(lines)
 
+        self.iframe_mode = False
         self.mode = set([mo.DECAWM, mo.DECTCEM, mo.LNM, mo.DECTCEM])
         self.margins = Margins(0, self.lines - 1)
 
@@ -195,32 +257,69 @@ class TermScreen(pyte.Screen):
 
         .. note:: According to `xterm`, we should also reset origin
                   mode and screen margins, see ``xterm/screen.c:1761``.
-
+                  -> but we don't do this here
         :param int lines: number of lines in the new screen.
         :param int columns: number of columns in the new screen.
         """
         lines = lines or self.lines
         columns = columns or self.columns
 
+        lc = self.linecontainer
+
+        #print "screen.resize 0:", (self.lines, "->", lines, "lc.lines:", len(lc.lines))
+
+        # cursor: make sure that it 'stays' on its current line
+
+        if self.lines < lines:
+            # enlarge
+            if len(lc.lines) < lines:
+                for _ in range(lines - len(lc.lines)):
+                    lc.append(self._create_line())
+                cursordelta = len(lc.lines) - lines
+            else:
+                cursordelta = lines - self.lines
+        else:
+            # try to remove blank lines from the bottom first
+            lines_to_remove = self.lines - lines;
+            while self._is_empty_line(lc.lines[-1]) and lines_to_remove > 0:
+                lc.pop_bottom();
+                lines_to_remove -= 1;
+
+            cursordelta = lines_to_remove
+
+        newcursory = self.cursor.y + cursordelta
+        self.cursor.y = min(max(newcursory, 0), lines)
+        self.cursor.x = min(max(self.cursor.x, 0), columns)
+
+        #print "new cursor is row:{} col:{}".format(self.cursor.y, self.cursor.x)
+
+        lc.height = lines
+        #print "screen.resize 1:", (self.lines, "->", lines, "lc.lines:", len(lc.lines))
+
         # First resize the lines:
-        diff = self.lines - lines
+        #diff = self.lines - lines
 
         # a) if the current display size is less than the requested
         #    size, add lines to the bottom.
-        if diff < 0:
-            # self.extend(take(self.columns, self.default_line)
-            #             for _ in range(diff, 0))
-            #self.extend(self._create_line() for _ in range(diff, 0))
-            for _ in range(diff, 0):
-                self.linecontainer.append(self._create_line())
+        ### TODO: add resize command to LineContainer
+        ### on the html-render side:
+        ### when the new size has more lines
+        ### grab lines from the history first instead of appending
+        ### blank ones at the top
+        # if diff < 0: # enlarge terminal screen
+        #     # self.extend(take(self.columns, self.default_line)
+        #     #             for _ in range(diff, 0))
+        #     #self.extend(self._create_line() for _ in range(diff, 0))
+        #     for _ in range(diff, 0):
+        #         self.linecontainer.append(self._create_line())
 
-        # b) if the current display size is greater than requested
-        #    size, take lines off the top.
-        elif diff > 0:
-            # self[:diff] = ()
-            #[self.pop(0) for _ in range(diff)]
-            for _ in range(diff):
-                self.linecontainer.pop(0)
+        # # b) if the current display size is greater than requested
+        # #    size, take lines off the top.
+        # elif diff > 0:
+        #     # self[:diff] = ()
+        #     #[self.pop(0) for _ in range(diff)]
+        #     for _ in range(diff):
+        #         self.linecontainer.pop(0)
 
         # Then resize the columns:
         for line in self.linecontainer:
@@ -240,51 +339,9 @@ class TermScreen(pyte.Screen):
 
         self.lines, self.columns = lines, columns
         self.margins = Margins(0, self.lines - 1)
-        self.reset_mode(mo.DECOM)
 
-#    def set_margins(self, top=None, bottom=None):
-#        """Selects top and bottom margins for the scrolling region.
-#
-#        Margins determine which screen lines move during scrolling
-#        (see :meth:`index` and :meth:`reverse_index`). Characters added
-#        outside the scrolling region do not cause the screen to scroll.
-#
-#        :param int top: the smallest line number that is scrolled.
-#        :param int bottom: the biggest line number that is scrolled.
-#        """
-#        if top is None or bottom is None:
-#            return
-#
-#        # Arguments are 1-based, while :attr:`margins` are zero based --
-#        # so we have to decrement them by one. We also make sure that
-#        # both of them is bounded by [0, lines - 1].
-#        top = max(0, min(top - 1, self.lines - 1))
-#        bottom = max(0, min(bottom - 1, self.lines - 1))
-#
-#        # Even though VT102 and VT220 require DECSTBM to ignore regions
-#        # of width less than 2, some programs (like aptitude for example)
-#        # rely on it. Practicality beats purity.
-#        if bottom - top >= 1:
-#            self.margins = Margins(top, bottom)
-#
-#            # The cursor moves to the home position when the top and
-#            # bottom margins of the scrolling region (DECSTBM) changes.
-#            self.cursor_position()
-#
-#    def set_charset(self, code, mode):
-#        """Set active ``G0`` or ``G1`` charset.
-#
-#        :param unicode code: character set code, should be a character
-#                             from ``"B0UK"`` -- otherwise ignored.
-#        :param unicode mode: if ``"("`` ``G0`` charset is set, if
-#                             ``")"`` -- we operate on ``G1``.
-#
-#        .. warning:: User-defined charsets are currently not supported.
-#        """
-#        print(code, code in cs.MAPS, cs.MAPS.keys())
-#        if code in cs.MAPS:
-#            setattr(self, {"(": "g0_charset", ")": "g1_charset"}[mode],
-#                    cs.MAPS[code])
+        # don't reset the cursorpos
+        #self.reset_mode(mo.DECOM) # resets the cursor position
 
     def set_mode(self, *modes, **kwargs):
         """Sets (enables) a given list of modes.
@@ -298,6 +355,20 @@ class TermScreen(pyte.Screen):
             modes = [mode << 5 for mode in modes]
 
         self.mode.update(modes)
+        if mo.DECAPP in modes:
+            print "Application Mode Set"
+
+        # Iframe mode yippee
+        if IFRAME_MODE in modes:
+            # move cursor to last line
+            # insert an iframe line
+            # all following chars are written to that frame via
+            # iframe.document.write
+
+            self.index()
+            self.linecontainer.pop(self.cursor.y)
+            self.linecontainer.insert(self.cursor.y, IframeLine())
+            self.iframe_mode = True
 
         # When DECOLM mode is set, the screen is erased and the cursor
         # moves to the home position.
@@ -323,6 +394,12 @@ class TermScreen(pyte.Screen):
         if mo.DECTCEM in modes:
             self.cursor.hidden = False
 
+    def _application_mode(self):
+        return mo.DECAPP in self.mode
+
+    def _iframe_mode(self):
+        return IFRAME_MODE in self.mode
+
     def reset_mode(self, *modes, **kwargs):
         """Resets (disables) a given list of modes.
 
@@ -335,6 +412,14 @@ class TermScreen(pyte.Screen):
             modes = [mode << 5 for mode in modes]
 
         self.mode.difference_update(modes)
+
+        if mo.DECAPP in modes:
+            print "Application Mode _RE_set"
+
+        # leave Iframe mode
+        if IFRAME_MODE in modes:
+            self.index()
+            self.iframe_mode = False
 
         # Lines below follow the logic in :meth:`set_mode`.
         if mo.DECCOLM in modes:
@@ -356,23 +441,25 @@ class TermScreen(pyte.Screen):
         if mo.DECTCEM in modes:
             self.cursor.hidden = True
 
-#    def shift_in(self):
-#        """Activates ``G0`` character set."""
-#        self.charset = 0
-#
-#    def shift_out(self):
-#        """Activates ``G1`` character set."""
-#        self.charset = 1
-
     def draw(self, char):
         """Display a character at the current cursor position and advance
         the cursor if :data:`~pyte.modes.DECAWM` is set.
 
         :param unicode char: a character to display.
         """
+
+        #print self.iframe_mode
+        if self.iframe_mode:
+            self.linecontainer.iframecharinsert(char)
+            return # ignore all other modes
+
         # Translating a given character.
-        char = char.translate([self.g0_charset,
-                               self.g1_charset][self.charset])
+        if self.charset != 0:
+            # somehoe, the latin 1 encoding done here is wrong,
+            # json.dumps does not correctly convert the resulting
+            # string into browser-utf-8
+            char = char.translate([self.g0_charset,
+                                   self.g1_charset][self.charset])
 
         # If this was the last column in a line and auto wrap mode is
         # enabled, move the cursor to the next line. Otherwise replace
@@ -399,10 +486,6 @@ class TermScreen(pyte.Screen):
         #           way, we'll never know when to linefeed.
         self.cursor.x += 1
 
-#    def carriage_return(self):
-#        """Move the cursor to the beginning of the current line."""
-#        self.cursor.x = 0
-
     def index(self):
         """Move the cursor down one line in the same column. If the
         cursor is at the last line, create a new line at the bottom.
@@ -410,9 +493,9 @@ class TermScreen(pyte.Screen):
         top, bottom = self.margins
 
         if self.cursor.y == bottom:
-            self.linecontainer.pop(top)
+            #self.linecontainer.pop(top) # don't handle history manually
             #self.insert(bottom, take(self.columns, self.default_line))
-            self.linecontainer.insert(bottom, self._create_line())
+            self.linecontainer.insert(bottom+1, self._create_line())
         else:
             self.cursor_down()
 
@@ -428,67 +511,6 @@ class TermScreen(pyte.Screen):
             self.linecontainer.insert(top, self._create_line())
         else:
             self.cursor_up()
-
-#    def linefeed(self):
-#        """Performs an index and, if :data:`~pyte.modes.LNM` is set, a
-#        carriage return.
-#        """
-#        self.index()
-#
-#        if mo.LNM in self.mode:
-#            self.carriage_return()
-#
-#    def tab(self):
-#        """Move to the next tab space, or the end of the screen if there
-#        aren't anymore left.
-#        """
-#        for stop in sorted(self.tabstops):
-#            if self.cursor.x < stop:
-#                column = stop
-#                break
-#        else:
-#            column = self.columns - 1
-#
-#        self.cursor.x = column
-#
-#    def backspace(self):
-#        """Move cursor to the left one or keep it in it's position if
-#        it's at the beginning of the line already.
-#        """
-#        self.cursor_back()
-#
-#    def save_cursor(self):
-#        """Push the current cursor position onto the stack."""
-#        self.savepoints.append(Savepoint(copy.copy(self.cursor),
-#                                         self.g0_charset,
-#                                         self.g1_charset,
-#                                         self.charset,
-#                                         mo.DECOM in self.mode,
-#                                         mo.DECAWM in self.mode))
-#
-#    def restore_cursor(self):
-#        """Set the current cursor position to whatever cursor is on top
-#        of the stack.
-#        """
-#        if self.savepoints:
-#            savepoint = self.savepoints.pop()
-#
-#            self.g0_charset = savepoint.g0_charset
-#            self.g1_charset = savepoint.g1_charset
-#            self.charset = savepoint.charset
-#
-#            if savepoint.origin:
-#                self.set_mode(mo.DECOM)
-#            if savepoint.wrap:
-#                self.set_mode(mo.DECAWM)
-#
-#            self.cursor = savepoint.cursor
-#            self.ensure_bounds(use_margins=True)
-#        else:
-#            # If nothing was saved, the cursor moves to home position;
-#            # origin mode is reset. :todo: DECAWM?
-#            self.reset_mode(mo.DECOM)
-#            self.cursor_position()
 
     def insert_lines(self, count=None):
         """Inserts the indicated # of lines at line with cursor. Lines
@@ -654,175 +676,3 @@ class TermScreen(pyte.Screen):
         # In case of 0 or 1 we have to erase the line with the cursor.
         if type_of in [0, 1]:
             self.erase_in_line(type_of)
-#
-#    def set_tab_stop(self):
-#        """Sest a horizontal tab stop at cursor position."""
-#        self.tabstops.add(self.cursor.x)
-#
-#    def clear_tab_stop(self, type_of=None):
-#        """Clears a horizontal tab stop in a specific way, depending
-#        on the ``type_of`` value:
-#
-#        * ``0`` or nothing -- Clears a horizontal tab stop at cursor
-#          position.
-#        * ``3`` -- Clears all horizontal tab stops.
-#        """
-#        if not type_of:
-#            # Clears a horizontal tab stop at cursor position, if it's
-#            # present, or silently fails if otherwise.
-#            self.tabstops.discard(self.cursor.x)
-#        elif type_of == 3:
-#            self.tabstops = set()  # Clears all horizontal tab stops.
-#
-#    def ensure_bounds(self, use_margins=None):
-#        """Ensure that current cursor position is within screen bounds.
-#
-#        :param bool use_margins: when ``True`` or when
-#                                 :data:`~pyte.modes.DECOM` is set,
-#                                 cursor is bounded by top and and bottom
-#                                 margins, instead of ``[0; lines - 1]``.
-#        """
-#        if use_margins or mo.DECOM in self.mode:
-#            top, bottom = self.margins
-#        else:
-#            top, bottom = 0, self.lines - 1
-#
-#        self.cursor.x = min(max(0, self.cursor.x), self.columns - 1)
-#        self.cursor.y = min(max(top, self.cursor.y), bottom)
-#
-#    def cursor_up(self, count=None):
-#        """Moves cursor up the indicated # of lines in same column.
-#        Cursor stops at top margin.
-#
-#        :param int count: number of lines to skip.
-#        """
-#        self.cursor.y -= count or 1
-#        self.ensure_bounds(use_margins=True)
-#
-#    def cursor_up1(self, count=None):
-#        """Moves cursor up the indicated # of lines to column 1. Cursor
-#        stops at bottom margin.
-#
-#        :param int count: number of lines to skip.
-#        """
-#        self.cursor_up(count)
-#        self.carriage_return()
-#
-#    def cursor_down(self, count=None):
-#        """Moves cursor down the indicated # of lines in same column.
-#        Cursor stops at bottom margin.
-#
-#        :param int count: number of lines to skip.
-#        """
-#        self.cursor.y += count or 1
-#        self.ensure_bounds(use_margins=True)
-#
-#    def cursor_down1(self, count=None):
-#        """Moves cursor down the indicated # of lines to column 1.
-#        Cursor stops at bottom margin.
-#
-#        :param int count: number of lines to skip.
-#        """
-#        self.cursor_down(count)
-#        self.carriage_return()
-#
-#    def cursor_back(self, count=None):
-#        """Moves cursor left the indicated # of columns. Cursor stops
-#        at left margin.
-#
-#        :param int count: number of columns to skip.
-#        """
-#        self.cursor.x -= count or 1
-#        self.ensure_bounds()
-#
-#    def cursor_forward(self, count=None):
-#        """Moves cursor right the indicated # of columns. Cursor stops
-#        at right margin.
-#
-#        :param int count: number of columns to skip.
-#        """
-#        self.cursor.x += count or 1
-#        self.ensure_bounds()
-#
-#    def cursor_position(self, line=None, column=None):
-#        """Set the cursor to a specific `line` and `column`.
-#
-#        Cursor is allowed to move out of the scrolling region only when
-#        :data:`~pyte.modes.DECOM` is reset, otherwise -- the position
-#        doesn't change.
-#
-#        :param int line: line number to move the cursor to.
-#        :param int column: column number to move the cursor to.
-#        """
-#        column = (column or 1) - 1
-#        line = (line or 1) - 1
-#
-#        # If origin mode (DECOM) is set, line number are relative to
-#        # the top scrolling margin.
-#        if mo.DECOM in self.mode:
-#            line += self.margins.top
-#
-#            # Cursor is not allowed to move out of the scrolling region.
-#            if not self.margins.top <= line <= self.margins.bottom:
-#                return
-#
-#        self.cursor.x, self.cursor.y = column, line
-#        self.ensure_bounds()
-#
-#    def cursor_to_column(self, column=None):
-#        """Moves cursor to a specific column in the current line.
-#
-#        :param int column: column number to move the cursor to.
-#        """
-#        self.cursor.x = (column or 1) - 1
-#        self.ensure_bounds()
-#
-#    def cursor_to_line(self, line=None):
-#        """Moves cursor to a specific line in the current column.
-#
-#        :param int line: line number to move the cursor to.
-#        """
-#        self.cursor.y = (line or 1) - 1
-#
-#        # If origin mode (DECOM) is set, line number are relative to
-#        # the top scrolling margin.
-#        if mo.DECOM in self.mode:
-#            self.cursor.y += self.margins.top
-#
-#            # FIXME: should we also restrict the cursor to the scrolling
-#            # region?
-#
-#        self.ensure_bounds()
-#
-#    def bell(self, *args):
-#        """Bell stub -- the actual implementation should probably be
-#        provided by the end-user.
-#        """
-#
-#    def alignment_display(self):
-#        """Fills screen with uppercase E's for screen focus and alignment."""
-#        for line in self:
-#            for column, char in enumerate(line):
-#                line[column] = char._replace(data="E")
-#
-#    def select_graphic_rendition(self, *attrs):
-#        """Set display attributes.
-#
-#        :param list attrs: a list of display attributes to set.
-#        """
-#        replace = {}
-#
-#        for attr in attrs or [0]:
-#            if attr in g.FG:
-#                replace["fg"] = g.FG[attr]
-#            elif attr in g.BG:
-#                replace["bg"] = g.BG[attr]
-#            elif attr in g.TEXT:
-#                attr = g.TEXT[attr]
-#                replace[attr[1:]] = attr.startswith("+")
-#            elif not attr:
-#                replace = self.default_char._asdict()
-#
-#        self.cursor.attrs = self.cursor.attrs._replace(**replace)
-#
-#

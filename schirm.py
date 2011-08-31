@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
 import sys
 import signal
@@ -65,8 +66,10 @@ def receive_handler(msg, pty):
         # always set size
         w = d.get('width')
         h = d.get('height')
+
         if w and h:
-            pty.set_size(int(w), int(h))
+            #pty.set_size(int(h), int(w))
+            pty.resize(int(h), int(w))
 
         return True
     else:
@@ -74,7 +77,6 @@ def receive_handler(msg, pty):
 
 def keypress_cb(widget, event):
     print "keypress:",event.time, event.keyval, event.string, event.string and ord(event.string)
-
 
 def handle_keypress(event, pty):
     """
@@ -134,9 +136,12 @@ def webkit_event_loop():
     uri = 'file://' + urllib.pathname2url(file)
     browser.open_uri(uri)
 
+    # start a thread to send js expressions to webkit
     t = threading.Thread(target=lambda : pty_loop(pty, execute))
     t.start()
 
+    # read from webkit though console.log messages starting with 'schirm'
+    # and containing json
     while run:
         msg = receive(block=True, timeout=1) # timeout to make waiting for events interruptible
         if msg:
@@ -149,7 +154,7 @@ def webkit_event_loop():
 
 def pty_loop(pty, execute):
     global run
-    execute("resize_handler();")
+    execute("termInit();")
     while run:
         #print "reading ...."
         #response = pty.read()
@@ -165,9 +170,9 @@ def pty_loop(pty, execute):
         #     execute(js)
 
         jslist = pty.read_and_feed_and_render()
-        ##print jslist
+        #print "\n".join(jslist)
         execute("\n".join(jslist))
-        #execute('scroll_to_bottom();')
+        execute('term.scrollToBottom();')
 
 
 def main():
@@ -209,21 +214,6 @@ if __name__ == '__main__':
 #                 resetting closes the <div>
 #
 # treat all stuff created while a html-* mode was active as a single line???
-
-
-def enterIframeMode():
-    sys.stdout.write("\033[21h");
-
-def leaveIframeMode():
-    sys.stdout.write("\033[21l");
-
-def testIframeMode():
-    try:
-        enterIframeMode()
-        print "<h1>a small step for a terminal</h1>"
-    finally:
-        leaveIframeMode()
-
 
 
 
