@@ -189,35 +189,3 @@ if __name__ == '__main__':
     signal.signal(signal.SIGINT, lambda sig, stackframe: quit())
     signal.siginterrupt(signal.SIGINT, True)
     main()
-
-
-## how to implement the html functionality:
-# use the 'set mode' and 'reset mode' to turn html-mode on (embed the output in this mode in an <iframe>
-
-# RM - Reset Mode: ESC [ Ps ; Ps ; . . . ; Ps l
-# SM - Set Mode:   ESC [ Ps ; . . . ; Ps h
-
-# where ps are mode params
-# ?;number .. DEC private modes
-
-# normal-modes:
-# 0 .. error (ignored) ???
-# 20 .. line feed newline mode ???
-
-# how should the other terminal commands treat the embedded iframe?
-# new modes:
-# html-iframe, 21 .. inserts an <iframe><html><head/><body>
-#                    resetting that mode inserts </body></html></iframe>
-#                    iframes to isolate used javascript
-#                    do not escape html chars (<,>,")
-# html-div, 22 .. wrap all output in a div, do not escape html chars (<,>,")
-#                 resetting closes the <div>
-#
-# treat all stuff created while a html-* mode was active as a single line???
-
-
-
-
-
-
-

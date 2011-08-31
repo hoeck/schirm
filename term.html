@@ -93,7 +93,7 @@ var Lines = (function(linesElement, term) {
       //console.log("removing Last Line: " + linesElement.childNodes.length);
       linesElement.removeChild(linesElement.lastChild);
     },
-    
+
     // iframe
     insertIframe: function (linenumber) {
       // close the old iframe
@@ -101,19 +101,20 @@ var Lines = (function(linesElement, term) {
         term.currentIframe.contentDocument.close();
       }
       
-      var div = document.createElement('div');
+      var div = document.createElement('span');
+      div.setAttribute("foobar");
       if (term.size.lines <= linenumber) {
         linesElement.appendChild(div);
       } else {
-        linesElement.insertBefore(div, linesElement.childNodes[linenumber]);
+        linesElement.insertBefore(div, linesElement.childNodes[this.elementIndex(linenumber)]);
       }
 
       var iframe = document.createElement('iframe');
       div.appendChild(iframe);
       
-      var newline = document.createElement('span');
-      newline.innerHTML = "\n";
-      div.appendChild(newline);
+      // var newline = document.createElement('span');
+      // newline.innerHTML = "\n";
+      // div.appendChild(newline);
       
       term.currentIframe = iframe;
       iframe.height = "1";

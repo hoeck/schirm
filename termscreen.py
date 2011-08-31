@@ -366,7 +366,7 @@ class TermScreen(pyte.Screen):
             # iframe.document.write
 
             self.index()
-            self.linecontainer.pop(self.cursor.y)
+            #self.linecontainer.pop(self.cursor.y)
             self.linecontainer.insert(self.cursor.y, IframeLine())
             self.iframe_mode = True
 
@@ -418,8 +418,8 @@ class TermScreen(pyte.Screen):
 
         # leave Iframe mode
         if IFRAME_MODE in modes:
-            self.index()
             self.iframe_mode = False
+            self.index()
 
         # Lines below follow the logic in :meth:`set_mode`.
         if mo.DECCOLM in modes:
@@ -490,6 +490,9 @@ class TermScreen(pyte.Screen):
         """Move the cursor down one line in the same column. If the
         cursor is at the last line, create a new line at the bottom.
         """
+        if self.iframe_mode:
+            return
+
         top, bottom = self.margins
 
         if self.cursor.y == bottom:

@@ -127,12 +127,12 @@ class EventRenderer():
 
     @staticmethod
     def pop(index, line):
-        if index == 0:
-            # do not remove, let it become part of the history, but
-            # apply its chages first
-            return set_line_to(index, renderline(line))
-        else:
-            return "term.removeLine({});".format(index)
+        #if index == 0:
+        #    # do not remove, let it become part of the history, but
+        #    # apply its chages first
+        #    return set_line_to(index, renderline(line))
+        #else:
+        return "term.removeLine({});".format(index)
 
     @staticmethod
     def pop_bottom():
