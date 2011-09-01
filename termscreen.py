@@ -150,7 +150,7 @@ class LineContainer():
     def pop(self, index):
         ri = self.realLineIndex(index)
         line = self.lines.pop(ri)
-        self.events.append(('pop', index))
+        self.events.append(('pop', index, line))
         return line
 
     def pop_bottom(self):

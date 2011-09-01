@@ -18,7 +18,7 @@ pre {
 }
 
 iframe {
-  //border: None;
+  border: None;
   width: 100%;
 }
 
@@ -112,9 +112,9 @@ var Lines = (function(linesElement, term) {
       var iframe = document.createElement('iframe');
       div.appendChild(iframe);
       
-      // var newline = document.createElement('span');
-      // newline.innerHTML = "\n";
-      // div.appendChild(newline);
+      var newline = document.createElement('span');
+      newline.innerHTML = "\n";
+      div.appendChild(newline);
       
       term.currentIframe = iframe;
       iframe.height = "1";
