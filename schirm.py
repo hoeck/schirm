@@ -20,12 +20,15 @@ state = None
 gtkthread = None
 run = True
 
+def running():
+    global run
+    return run
+
 def stop():
     global run
     run = False
 
 def quit():
-    print "quitting"
     try:
         stop()
         os.kill(os.getpid(), 15)
@@ -103,7 +106,6 @@ def handle_keypress(event, pty):
 
 def webkit_event_loop():
 
-    global run
     global gtkthread
     gtkthread = GtkThread()
       
@@ -141,8 +143,8 @@ def webkit_event_loop():
     t.start()
 
     # read from webkit though console.log messages starting with 'schirm'
-    # and containing json
-    while run:
+    # and containing json data
+    while running():
         msg = receive(block=True, timeout=1) # timeout to make waiting for events interruptible
         if msg:
             #print "received:", msg
@@ -150,30 +152,21 @@ def webkit_event_loop():
                 pass
             elif msg == "show_webkit_inspector": # shows a blank window :/
                 gtkthread.invoke(browser.show_inspector)
+    quit()
 
 
 def pty_loop(pty, execute):
-    global run
     execute("termInit();")
-    while run:
-        #print "reading ...."
-        #response = pty.read()
-        #pty.stream.feed(response.decode('utf-8','replace'))
-        #execute('''writeTerminalScreen("%s");''' % term.json_escape_all_u("\n".join(pty.screen.display)))
-        #js = term.render_all_js(pty.screen)
-        #js = term.render_different(pty.screen)
-        # js = pty.render()
-        # if js:
-        #     execute(js)
-        # js = term.render_history(pty.screen)
-        # if js:
-        #     execute(js)
+    try:
+        while running():
+            jslist = pty.read_and_feed_and_render()
+            #print "\n".join(jslist)
+            execute("\n".join(jslist))
+            execute('term.scrollToBottom();')
+    except OSError:
+        stop()
 
-        jslist = pty.read_and_feed_and_render()
-        #print "\n".join(jslist)
-        execute("\n".join(jslist))
-        execute('term.scrollToBottom();')
-
+    
 
 def main():
     try:
