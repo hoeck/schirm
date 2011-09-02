@@ -1,3 +1,4 @@
+import os
 import time
 import Queue
 import thread
@@ -60,6 +61,9 @@ class Webkit(object):
             ("enable-xss-auditor",                    False, '1.1.11'),
             ("tab-key-cycles-through-elements",       False, '1.1.17'),
             ("enable-developer-extras",               True,  '1.1.17'),
+            ("user-stylesheet-uri",                   'file://{}'.format(os.path.abspath("schirmstyles.css")), '???'),
+            ("default-font-size",                     10,    '???'   ),
+            ("default-monospace-font-size",           10,    '???'   )
         )
 
         settings = self.browser.get_settings()
