@@ -6,8 +6,11 @@ class Promise(object):
     def __init__(self, deliver=None):
         """
         Optionally specify a function called when the promise instance
-        is called. This functions return value is used to delivers
+        is called. This functions return value is used to deliver
         this promise value.
+
+        If deliver is None and the promise is called, ignore all
+        arguments, deliver 'True' and return None.
         """
         self._condition = threading.Condition()
         if deliver:
@@ -19,14 +22,12 @@ class Promise(object):
             self.deliver(r)
             return r
         else:
-            raise Exception("Promise contains no function")
+            self.deliver(True)
 
-    def deliver(self, value):
+    def deliver(self, value=True):
         """
-        Set the value (once) of this promise.
+        Set the value (once) of this promise. Defaults to True.
         """
-        # race condition here (multiple threads shouldn't try to
-        # deliver a promise anyway)
         self._condition.acquire()
         if not hasattr(self, '_value'):
             self._value = value
@@ -44,12 +45,10 @@ class Promise(object):
         self._condition.acquire()
 
         if not hasattr(self, '_value'):
-            self._condition.acquire()
             self._condition.wait()
 
         v = self._value
         self._condition.release()
 
         return v
-
 
