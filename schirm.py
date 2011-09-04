@@ -10,6 +10,7 @@ import threading
 import simplejson
 
 from webkit_wrapper import GtkThread, launch_browser, establish_browser_channel, install_key_events
+from promise import Promise
 # import shellinabox
 
 import term
@@ -48,6 +49,7 @@ def my_navigation_request_handler(view, frame, networkRequest):
 last_resource_requested = None
 def my_resource_requested_handler(view, frame, resource, request, response):
     print "resource-request-starting", request.get_uri()
+    last_resource_requested = request;
     return 1
 
 # browser.connect('console-message', my_console_message_handler)
@@ -111,9 +113,7 @@ def webkit_event_loop():
       
     window, browser = gtkthread.invoke_s(launch_browser)
     receive, execute = establish_browser_channel(gtkthread, browser)
-
-    #install_key_events(window, keypress_cb)
-    
+   
     # handle links
     #gtkthread.invoke(lambda : browser.browser.connect('navigation-requested', lambda view, frame, networkRequest: 0))
     #gtkthread.invoke(lambda : browser.connect_navigation_requested(my_navigation_request_handler))
@@ -130,17 +130,26 @@ def webkit_event_loop():
                  execute=execute,
                  pty=pty)
     
-    # load shellinabox
-    #file = os.path.abspath('root_page.html')
-    #file = os.path.abspath("/var/www/index.html")
-    #file = os.path.abspath("foo.html")
+    # setup onetime load finished handler
+    load_finished = Promise()
+    load_finished_id = None
+    def load_finished_cb(view, frame, user_data=None):
+        load_finished.deliver()
+        if load_finished_id:
+            browser.disconnect(load_finished_id)
+    load_finished_id = gtkthread.invoke_s(lambda : browser.connect('document-load-finished', load_finished_cb))
+
+    # load term document
     file = os.path.abspath("term.html")
     uri = 'file://' + urllib.pathname2url(file)
-    browser.open_uri(uri)
+    gtkthread.invoke(lambda : browser.open_uri(uri))
+
+    load_finished.get()
 
     # start a thread to send js expressions to webkit
     t = threading.Thread(target=lambda : pty_loop(pty, execute))
     t.start()
+
 
     # read from webkit though console.log messages starting with 'schirm'
     # and containing json data
@@ -166,7 +175,6 @@ def pty_loop(pty, execute):
     except OSError:
         stop()
 
-    
 
 def main():
     try:

@@ -47,7 +47,10 @@ class Webkit(object):
 
     def connect(self, *args, **kwargs):
         return self.browser.connect(*args, **kwargs)
-        
+    
+    def disconnect(self, *args, **kwargs):
+        return self.browser.disconnect(*args, **kwargs)
+
     def open_uri(self, uri):
         self.browser.open(uri)
 
