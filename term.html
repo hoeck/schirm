@@ -110,6 +110,7 @@ var Lines = (function(linesElement, term) {
       }
 
       var iframe = document.createElement('iframe');
+      iframe.name = "termIframe";
       div.appendChild(iframe);
       
       var newline = document.createElement('span');

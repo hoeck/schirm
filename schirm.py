@@ -103,7 +103,7 @@ def handle_keypress(event, pty):
         key = event.string
     
     if key:
-        pty.write(key)
+        pty.q_write(key)
 
 
 def webkit_event_loop():
@@ -142,13 +142,17 @@ def webkit_event_loop():
     # load term document
     file = os.path.abspath("term.html")
     uri = 'file://' + urllib.pathname2url(file)
-    gtkthread.invoke(lambda : browser.open_uri(uri))
+    #gtkthread.invoke(lambda : browser.open_uri(uri))
+    with open(file, "r") as f:
+        doc = f.read()
+    gtkthread.invoke(lambda : browser.load_string(doc, base_uri="schirm://"))
 
     load_finished.get()
 
     # start a thread to send js expressions to webkit
     t = threading.Thread(target=lambda : pty_loop(pty, execute))
     t.start()
+
 
 
     # read from webkit though console.log messages starting with 'schirm'

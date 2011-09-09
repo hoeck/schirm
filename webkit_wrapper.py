@@ -54,6 +54,9 @@ class Webkit(object):
     def open_uri(self, uri):
         self.browser.open(uri)
 
+    def load_string(self, content, mime_type="text/html", encoding="UTF-8", base_uri=""):
+        self.browser.load_string(content, mime_type, encoding, base_uri)
+
     def my_settings(self):
         # from https://github.com/mackstann/htpicker/blob/dabf5cb377dce9e4b05b39d2b2afa7bb1f11baa7/htpicker/browser.py (public domain)
         settings_values = (

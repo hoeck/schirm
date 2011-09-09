@@ -285,12 +285,12 @@ class TermScreen(pyte.Screen):
                 lc.pop_bottom();
                 lines_to_remove -= 1;
 
-            cursordelta = lines_to_remove
+            cursordelta = -(self.lines - lines - lines_to_remove - 1)
 
+        #print "old cursor is row:{} col:{}".format(self.cursor.y, self.cursor.x)
         newcursory = self.cursor.y + cursordelta
-        self.cursor.y = min(max(newcursory, 0), lines)
-        self.cursor.x = min(max(self.cursor.x, 0), columns)
-
+        self.cursor.y = min(max(newcursory, 0), lines-1)
+        self.cursor.x = min(max(self.cursor.x, 0), columns-1)
         #print "new cursor is row:{} col:{}".format(self.cursor.y, self.cursor.x)
 
         lc.height = lines
@@ -625,7 +625,7 @@ class TermScreen(pyte.Screen):
             * ``1`` -- Erases from beginning of line to cursor,
               including cursor position.
             * ``2`` -- Erases complete line.
-        :param bool private: when ``True`` character attributes aren left
+        :param bool private: when ``True`` character attributes are left
                              unchanged **not implemented**.
         """
         # interval = (

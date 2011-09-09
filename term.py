@@ -9,7 +9,8 @@ import itertools
 import cgi
 import json
 import struct
-
+import Queue
+import threading
 from itertools import cycle
 from UserList import UserList
 
@@ -177,12 +178,32 @@ class Pty(object):
 
         self.set_size(*size)
 
+        # set up input queue
+        self.input_queue = Queue.Queue()
+        
+        def process_queue_input():
+            while 1:
+                self.input_queue.get(block=True)()
+
+        t = threading.Thread(target=process_queue_input)
+        t.start()
+
+    def q_write(self, s):
+        "Queued version of self.write()"
+        self.input_queue.put(lambda : self.write(s))
+
+    def q_set_size(self, h, w):
+        "Queued version of self.set_size()"
+        self.input_queue.put(lambda : self.set_size(h, w))
+
     def write(self, s):
         os.write(self._pty, s)
 
     def set_size(self, h, w): # h/lines, w/columns
         """
         Use the TIOCSWINSZ ioctl to change the size of _pty if neccessary.
+
+        TODO: also set LINES/COLUMNS env vars for the child process
         """
         oldw, oldh = self._size
         if oldw != w or oldh != h and w > 0 and h > 0:
@@ -202,6 +223,9 @@ class Pty(object):
 
             self._size = [w, h]
 
+    def q_resize(self, lines, cols):
+        self.input_queue.put(lambda : self.resize(lines, cols))
+
     def resize(self, lines, cols):
         self.screen.resize(lines, cols)
 
@@ -211,7 +235,6 @@ class Pty(object):
         # currently is
         #if self.screen._application_mode():
         self.set_size(lines, cols)
-
 
     def read(self):
         return os.read(self._pty, 2048)
