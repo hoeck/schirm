@@ -1,28 +1,12 @@
 # -*- coding: utf-8 -*-
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! HERE !!!
-# works great so far except for resizing lines:
-
-# create a screen proxy which dispatches calls to different screens
-# depending on the current mode ?????
-# allows better iframe mode support?
-
-# also: change the resizte function to take into account how the
-#  browser already handles the resizing!!!!
-
-
 from UserList import UserList
 
 import pyte
 from pyte.screens import Char, Margins, Cursor
 from pyte import modes as mo, graphics as g, charsets as cs
 
-# When iframe mode is set, use another screen??
-IFRAME_MODE = 21
-
-
 # create an explicit interface to Lines and the seq of Lines to be
 # able to create better js dom-update instructions
-
 class Line(UserList):
     """
     A line of characters
@@ -188,6 +172,7 @@ class TermScreen(pyte.Screen):
         self.savepoints = []
         self.lines, self.columns = lines, columns
         self.linecontainer = LineContainer()
+        self.iframe_mode = False
         self.reset()
 
     def __before__(self, command):
@@ -225,7 +210,9 @@ class TermScreen(pyte.Screen):
         lines = [self._create_line() for _ in range(self.lines)]
         self.linecontainer.reset(lines)
 
-        self.iframe_mode = False
+        if self.iframe_mode:
+            self.iframe_leaeve()
+            
         self.mode = set([mo.DECAWM, mo.DECTCEM, mo.LNM, mo.DECTCEM])
         self.margins = Margins(0, self.lines - 1)
 
@@ -358,18 +345,6 @@ class TermScreen(pyte.Screen):
         if mo.DECAPP in modes:
             print "Application Mode Set"
 
-        # Iframe mode yippee
-        if IFRAME_MODE in modes:
-            # move cursor to last line
-            # insert an iframe line
-            # all following chars are written to that frame via
-            # iframe.document.write
-
-            self.index()
-            #self.linecontainer.pop(self.cursor.y)
-            self.linecontainer.insert(self.cursor.y, IframeLine())
-            self.iframe_mode = True
-
         # When DECOLM mode is set, the screen is erased and the cursor
         # moves to the home position.
         if mo.DECCOLM in modes:
@@ -397,9 +372,6 @@ class TermScreen(pyte.Screen):
     def _application_mode(self):
         return mo.DECAPP in self.mode
 
-    def _iframe_mode(self):
-        return IFRAME_MODE in self.mode
-
     def reset_mode(self, *modes, **kwargs):
         """Resets (disables) a given list of modes.
 
@@ -415,11 +387,6 @@ class TermScreen(pyte.Screen):
 
         if mo.DECAPP in modes:
             print "Application Mode _RE_set"
-
-        # leave Iframe mode
-        if IFRAME_MODE in modes:
-            self.iframe_mode = False
-            self.index()
 
         # Lines below follow the logic in :meth:`set_mode`.
         if mo.DECCOLM in modes:
@@ -447,11 +414,6 @@ class TermScreen(pyte.Screen):
 
         :param unicode char: a character to display.
         """
-
-        #print self.iframe_mode
-        if self.iframe_mode:
-            self.linecontainer.iframecharinsert(char)
-            return # ignore all other modes
 
         # Translating a given character.
         if self.charset != 0:
@@ -679,3 +641,140 @@ class TermScreen(pyte.Screen):
         # In case of 0 or 1 we have to erase the line with the cursor.
         if type_of in [0, 1]:
             self.erase_in_line(type_of)
+
+    ### iframe extensions
+    def iframe_enter(self):
+        # move cursor to last line
+        # insert an iframe line
+        # all following chars are written to that frame via
+        # iframe.document.write
+
+        self.index()
+        #self.linecontainer.pop(self.cursor.y)
+        self.linecontainer.insert(self.cursor.y, IframeLine())
+        self.iframe_mode = True
+
+    def iframe_leave(self):
+        self.iframe_mode = False
+        self.index()
+
+    def iframe_write(self, char):
+        if self.iframe_mode:
+            self.linecontainer.iframecharinsert(char)
+
+
+class SchirmStream(pyte.Stream):
+    
+    def __init__(self, *args, **kwargs):
+        super(SchirmStream, self).__init__(*args, **kwargs)
+        self.handlers.update({
+                'iframe_write': self._iframe_write,
+                'iframe_data': self._iframe_data,
+                'iframe_data_esc': self._iframe_data_esc,
+                'iframe_esc': self._iframe_esc,
+                'escape': self._escape,
+                })
+    
+    # def consume(self, char):
+    #     oldstate  = self.state
+    #     super(SchirmStream, self).consume(char)
+    #     print "consume:", char, "--", oldstate, " -> ",self.state
+    # def reset(self):
+    #     if self.iframe_mode:
+    #         super(self, SchirmStream).reset()
+    #         self.state = 'iframe_write'
+    #     else:
+    #         super(self, SchirmStream).reset()
+
+    # I use my own dispatch function - I don't need multiple listeners
+    # ignore the only flag too
+    def dispatch(self, event, *args, **kwargs):
+        (listener, only) = self.listeners[0] # ignore only
+        if self.listeners:
+            handler = getattr(listener, event)
+
+            if hasattr(listener, "__before__"):
+                listener.__before__(event)
+            print "calling: ", event, args
+            handler(*args, **self.flags)
+
+            if hasattr(listener, "__after__"):
+                listener.__after__(event)
+
+            if kwargs.get("reset", True): self.reset()
+            if kwargs.get("iframe", False): self.state = 'iframe_write'
+
+
+    # - ESC x leave iframe mode, interpreted at any time, ignored when
+    #   not in iframe mode
+    # - ESC R register-resource ESC ; <resource-name> ESC ; <escaped-data> ESC Q
+    #   Register a given resource to be served to the webkit view upon
+    #   request. Content-Type is determined by examining name (a file name).
+    #   Resource name must not contain a ";" character.
+    def _escape(self, char, **kwargs):
+        """Like pyte.Stream._escape, but additionally capture all
+        iframe commands: ESC R *args.
+        """
+        if char == "R":
+            self.state = "iframe_data" # go read a list of strings
+        elif char == 'x':
+            # leave iframe mode immediately/ignore this command
+            self.dispatch('iframe_leave')
+        else:
+            super(SchirmStream, self)._escape(char)
+
+    def _iframe_esc(self, char):
+        if char == "R": # read a command
+            self.state = 'iframe_data'
+        elif char == 'x':
+            self.dispatch('iframe_leave')
+        elif char == "\033":
+            self.dispatch('iframe_write', "\033", iframe=True)
+        else:
+            raise Exception("Invalid Iframe Mode Command")
+
+    def _iframe_data(self, char):
+        """Decode an iframe command. These start with ESC R followed
+           by a name followed by ESCaped argument (may be 0) followed
+           by ESC ; for more arguments or ESC Q to end the iframe
+           command.
+        """
+        if char == '\033':
+            self.state = "iframe_data_esc"
+        else:
+            self.current += char
+        print "iframe_data:", self.current, char == '\033'
+
+    def _iframe_data_esc(self, char):
+        if char == "\033":
+            # insert an escape into the stream
+            self.current += "\033"
+            self.state = 'iframe_data'
+        elif char == ";":
+            # read another argument
+            self.params.append(self.current)
+            self.current = ""
+            self.state = 'iframe_data'
+        elif char == "x":
+            # immediately leave iframe mode and ignore the current
+            # command
+            self.dispatch('iframe_leave')
+        elif char == "Q":
+            # end parameter transmission and dispatch
+            self.params.append(self.current)
+            # todo: check for valid commands
+            cmd = "iframe_{}".format(self.params[0])
+            args = self.params[1:]
+            self.dispatch(cmd, *args, iframe=True)
+        else:
+            raise Exception("Unknown escape sequence in iframe data")
+
+    def _iframe_write(self, char):
+        """Read a normal char: written to an iframe using document.write().
+        Advance state to 'escape' if an unescaped ESC is found.
+        """
+        if char == "\033":
+            self.state = 'iframe_esc'
+        else:
+            self.dispatch('iframe_write', char, iframe=True)
+

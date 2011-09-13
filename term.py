@@ -17,7 +17,7 @@ from UserList import UserList
 import pyte
 
 import termscreen
-from termscreen import TermScreen
+from termscreen import TermScreen, SchirmStream
 
 def json_escape_all_u(src):
     dst = ""
@@ -173,7 +173,8 @@ class Pty(object):
 
         self.screen = TermScreen(*size)
         self.last_cursor_line = 0
-        self.stream = pyte.Stream()
+        #self.stream = pyte.Stream()
+        self.stream = SchirmStream()
         self.stream.attach(self.screen)
 
         self.set_size(*size)
