@@ -142,10 +142,15 @@ def webkit_event_loop():
     # load term document
     file = os.path.abspath("term.html")
     uri = 'file://' + urllib.pathname2url(file)
-    #gtkthread.invoke(lambda : browser.open_uri(uri))
+
+    with open("term.css") as f:
+        term_css = f.read()
+
     with open(file, "r") as f:
         doc = f.read()
-    gtkthread.invoke(lambda : browser.load_string(doc, base_uri="schirm://"))
+        doc = doc.replace("//TERM-CSS-PLACEHOLDER", term_css)
+        
+    gtkthread.invoke(lambda : browser.load_string(doc, base_uri="http://localhost:{}".format(server.getport())))
 
     load_finished.get()
 
