@@ -11,6 +11,7 @@ import simplejson
 
 from webkit_wrapper import GtkThread, launch_browser, establish_browser_channel, install_key_events
 from promise import Promise
+import webserver
 # import shellinabox
 
 import term
@@ -123,13 +124,19 @@ def webkit_event_loop():
 
     pty = term.Pty([80,24])
     gtkthread.invoke(lambda : install_key_events(window, lambda widget, event: handle_keypress(event, pty)))
+
+    # A local webserver to write requests to the PTYs stdin and wait
+    # for responses because I did not find a way to mock or get a
+    # proxy of libsoup.
+    server = webserver.Server(pty).start()
     
     global state # to make interactive development and debugging easier
     state = dict(browser=browser,
                  receive=receive,
                  execute=execute,
-                 pty=pty)
-    
+                 pty=pty,
+                 server=server)
+
     # setup onetime load finished handler
     load_finished = Promise()
     load_finished_id = None
