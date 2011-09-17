@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 from UserList import UserList
-
 from StringIO import StringIO
 import codecs
+import base64
 
 import pyte
 from pyte.screens import Char, Margins, Cursor
@@ -15,7 +15,7 @@ class Line(UserList):
     A line of characters
     """
     # Later, add an iframe line implementation
-  
+
     def __init__(self, size, default_char):
         self.size = size
         self.default_char = default_char
@@ -37,7 +37,7 @@ class Line(UserList):
             char._replace(reverse=True)
 
     def insert_characters(self, pos, count, char):
-        """ 
+        """
         Inserts count chars at pos.
         (see Screen insert_characters)
         """
@@ -86,7 +86,7 @@ class Line(UserList):
 
 
 class IframeLine(Line):
-  
+
     def __init__(self):
         self.changed = False
 
@@ -113,7 +113,7 @@ class IframeLine(Line):
 
 
 class LineContainer():
-    
+
     def __init__(self):
         self.height = 0
         self.lines  = []
@@ -121,7 +121,7 @@ class LineContainer():
 
     def realLineIndex(self, i):
         return len(self.lines) - self.height + i
-       
+
     def get_and_clear_events(self):
         ret = self.events
         self.events = []
@@ -219,7 +219,7 @@ class TermScreen(pyte.Screen):
 
         if self.iframe_mode:
             self.iframe_leaeve()
-            
+
         self.mode = set([mo.DECAWM, mo.DECTCEM, mo.LNM, mo.DECTCEM])
         self.margins = Margins(0, self.lines - 1)
 
@@ -421,7 +421,7 @@ class TermScreen(pyte.Screen):
 
         :param unicode char: a character to display.
         """
-        
+
         # Translating a given character.
         if self.charset != 0 and 0: # commented out
             # somehoe, the latin 1 encoding done here is wrong,
@@ -669,13 +669,14 @@ class TermScreen(pyte.Screen):
         if self.iframe_mode:
             self.linecontainer.iframecharinsert(char)
 
-    def iframe_register_resource(self, name, data):
+    def iframe_register_resource(self, name, data_b64):
         #print "registering resource:", name, len(data), "chars"
+        data = base64.b64decode(data_b64)
         self.linecontainer.iframe_register_resource(name, data)
 
 
 class SchirmStream(pyte.Stream):
-    
+
     def __init__(self, *args, **kwargs):
         super(SchirmStream, self).__init__(*args, **kwargs)
         self.handlers.update({
@@ -686,10 +687,6 @@ class SchirmStream(pyte.Stream):
                 'escape': self._escape,
                 })
 
-        # If True, interpret fed chars as utf-8,
-        # when False, read plain bytes.
-        self.read_unicode = True
-    
     #def consume(self, char):
         #oldstate  = self.state
         #super(SchirmStream, self).consume(char)
@@ -698,15 +695,16 @@ class SchirmStream(pyte.Stream):
     def feed(self, bytes):
         # All js characters are json-encoded anyway.
         # All terminal control chars are 7bit.
-        stream = StringIO(bytes)
+        self.feed_stream(StringIO(bytes))
+
+    def feed_stream(self, stream):
+        """
+        Like feed() but directly use a stream and do not return until
+        everything has been read.
+        """
         rdr = codecs.getreader('utf-8')(stream)
-
         while True:
-            if self.read_unicode:
-                char = rdr.read(size=1, chars=1)
-            else:
-                char = stream.read(1)
-
+            char = rdr.read(chars=1)
             if char:
                 self.consume(char)
             else:
@@ -727,10 +725,6 @@ class SchirmStream(pyte.Stream):
                 self.reset()
             else:
                 raise
-
-    def reset(self):
-        self.read_unicode = True
-        super(SchirmStream, self).reset()
 
     # I use my own dispatch function - I don't need multiple listeners
     # ignore the only flag too
@@ -773,7 +767,6 @@ class SchirmStream(pyte.Stream):
     def _iframe_esc(self, char):
         if char == "R": # read a command
             self.state = 'iframe_data'
-            self.read_unicode = False # data consists of raw bytes
             self.current = []
         elif char == 'x':
             self.dispatch('iframe_leave')

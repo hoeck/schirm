@@ -4,6 +4,7 @@ import os
 import sys
 import random
 import time
+import base64
 
 def enterIframeMode():
     sys.stdout.write("\033Renter\033Q")
@@ -25,7 +26,7 @@ def register_resource(path):
 
     sys.stdout.write("\033Rregister_resource\033;{}\033;".format(name))
     with open(path, "rb") as f:
-        sys.stdout.write(f.read().replace("\033", "\033\033"))
+        sys.stdout.write(base64.b64encode(f.read().replace("\033", "\033\033")))
     sys.stdout.write("\033Q")   
 
 def testIframeModeHeight():
