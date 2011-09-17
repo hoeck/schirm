@@ -50,8 +50,19 @@ def my_navigation_request_handler(view, frame, networkRequest):
 last_resource_requested = None
 def my_resource_requested_handler(view, frame, resource, request, response):
     print "resource-request-starting", request.get_uri()
-    last_resource_requested = request;
-    return 1
+    global last_resource
+    global last_frame
+    global last_request
+    last_resource = resource
+    last_frame = frame
+    last_request = request
+
+    #if request.get_uri().startswith("schirm://"):
+    #    print "schirm-request!!"
+    #print "request for:", request.get_uri()
+
+    return 0
+
 
 # browser.connect('console-message', my_console_message_handler)
 def my_console_message_handler(view, msg, line, source_id, user_data):
@@ -129,6 +140,7 @@ def webkit_event_loop():
     # for responses because I did not find a way to mock or get a
     # proxy of libsoup.
     server = webserver.Server(pty).start()
+    pty.set_webserver(server) # currently pty handles register_resource commands directly
     
     global state # to make interactive development and debugging easier
     state = dict(browser=browser,

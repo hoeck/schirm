@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 from UserList import UserList
 
+from StringIO import StringIO
+import codecs
+
 import pyte
 from pyte.screens import Char, Margins, Cursor
 from pyte import modes as mo, graphics as g, charsets as cs
@@ -158,10 +161,14 @@ class LineContainer():
 
     def __iter__(self):
         return self.lines[self.realLineIndex(0):].__iter__() #???
-    
+
+    ## iframe events, not directly line-based
+
     def iframecharinsert(self, char):
         self.events.append(('iframe', char))
 
+    def iframe_register_resource(self, name, data):
+        self.events.append(('iframe_register_resource', name, data))
 
 # highlight-regexp:
 # self\(\.extend\|\.append\|\.pop\|\.insert\|\.remove\|\[.*\]\)
@@ -414,9 +421,9 @@ class TermScreen(pyte.Screen):
 
         :param unicode char: a character to display.
         """
-
+        
         # Translating a given character.
-        if self.charset != 0:
+        if self.charset != 0 and 0: # commented out
             # somehoe, the latin 1 encoding done here is wrong,
             # json.dumps does not correctly convert the resulting
             # string into browser-utf-8
@@ -662,6 +669,10 @@ class TermScreen(pyte.Screen):
         if self.iframe_mode:
             self.linecontainer.iframecharinsert(char)
 
+    def iframe_register_resource(self, name, data):
+        #print "registering resource:", name, len(data), "chars"
+        self.linecontainer.iframe_register_resource(name, data)
+
 
 class SchirmStream(pyte.Stream):
     
@@ -674,32 +685,67 @@ class SchirmStream(pyte.Stream):
                 'iframe_esc': self._iframe_esc,
                 'escape': self._escape,
                 })
+
+        # If True, interpret fed chars as utf-8,
+        # when False, read plain bytes.
+        self.read_unicode = True
     
-    # def consume(self, char):
-    #     oldstate  = self.state
-    #     super(SchirmStream, self).consume(char)
-    #     print "consume:", char, "--", oldstate, " -> ",self.state
-    # def reset(self):
-    #     if self.iframe_mode:
-    #         super(self, SchirmStream).reset()
-    #         self.state = 'iframe_write'
-    #     else:
-    #         super(self, SchirmStream).reset()
+    #def consume(self, char):
+        #oldstate  = self.state
+        #super(SchirmStream, self).consume(char)
+        #print "consume:", char, ord(char) #, "--", oldstate, " -> ",self.state
+
+    def feed(self, bytes):
+        # All js characters are json-encoded anyway.
+        # All terminal control chars are 7bit.
+        stream = StringIO(bytes)
+        rdr = codecs.getreader('utf-8')(stream)
+
+        while True:
+            if self.read_unicode:
+                char = rdr.read(size=1, chars=1)
+            else:
+                char = stream.read(1)
+
+            if char:
+                self.consume(char)
+            else:
+                return
+
+    def consume(self, char):
+        # same as super(SchirmStream, self).consume(char) bit without
+        # the unicode enforcement
+        try:
+            self.handlers.get(self.state)(char)
+        except TypeError:
+            pass
+        except KeyError:
+            if __debug__:
+                self.flags["state"] = self.state
+                self.flags["unhandled"] = char
+                self.dispatch("debug", *self.params)
+                self.reset()
+            else:
+                raise
+
+    def reset(self):
+        self.read_unicode = True
+        super(SchirmStream, self).reset()
 
     # I use my own dispatch function - I don't need multiple listeners
     # ignore the only flag too
     def dispatch(self, event, *args, **kwargs):
-        (listener, only) = self.listeners[0] # ignore only
+        (listener, only) = self.listeners[0] # ignore 'only'
         if self.listeners:
-            handler = getattr(listener, event)
+            handler = getattr(listener, event, None)
+            if handler:
+                if hasattr(listener, "__before__"):
+                    listener.__before__(event)
+                #print "calling: ", event, args
+                handler(*args, **self.flags)
 
-            if hasattr(listener, "__before__"):
-                listener.__before__(event)
-            print "calling: ", event, args
-            handler(*args, **self.flags)
-
-            if hasattr(listener, "__after__"):
-                listener.__after__(event)
+                if hasattr(listener, "__after__"):
+                    listener.__after__(event)
 
             if kwargs.get("reset", True): self.reset()
             if kwargs.get("iframe", False): self.state = 'iframe_write'
@@ -717,6 +763,7 @@ class SchirmStream(pyte.Stream):
         """
         if char == "R":
             self.state = "iframe_data" # go read a list of strings
+            self.current = []
         elif char == 'x':
             # leave iframe mode immediately/ignore this command
             self.dispatch('iframe_leave')
@@ -726,6 +773,8 @@ class SchirmStream(pyte.Stream):
     def _iframe_esc(self, char):
         if char == "R": # read a command
             self.state = 'iframe_data'
+            self.read_unicode = False # data consists of raw bytes
+            self.current = []
         elif char == 'x':
             self.dispatch('iframe_leave')
         elif char == "\033":
@@ -742,18 +791,17 @@ class SchirmStream(pyte.Stream):
         if char == '\033':
             self.state = "iframe_data_esc"
         else:
-            self.current += char
-        print "iframe_data:", self.current, char == '\033'
+            self.current.append(char)
 
     def _iframe_data_esc(self, char):
         if char == "\033":
             # insert an escape into the stream
-            self.current += "\033"
+            self.current.append("\033")
             self.state = 'iframe_data'
         elif char == ";":
             # read another argument
-            self.params.append(self.current)
-            self.current = ""
+            self.params.append("".join(self.current))
+            self.current = []
             self.state = 'iframe_data'
         elif char == "x":
             # immediately leave iframe mode and ignore the current
@@ -761,7 +809,7 @@ class SchirmStream(pyte.Stream):
             self.dispatch('iframe_leave')
         elif char == "Q":
             # end parameter transmission and dispatch
-            self.params.append(self.current)
+            self.params.append("".join(self.current))
             # todo: check for valid commands
             cmd = "iframe_{}".format(self.params[0])
             args = self.params[1:]

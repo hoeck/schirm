@@ -62,7 +62,9 @@ class Server(object):
         if method == 'GET' and path in self.resources:
             # serve it
             print "serving static resource:", path
+            #print self.resources[path]
             client.sendall(self.resources[path])
+            client.close()
             return
         elif method == 'GET' and path in self.not_found:
             # ignore some requests (favicon & /)
@@ -97,11 +99,12 @@ class Server(object):
         Add a static resource name to be served. Use the resources
         name to guess an appropriate content-type.
         """
-        response = "\n".join("HTTP/1.1 200 OK",
-                             "Content-Type: " + mimetypes.guess_type(name, strict=False),
-                             "Content-Length: " + len(data),
-                             "",
-                             data)
+        guessed_type, encoding = mimetypes.guess_type(name, strict=False)
+        response = "\n".join(("HTTP/1.1 200 OK",
+                              "Content-Type: " + guessed_type,
+                              "Content-Length: " + str(len(data)),
+                              "",
+                              data))
         if not name.startswith("/"):
             name = "/" + name
         self.resources[name] = response

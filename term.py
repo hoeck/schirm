@@ -156,7 +156,7 @@ class EventRenderer():
     def iframe(content):
         return 'term.iframeWrite({})'.format(json.dumps(content))
 
-
+       
 class Pty(object):
             
     def __init__(self, size=(80, 24)):
@@ -170,6 +170,8 @@ class Pty(object):
             pass
         self._size = [0,0]
         self._pty = master
+
+        self._server = None # must be set later
 
         self.screen = TermScreen(*size)
         self.last_cursor_line = 0
@@ -224,6 +226,9 @@ class Pty(object):
 
             self._size = [w, h]
 
+    def set_webserver(self, server):
+        self._server = server
+
     def q_resize(self, lines, cols):
         self.input_queue.put(lambda : self.resize(lines, cols))
 
@@ -242,7 +247,8 @@ class Pty(object):
 
     def read_and_feed(self):
         response = self.read()
-        self.stream.feed(response.decode('utf-8','replace'))       
+        #self.stream.feed(response.decode('utf-8','replace'))
+        self.stream.feed(response)
 
     def render_changes(self):
         js = []
@@ -250,7 +256,10 @@ class Pty(object):
         events = lines.get_and_clear_events()
 
         for e in events:
-            js.append(getattr(EventRenderer, e[0])(*e[1:]))
+            if e[0] == 'iframe_register_resource': # kludge, needs some real (attribute based) polymorphism
+                self._server.register_resource(e[1], e[2])
+            else:
+                js.append(getattr(EventRenderer, e[0])(*e[1:]))
             
         for i,line in enumerate(lines):
             if line.changed:

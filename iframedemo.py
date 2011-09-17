@@ -23,11 +23,10 @@ def testIframeMode(s):
 def register_resource(path):
     _, name = os.path.split(path)
 
-    sys.stdout.write("\033Rregister_resource;{};".format(name))
-    with open(path) as f:
+    sys.stdout.write("\033Rregister_resource\033;{}\033;".format(name))
+    with open(path, "rb") as f:
         sys.stdout.write(f.read().replace("\033", "\033\033"))
-    sys.stdout.write("\033Q")
-    
+    sys.stdout.write("\033Q")   
 
 def testIframeModeHeight():
     #print "plain term"
