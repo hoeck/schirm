@@ -47,22 +47,8 @@ def my_navigation_request_handler(view, frame, networkRequest):
     last_nav_request = (view, frame, networkRequest)
     return 0
 
-last_resource_requested = None
 def my_resource_requested_handler(view, frame, resource, request, response):
-    print "resource-request-starting", request.get_uri()
-    global last_resource
-    global last_frame
-    global last_request
-    last_resource = resource
-    last_frame = frame
-    last_request = request
-
-    #if request.get_uri().startswith("schirm://"):
-    #    print "schirm-request!!"
-    #print "request for:", request.get_uri()
-
     return 0
-
 
 # browser.connect('console-message', my_console_message_handler)
 def my_console_message_handler(view, msg, line, source_id, user_data):
