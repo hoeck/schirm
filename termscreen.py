@@ -628,26 +628,50 @@ class TermScreen(pyte.Screen):
         :param bool private: when ``True`` character attributes aren left
                              unchanged **not implemented**.
         """
-        interval = (
-            # a) erase from cursor to the end of the display, including
-            # the cursor,
-            range(self.cursor.y + 1, self.lines),
-            # b) erase from the beginning of the display to the cursor,
-            # including it,
-            range(0, self.cursor.y),
-            # c) erase the whole display.
-            range(0, self.lines)
-        )[type_of]
 
-        for line in interval:
-            # self[line][:] = \
-            #     (self.cursor.attrs for _ in range(self.columns))
-            # erase the whole line
-            self.linecontainer[line].erase_in_line(2, 0, self.cursor.attrs)
-
-        # In case of 0 or 1 we have to erase the line with the cursor.
         if type_of in [0, 1]:
-            self.erase_in_line(type_of)
+            # erase parts of the display -> don't care about history
+            interval = (
+                # a) erase from cursor to the end of the display, including
+                # the cursor,
+                range(self.cursor.y + 1, self.lines),
+                # b) erase from the beginning of the display to the cursor,
+                # including it,
+                range(0, self.cursor.y),
+                # c) erase the whole display.
+                range(0, self.lines)
+            )[type_of]
+
+            for line in interval:
+                # self[line][:] = \
+                #     (self.cursor.attrs for _ in range(self.columns))
+                # erase the whole line
+                self.linecontainer[line].erase_in_line(2, 0, self.cursor.attrs)
+
+            # In case of 0 or 1 we have to erase the line with the cursor.
+            if type_of in [0, 1]:
+                self.erase_in_line(type_of)
+        else: # type_of == 2
+            # erase the whole display -> 
+            # Push every visible line to the history == add blank
+            # lines until all current non-blank lines are above the
+            # top of the term window. (thats what xterm does and
+            # linux-term not, try using top in both term emulators and
+            # see what
+            # happens to the history)
+
+            lc = self.linecontainer
+            # find the lowest nonempty line
+            for i in range(self.lines-1, -1, -1):
+                if not self._is_empty_line(lc.lines[i]):
+                    break
+            
+            # fill the screen with enough empty lines to push all
+            # other nonempty lines (and an additional newline) to the
+            # history
+            top, bottom = self.margins
+            for _ in range(i+1):
+                self.linecontainer.insert(bottom+1, self._create_line())
 
     ### iframe extensions
     def iframe_enter(self):
@@ -702,7 +726,7 @@ class SchirmStream(pyte.Stream):
         Like feed() but directly use a stream and do not return until
         everything has been read.
         """
-        rdr = codecs.getreader('utf-8')(stream)
+        rdr = codecs.getreader('utf-8')(stream, 'ignore')
         while True:
             char = rdr.read(chars=1)
             if char:
