@@ -163,7 +163,10 @@ class Pty(object):
         pid, master = os.forkpty()
         if pid == 0:
             # child
-            os.putenv('TERM', 'linux')
+            os.putenv('TERM', 'xterm')
+            os.putenv('COLORTERM', 'Terminal')
+            os.putenv('COLUMNS', str(size[0]))
+            os.putenv('LINES', str(size[1]))
             os.execl("/bin/bash", "bash") # todo: use the users default shell
         else:
             # parent
@@ -243,11 +246,11 @@ class Pty(object):
         self.set_size(lines, cols)
 
     def read(self):
-        return os.read(self._pty, 2048)
+        return os.read(self._pty, 4096)
 
     def read_and_feed(self):
         response = self.read()
-        #self.stream.feed(response.decode('utf-8','replace'))
+        #print "response-len:", len(response)
         self.stream.feed(response)
 
     def render_changes(self):
