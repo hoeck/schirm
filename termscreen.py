@@ -676,18 +676,17 @@ class TermScreen(pyte.Screen):
     ### iframe extensions
     def iframe_enter(self):
         # move cursor to last line
-        # insert an iframe line
+        # insert an iframe line at the current cursor position
         # all following chars are written to that frame via
         # iframe.document.write
 
-        self.index()
+        #self.index()
         #self.linecontainer.pop(self.cursor.y)
         self.linecontainer.insert(self.cursor.y, IframeLine())
         self.iframe_mode = True
 
     def iframe_leave(self):
         self.iframe_mode = False
-        self.index()
 
     def iframe_write(self, char):
         if self.iframe_mode:
