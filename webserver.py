@@ -1,15 +1,34 @@
 
+import os
 import socket
 import mimetypes
 import threading
+import base64
+from BaseHTTPServer import BaseHTTPRequestHandler
+from StringIO import StringIO
+
+
+START = "\033R"
+SEP = "\033;"
+END = "\033Q"
+
+class HTTPRequest(BaseHTTPRequestHandler):
+    def __init__(self, stream): #request_text
+        self.rfile = stream #StringIO(request_text)
+        self.raw_requestline = self.rfile.readline()
+        self.error_code = self.error_message = None
+        self.parse_request()
+
+    def send_error(self, code, message):
+        self.error_code = code
+        self.error_message = message
 
 class Server(object):
     """
     1) A simple server which reads requests from the embedded webkit,
     enumerates them and writes them to the pty using a special ESC code:
-    ESC R <id> ; <escaped-request-data> \033 Q
+    ESC R <id> ESC ; <base64-encoded-request-data> \033 Q
     the id is required to know which response belongs to which request.
-    Escape all escape-bytes ('\033') in request-data with an escape ('\033').
     
     2) A function to handle responses from the pty and write them to the
     webkit socket.
@@ -45,28 +64,33 @@ class Server(object):
         return port
     
     def listen(self):
-        print "listening!"
+        # todo: thread to close up unused connections
         while 1:
             client, address = self.socket.accept()
-            print "connected!!!!"
             self.receive(client)            
             
     def receive(self, client):
-        print "webserver: receiving"
 
-        # is it a known static resource?
-        data = client.recv(8192)
-        head = data[:data.index("\n")]
-        print "request:", head
-        method, path, protocol = head.split()
-        if method == 'GET' and path in self.resources:
-            # serve it
-            print "serving static resource:", path
-            #print self.resources[path]
-            client.sendall(self.resources[path])
+        rfile = client.makefile()
+
+        req = HTTPRequest(rfile)
+        print req.command, req.path
+
+        if req.error_code:
+            print "webserver error:", req.error_message
+            client.sendall(req.error_message)
             client.close()
             return
-        elif method == 'GET' and path in self.not_found:
+        
+        # is it a known static resource?
+        if req.command == 'GET' and req.path in self.resources:
+            # serve it
+            print "serving static resource:", req.path
+            client.sendall(self.resources[req.path])
+            client.close()
+            return
+
+        elif req.command == 'GET' and req.path in self.not_found:
             # ignore some requests (favicon & /)
             print "not_found"
             client.sendall("HTTP/1.1 404 Not Found")
@@ -76,17 +100,30 @@ class Server(object):
             print "No static resource found -> asking pty"
             req_id = self._getnextid()
             self.requests[req_id] = client
-            pty_request = ["\033R",
-                           str(req_id),
-                           ";",
-                           data.replace('\033', '\033\033')]
-            while 1:
-                data = client.recv(8192)
-                if not data:
-                    break
-                pty_request.append(data.replace('\033', '\033\033'))
-            pty_request.append('\033Q')
-            self.pty.q_write("".join(data))
+            
+            # transmitting: method, path, (k, v)*, data
+            data = [req.request_version,
+                    req.command,
+                    req.path]
+
+            for k in req.headers.keys():
+                data.append(k)
+                data.append(req.headers[k])
+
+            if req.headers.get("Content-Length"):
+                print "reading data:", req.headers.get("Content-Length")
+                data.append(req.rfile.read(long(req.headers.get("Content-Length"))))
+                print "OK:", data[-1]
+            else:
+                print "No Data"
+                data.append("")
+            # print "request is:"
+            # for x in data:
+            #     print "  ", x
+
+            pty_request = START + SEP.join(base64.encodestring(x) for x in data) + END
+            print "request is:", pty_request
+            self.pty.q_write_iframe(pty_request)
 
     def respond(self, req_id, data):
         if req_id in self.requests:

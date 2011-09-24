@@ -156,7 +156,6 @@ class EventRenderer():
     def iframe(content):
         return 'term.iframeWrite({})'.format(json.dumps(content))
 
-       
 class Pty(object):
             
     def __init__(self, size=(80, 24)):
@@ -197,6 +196,10 @@ class Pty(object):
     def q_write(self, s):
         "Queued version of self.write()"
         self.input_queue.put(lambda : self.write(s))
+
+    def q_write_iframe(self, s):
+        "Write content to the PTYs stdin only if its in iframe mode."
+        self.input_queue.put(lambda : self.write(s) if self.screen.iframe_mode else None)
 
     def q_set_size(self, h, w):
         "Queued version of self.set_size()"
