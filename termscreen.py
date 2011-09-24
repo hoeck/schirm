@@ -170,6 +170,13 @@ class LineContainer():
     def iframe_register_resource(self, name, data):
         self.events.append(('iframe_register_resource', name, data))
 
+    def iframe_respond(self, name, data):
+        self.events.append(('iframe_respond', name, data))
+
+    def iframe_close(self):
+        self.events.append(('iframe_close', ))
+
+
 # highlight-regexp:
 # self\(\.extend\|\.append\|\.pop\|\.insert\|\.remove\|\[.*\]\)
 
@@ -183,6 +190,8 @@ class TermScreen(pyte.Screen):
         self.reset()
 
     def __before__(self, command):
+        #if not command == 'draw':
+        #    print command
         pass
 
     def __after__(self, command):
@@ -639,7 +648,7 @@ class TermScreen(pyte.Screen):
                 # including it,
                 range(0, self.cursor.y),
                 # c) erase the whole display.
-                range(0, self.lines)
+                 #range(0, self.lines)
             )[type_of]
 
             for line in interval:
@@ -692,11 +701,17 @@ class TermScreen(pyte.Screen):
         if self.iframe_mode:
             self.linecontainer.iframecharinsert(char)
 
+    def iframe_close(self):
+        self.linecontainer.iframe_close()
+
     def iframe_register_resource(self, name, data_b64):
         #print "registering resource:", name, len(data), "chars"
         data = base64.b64decode(data_b64)
         self.linecontainer.iframe_register_resource(name, data)
 
+    def iframe_respond(self, request_id, data_b64):
+        data = base64.b64decode(data_b64)
+        self.linecontainer.iframe_respond(request_id, data)
 
 class SchirmStream(pyte.Stream):
 
@@ -810,11 +825,7 @@ class SchirmStream(pyte.Stream):
             self.current.append(char)
 
     def _iframe_data_esc(self, char):
-        if char == "\033":
-            # insert an escape into the stream
-            self.current.append("\033")
-            self.state = 'iframe_data'
-        elif char == ";":
+        if char == ";":
             # read another argument
             self.params.append("".join(self.current))
             self.current = []

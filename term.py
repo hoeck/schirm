@@ -154,7 +154,11 @@ class EventRenderer():
 
     @staticmethod
     def iframe(content):
-        return 'term.iframeWrite({})'.format(json.dumps(content))
+        return 'term.iframeWrite({});'.format(json.dumps(content))
+    
+    @staticmethod
+    def iframe_close():
+        return 'term.iframeCloseDocument();'
 
 class Pty(object):
             
@@ -264,6 +268,8 @@ class Pty(object):
         for e in events:
             if e[0] == 'iframe_register_resource': # kludge, needs some real (attribute based) polymorphism
                 self._server.register_resource(e[1], e[2])
+            elif e[0] == 'iframe_respond':
+                self._server.respond(e[1], e[2])
             else:
                 js.append(getattr(EventRenderer, e[0])(*e[1:]))
             

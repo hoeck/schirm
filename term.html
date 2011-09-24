@@ -137,6 +137,12 @@ var Lines = (function(linesElement, term) {
       }
     },
 
+    // call .close on the iframe document.
+    iframeCloseDocument: function () {
+      var iframe = term.currentIframe;
+      iframe.contentDocument.close();
+    },
+
     getSize: function() {
       return getPreSize(linesElement);
     },
@@ -359,6 +365,7 @@ var Term = function() {
 
     insertIframe: function (linenumber) { fn.getScreen().insertIframe(linenumber); },
     iframeWrite: function (content) { fn.getScreen().iframeWrite(content); },
+    iframeCloseDocument: function() { fn.getScreen().iframeCloseDocument(); },
 
     getSize: function() { return fn.getScreen().getSize(); },
     resize: function(oldLines, newLines) { fn.getScreen().resize(oldLines, newLines); },
