@@ -173,9 +173,17 @@ class LineContainer():
     def iframe_respond(self, name, data):
         self.events.append(('iframe_respond', name, data))
 
+    def iframe_debug(self, data):
+        self.events.append(('iframe_debug', data))
+
     def iframe_close(self):
         self.events.append(('iframe_close', ))
 
+    def iframe_enter(self):
+        self.events.append(('iframe_enter', ))
+
+    def iframe_leave(self):
+        self.events.append(('iframe_leave', ))
 
 # highlight-regexp:
 # self\(\.extend\|\.append\|\.pop\|\.insert\|\.remove\|\[.*\]\)
@@ -186,7 +194,7 @@ class TermScreen(pyte.Screen):
         self.savepoints = []
         self.lines, self.columns = lines, columns
         self.linecontainer = LineContainer()
-        self.iframe_mode = False
+        self.iframe_mode = None
         self.reset()
 
     def __before__(self, command):
@@ -360,7 +368,7 @@ class TermScreen(pyte.Screen):
         self.mode.update(modes)
         if mo.DECAPP in modes:
             print "Application Mode Set"
-
+            
         # When DECOLM mode is set, the screen is erased and the cursor
         # moves to the home position.
         if mo.DECCOLM in modes:
@@ -691,18 +699,32 @@ class TermScreen(pyte.Screen):
 
         #self.index()
         #self.linecontainer.pop(self.cursor.y)
-        self.linecontainer.insert(self.cursor.y, IframeLine())
-        self.iframe_mode = True
+        if self.iframe_mode == None:
+            self.linecontainer.iframe_enter()
+            self.linecontainer.insert(self.cursor.y, IframeLine())
+            self.iframe_mode = 'open' # iframe document opened
+        elif self.iframe_mode == 'closed':
+            self.iframe_mode = 'open'
+        elif self.iframe_mode == 'open':
+            pass
+        else:
+            raise Exception("Illegal iframe_mode: '{}'".format(self.iframe_mode))
 
     def iframe_leave(self):
-        self.iframe_mode = False
+        self.linecontainer.iframe_leave()
+        self.iframe_mode = None
 
     def iframe_write(self, char):
-        if self.iframe_mode:
+        if self.iframe_mode == 'open':
             self.linecontainer.iframecharinsert(char)
+        else:
+            # ignore all writes to closed documents:
+            # those are echo writes of input to the terminal
+            pass
 
     def iframe_close(self):
         self.linecontainer.iframe_close()
+        self.iframe_mode = 'closed'
 
     def iframe_register_resource(self, name, data_b64):
         #print "registering resource:", name, len(data), "chars"
@@ -712,6 +734,11 @@ class TermScreen(pyte.Screen):
     def iframe_respond(self, request_id, data_b64):
         data = base64.b64decode(data_b64)
         self.linecontainer.iframe_respond(request_id, data)
+
+    def iframe_debug(self, b64_debugmsg):
+        # write a debugstring to sys stdout of the emulator process
+        data = base64.b64decode(b64_debugmsg)
+        self.linecontainer.iframe_debug(data)
 
 class SchirmStream(pyte.Stream):
 
@@ -811,7 +838,10 @@ class SchirmStream(pyte.Stream):
         elif char == "\033":
             self.dispatch('iframe_write', "\033", iframe=True)
         else:
-            raise Exception("Invalid Iframe Mode Command")
+            #raise Exception("Invalid Iframe Mode Command: ESC {} ({})".format(char, ord(char)))
+            #print "Invalid Iframe Mode Command: ESC {} ({})".format(char, ord(char))
+            # leave the iframe mode on invalid commands
+            self.dispatch('iframe_leave')
 
     def _iframe_data(self, char):
         """Decode an iframe command. These start with ESC R followed
@@ -842,7 +872,9 @@ class SchirmStream(pyte.Stream):
             args = self.params[1:]
             self.dispatch(cmd, *args, iframe=True)
         else:
-            raise Exception("Unknown escape sequence in iframe data")
+            #print "Unknown escape sequence in iframe data:", "ESC", char
+            #raise Exception("Unknown escape sequence in iframe data")
+            pass
 
     def _iframe_write(self, char):
         """Read a normal char: written to an iframe using document.write().
@@ -852,4 +884,3 @@ class SchirmStream(pyte.Stream):
             self.state = 'iframe_esc'
         else:
             self.dispatch('iframe_write', char, iframe=True)
-

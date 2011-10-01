@@ -176,7 +176,6 @@ class Pty(object):
             pass
         self._size = [0,0]
         self._pty = master
-
         self._server = None # must be set later
 
         self.screen = TermScreen(*size)
@@ -209,8 +208,49 @@ class Pty(object):
         "Queued version of self.set_size()"
         self.input_queue.put(lambda : self.set_size(h, w))
 
+    def q_echo_on(self):
+        self.input_queue.put(lambda : self.echo_on())
+
+    def q_echo_off(self):
+        self.input_queue.put(lambda : self.echo_off())
+
     def write(self, s):
         os.write(self._pty, s)
+
+    def fake_input(self, input_string):
+        #TIOCSTI const char *argp
+        #Insert the given byte in the input queue.
+        fcntl.ioctl(self._pty, termios.TIOCSTI, input_string)
+
+    def q_fake_input(self, input_string):
+        self.input_queue.put(lambda : self.fake_input(input_string))
+
+    def echo_off(self):
+        if 1: # works, but echo on does not always work :/
+            new = termios.tcgetattr(self._pty)
+            new[3] = new[3] & ~termios.ECHO # lflags
+            termios.tcsetattr(self._pty,
+                              #termios.TCSADRAIN,
+                              termios.TCSANOW,
+                              new)
+
+    def echo_on(self):
+        if 1: # sometimes under unknown circumstances refuses to set echo to on
+            import time
+            time.sleep(2)
+            #termios.tcflush(self._pty, termios.TCIOFLUSH)
+            buf = struct.pack('i',0)
+            ret = fcntl.ioctl(self._pty, termios.FIONREAD, buf)
+
+            buf = struct.pack('i',0)
+            ret = fcntl.ioctl(self._pty, termios.TIOCOUTQ, buf)
+
+            new = termios.tcgetattr(self._pty)
+            new[3] = new[3] | termios.ECHO # lflags
+            ret = termios.tcsetattr(self._pty,
+                                    #termios.TCSADRAIN,
+                                    termios.TCSANOW,
+                                    new)
 
     def set_size(self, h, w): # h/lines, w/columns
         """
@@ -257,7 +297,6 @@ class Pty(object):
 
     def read_and_feed(self):
         response = self.read()
-        #print "response-len:", len(response)
         self.stream.feed(response)
 
     def render_changes(self):
@@ -270,6 +309,15 @@ class Pty(object):
                 self._server.register_resource(e[1], e[2])
             elif e[0] == 'iframe_respond':
                 self._server.respond(e[1], e[2])
+            elif e[0] == 'iframe_enter':
+                #self.q_echo_off()
+                pass
+            elif e[0] == 'iframe_leave':
+                #self.q_echo_on()
+                self._server.clear_resources()
+                pass
+            elif e[0] == 'iframe_debug':
+                print 'IFRAME-DEBUG:', e[1]
             else:
                 js.append(getattr(EventRenderer, e[0])(*e[1:]))
             
@@ -378,4 +426,3 @@ class Pty(object):
                 return keydef[0]
         else:
             return keydef
-

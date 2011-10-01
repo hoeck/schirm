@@ -140,7 +140,10 @@ var Lines = (function(linesElement, term) {
     // call .close on the iframe document.
     iframeCloseDocument: function () {
       var iframe = term.currentIframe;
+      console.log("closing iframe document!");
+      var body = iframe.contentDocument.getElementsByTagName("body")[0];
       iframe.contentDocument.close();
+      iframe.height = iframe.contentDocument.height;
     },
 
     getSize: function() {
