@@ -310,11 +310,15 @@ class Pty(object):
             elif e[0] == 'iframe_respond':
                 self._server.respond(e[1], e[2])
             elif e[0] == 'iframe_enter':
+                # Make sure we have no old resources.
+                # The embedded webkit takes some time to load
+                # resources, so we want them to be around even if we
+                # already left iframe mode.
+                self._server.clear_resources()
                 #self.q_echo_off()
                 pass
             elif e[0] == 'iframe_leave':
                 #self.q_echo_on()
-                self._server.clear_resources()
                 pass
             elif e[0] == 'iframe_debug':
                 print 'IFRAME-DEBUG:', e[1]

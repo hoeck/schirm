@@ -75,40 +75,32 @@ class Server(object):
         self.resources = {}
 
     def receive(self, client):
-        
-        rfile = client.makefile()
+        """
+        Receive a request and ignore, serve static files or ask the
+        pty to provide a response.
+        """
 
+        rfile = client.makefile()
         req = HTTPRequest(rfile)
-        print req.command, req.path, req.headers
-        
+       
         if req.error_code:
-            #print "webserver error:", req.error_message
             client.sendall(req.error_message)
             client.close()
-            return
-        
-
-        if not self.pty.screen.iframe_mode:
-            # only server requests if terminal is in iframe mode
-            client.sendall("HTTP/1.1 404 Not Found")
-            client.close()
-            return
 
         elif req.command == 'GET' and req.path in self.resources:
             # its a known static resource, serve it!
-            #print "serving static resource:", req.path
             client.sendall(self.resources[req.path])
             client.close()
-            return
 
         elif req.command == 'GET' and req.path in self.not_found:
             # ignore some requests (favicon & /)
-            #print "not_found"
             client.sendall("HTTP/1.1 404 Not Found")
-            return
-
+        
+        elif not self.pty.screen.iframe_mode:
+            # only serve dynamic requests if terminal is in iframe mode
+            client.sendall("HTTP/1.1 404 Not Found")
+            client.close()
         else:
-            #print "No static resource found -> asking pty"
             req_id = self._getnextid()
             self.requests[req_id] = client
             
@@ -133,14 +125,20 @@ class Server(object):
 
             pty_request = START + SEP.join(base64.encodestring(x) for x in data) + END + NEWLINE
 
-            # Do only send requests then the terminals iframe document
-            # is closed so that requests are not echoed into the
-            # document.
-            while self.pty.screen.iframe_mode != 'closed':
-                time.sleep(0.1)
-            
+            # Do only send requests when the terminals iframe document
+            # is 'closed' so that requests are not echoed into the
+            # document or into the terminal screen.
+            # Wait for a close if its currently 'open'
+            timeout = 120
+            wait = 0.1
+            while self.pty.screen.iframe_mode == 'open' \
+                    and timeout > 0:
+                timeout -= wait
+                time.sleep(wait)
+
             #print "request is:", repr(pty_request)
-            self.pty.q_write_iframe(pty_request)
+            if self.pty.screen.iframe_mode == 'closed':
+                self.pty.q_write_iframe(pty_request)
 
     def respond(self, req_id, data):
         #print "respond:", req_id, data
