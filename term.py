@@ -293,7 +293,7 @@ class Pty(object):
         self.set_size(lines, cols)
 
     def read(self):
-        return os.read(self._pty, 4096)
+        return os.read(self._pty, 8192)
 
     def read_and_feed(self):
         response = self.read()

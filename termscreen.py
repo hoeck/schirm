@@ -699,6 +699,7 @@ class TermScreen(pyte.Screen):
 
         #self.index()
         #self.linecontainer.pop(self.cursor.y)
+
         if self.iframe_mode == None:
             self.linecontainer.iframe_enter()
             self.linecontainer.insert(self.cursor.y, IframeLine())
@@ -757,23 +758,52 @@ class SchirmStream(pyte.Stream):
         #super(SchirmStream, self).consume(char)
         #print "consume:", char, ord(char) #, "--", oldstate, " -> ",self.state
 
-    def feed(self, bytes):
-        # All js characters are json-encoded anyway.
-        # All terminal control chars are 7bit.
-        self.feed_stream(StringIO(bytes))
+    # def feed(self, bytes):
+    #     # All js characters are json-encoded anyway.
+    #     # All terminal control chars are 7bit.
+    #     self.feed_stream(StringIO(bytes))
 
-    def feed_stream(self, stream):
+    def feed(self, bytes):
         """
         Like feed() but directly use a stream and do not return until
         everything has been read.
         """
-        rdr = codecs.getreader('utf-8')(stream, 'ignore')
-        while True:
-            char = rdr.read(chars=1)
-            if char:
-                self.consume(char)
+        # TODO NEXT:
+        # when in iframe (data) mode/state, read in chunks, use
+        # String.index to scan for escape-chars, if nothin is found
+        # directly process, otherwise fallback to slow
+        # single-char-read-with-statemachine
+        # purpose: speed up the reading of large static files (like pictures and js files.)
+        
+        #rdr = codecs.getreader('utf-8')(stream, 'ignore')
+        chunksize = 8192
+        src = bytes.decode('utf-8', 'ignore')
+        i = 0
+        l = len(src)
+        while i < l:
+            if self.state == 'iframe_data':
+                # shortcut for iframe data to be able to transmit
+                # large requests faster
+
+                chunk = src[i:i+chunksize]
+                esc_idx = chunk.find("\033")
+                if esc_idx == -1:
+                    # no escape commands in chunk, just lots of b64 data
+                    self.current.append(chunk)
+                    i += chunksize
+                else:
+                    # fallback to normal state machine
+                    self.current.append(chunk[:esc_idx])
+                    i += esc_idx
+                    self.consume(src[i])
+                    i += 1
             else:
-                return
+                char = src[i]
+                if char:
+                    self.consume(char)
+                    i += 1
+                else:
+                    return
 
     def consume(self, char):
         # same as super(SchirmStream, self).consume(char) bit without
@@ -845,9 +875,9 @@ class SchirmStream(pyte.Stream):
 
     def _iframe_data(self, char):
         """Decode an iframe command. These start with ESC R followed
-           by a name followed by ESCaped argument (may be 0) followed
-           by ESC ; for more arguments or ESC Q to end the iframe
-           command.
+           by a name followed by b64 argument data (may be empty)
+           followed by ESC ; for more arguments or ESC Q to end the
+           iframe command.
         """
         if char == '\033':
             self.state = "iframe_data_esc"
@@ -872,7 +902,7 @@ class SchirmStream(pyte.Stream):
             args = self.params[1:]
             self.dispatch(cmd, *args, iframe=True)
         else:
-            #print "Unknown escape sequence in iframe data:", "ESC", char
+            print "Unknown escape sequence in iframe data:", "ESC", char
             #raise Exception("Unknown escape sequence in iframe data")
             pass
 

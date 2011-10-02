@@ -79,8 +79,8 @@ class Server(object):
         rfile = client.makefile()
 
         req = HTTPRequest(rfile)
-        #print req.command, req.path
-
+        print req.command, req.path, req.headers
+        
         if req.error_code:
             #print "webserver error:", req.error_message
             client.sendall(req.error_message)
@@ -161,6 +161,7 @@ class Server(object):
                               "Content-Length: " + str(len(data)),
                               "",
                               data))
+
         if not name.startswith("/"):
             name = "/" + name
         self.resources[name] = response
