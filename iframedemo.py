@@ -61,7 +61,7 @@ def frame():
 def register_resource(path, name=None):
     if not name:
         _, name = os.path.split(path)
-    sys.stdout.write("".join((INTRO, "register_resource", SEP, name, SEP)))
+    sys.stdout.write("".join((INTRO, "register_resource", SEP, base64.b64encode(name), SEP)))
     with open(path, "rb") as f:
         sys.stdout.write(base64.b64encode(f.read()))
     sys.stdout.write(END)  
@@ -171,6 +171,7 @@ $(document).ready(function() {
         print '<div id="container"><input type="button" id="butt" value="click me"/></div>'
         print "</body></html>"
         print "    "
+        #return
         close()
         req = read_next_request()
         rid, ver, method, path = req[:4]
@@ -204,19 +205,11 @@ def pprint_dict(d):
 
 def echotest2():
     enter()
-    print "<h1>yay</h1><img src=\"y.gif\">"
-    #print "<h1>uh</h1>"
-    time.sleep(10)
-    print "<h1>uh</h1>"
+    register_resource("x.gif")
+    #register_resource("jquery-1.6.2.js", "jquery.js")
+    print "<span>test</span><img src=\"x.gif\">"
     close()
-    while 1:
-        x = sys.stdin.read(10)
-        debug('read: {}'.format(repr(x)))
-        if x == '':
-            break
-    #x = read_next_request()
     leave()
-    #print "Read: len(x)=",len(x), repr(x)
 
 if __name__ == '__main__':
 #    for x in range(1):
@@ -232,7 +225,5 @@ if __name__ == '__main__':
     #     except control characters??
     #   - ESC R <digits> ; <escaped-data> ESC Q
 
-    ajax_demo()
-    #echotest2()
-
-
+    #ajax_demo()
+    echotest2()

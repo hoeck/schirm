@@ -3,6 +3,7 @@ from UserList import UserList
 from StringIO import StringIO
 import codecs
 import base64
+import logging
 
 import pyte
 from pyte.screens import Char, Margins, Cursor
@@ -14,7 +15,6 @@ class Line(UserList):
     """
     A line of characters
     """
-    # Later, add an iframe line implementation
 
     def __init__(self, size, default_char):
         self.size = size
@@ -160,7 +160,8 @@ class LineContainer():
         return self.lines[self.realLineIndex(index)]
 
     def __iter__(self):
-        return self.lines[self.realLineIndex(0):].__iter__() #???
+        # do we need an __iter__ method?
+        return self.lines[self.realLineIndex(0):].__iter__()
 
     ## iframe events, not directly line-based
 
@@ -185,8 +186,6 @@ class LineContainer():
     def iframe_leave(self):
         self.events.append(('iframe_leave', ))
 
-# highlight-regexp:
-# self\(\.extend\|\.append\|\.pop\|\.insert\|\.remove\|\[.*\]\)
 
 class TermScreen(pyte.Screen):
 
@@ -198,8 +197,6 @@ class TermScreen(pyte.Screen):
         self.reset()
 
     def __before__(self, command):
-        #if not command == 'draw':
-        #    print command
         pass
 
     def __after__(self, command):
@@ -228,9 +225,6 @@ class TermScreen(pyte.Screen):
            and tabstops should be reset as well, thanks to
            :manpage:`xterm` -- we now know that.
         """
-        # self[:] = (take(self.columns, self.default_line)
-        #            for _ in range(self.lines))
-        #self[:] = (self._create_line() for _ in range(self.lines))
         lines = [self._create_line() for _ in range(self.lines)]
         self.linecontainer.reset(lines)
 
@@ -277,10 +271,7 @@ class TermScreen(pyte.Screen):
 
         lc = self.linecontainer
 
-        #print "screen.resize 0:", (self.lines, "->", lines, "lc.lines:", len(lc.lines))
-
         # cursor: make sure that it 'stays' on its current line
-
         if self.lines < lines:
             # enlarge
             if len(lc.lines) < lines:
@@ -298,61 +289,18 @@ class TermScreen(pyte.Screen):
 
             cursordelta = -(self.lines - lines - lines_to_remove - 1)
 
-        #print "old cursor is row:{} col:{}".format(self.cursor.y, self.cursor.x)
         newcursory = self.cursor.y + cursordelta
         self.cursor.y = min(max(newcursory, 0), lines-1)
         self.cursor.x = min(max(self.cursor.x, 0), columns-1)
-        #print "new cursor is row:{} col:{}".format(self.cursor.y, self.cursor.x)
 
         lc.height = lines
-        #print "screen.resize 1:", (self.lines, "->", lines, "lc.lines:", len(lc.lines))
-
-        # First resize the lines:
-        #diff = self.lines - lines
-
-        # a) if the current display size is less than the requested
-        #    size, add lines to the bottom.
-        ### TODO: add resize command to LineContainer
-        ### on the html-render side:
-        ### when the new size has more lines
-        ### grab lines from the history first instead of appending
-        ### blank ones at the top
-        # if diff < 0: # enlarge terminal screen
-        #     # self.extend(take(self.columns, self.default_line)
-        #     #             for _ in range(diff, 0))
-        #     #self.extend(self._create_line() for _ in range(diff, 0))
-        #     for _ in range(diff, 0):
-        #         self.linecontainer.append(self._create_line())
-
-        # # b) if the current display size is greater than requested
-        # #    size, take lines off the top.
-        # elif diff > 0:
-        #     # self[:diff] = ()
-        #     #[self.pop(0) for _ in range(diff)]
-        #     for _ in range(diff):
-        #         self.linecontainer.pop(0)
 
         # Then resize the columns:
         for line in self.linecontainer:
             line.set_size(columns)
 
-        # diff = self.columns - columns
-
-        # a) if the current display size is less than the requested
-        #   size, expand each line to the new size.
-        #if diff < 0:
-        #    for y in range(lines):
-        #        self[y].extend(take(abs(diff), self.default_line))
-        # b) if the current display size is greater than requested
-        #    size, trim each line from the right to the new size.
-        #elif diff > 0:
-        #    self[:] = (line[:columns] for line in self)
-
         self.lines, self.columns = lines, columns
         self.margins = Margins(0, self.lines - 1)
-
-        # don't reset the cursorpos
-        #self.reset_mode(mo.DECOM) # resets the cursor position
 
     def set_mode(self, *modes, **kwargs):
         """Sets (enables) a given list of modes.
@@ -367,7 +315,10 @@ class TermScreen(pyte.Screen):
 
         self.mode.update(modes)
         if mo.DECAPP in modes:
-            print "Application Mode Set"
+            # application mode set
+            # todo: implement event so that we can switch to/from appmode
+            # in term.html
+            pass
             
         # When DECOLM mode is set, the screen is erased and the cursor
         # moves to the home position.
@@ -383,8 +334,6 @@ class TermScreen(pyte.Screen):
 
         # Mark all displayed characters as reverse.
         if mo.DECSCNM in modes:
-            # self[:] = ([char._replace(reverse=True) for char in line]
-            #            for line in self)
             for line in self.linecontainer:
                 line.reverse()
             self.select_graphic_rendition(g._SGR["+reverse"])
@@ -410,7 +359,7 @@ class TermScreen(pyte.Screen):
         self.mode.difference_update(modes)
 
         if mo.DECAPP in modes:
-            print "Application Mode _RE_set"
+            pass
 
         # Lines below follow the logic in :meth:`set_mode`.
         if mo.DECCOLM in modes:
@@ -422,8 +371,6 @@ class TermScreen(pyte.Screen):
             self.cursor_position()
 
         if mo.DECSCNM in modes:
-            # self[:] = ([char._replace(reverse=False) for char in line]
-            #            for line in self)
             for line in self.linecontainer:
                 line.reverse()
             self.select_graphic_rendition(g._SGR["-reverse"])
@@ -441,9 +388,9 @@ class TermScreen(pyte.Screen):
 
         # Translating a given character.
         if self.charset != 0 and 0: # commented out
-            # somehoe, the latin 1 encoding done here is wrong,
+            # somehow, the latin 1 encoding done here is wrong,
             # json.dumps does not correctly convert the resulting
-            # string into browser-utf-8
+            # string
             char = char.translate([self.g0_charset,
                                    self.g1_charset][self.charset])
 
@@ -462,8 +409,6 @@ class TermScreen(pyte.Screen):
         if mo.IRM in self.mode:
             self.insert_characters(1)
 
-        # self[self.cursor.y][self.cursor.x] = self.cursor.attrs \
-        #     ._replace(data=char)
         self.linecontainer[self.cursor.y] \
             .replace_character(self.cursor.x,
                                self.cursor.attrs._replace(data=char))
@@ -482,8 +427,6 @@ class TermScreen(pyte.Screen):
         top, bottom = self.margins
 
         if self.cursor.y == bottom:
-            #self.linecontainer.pop(top) # don't handle history manually
-            #self.insert(bottom, take(self.columns, self.default_line))
             self.linecontainer.insert(bottom+1, self._create_line())
         else:
             self.cursor_down()
@@ -496,7 +439,6 @@ class TermScreen(pyte.Screen):
 
         if self.cursor.y == top:
             self.linecontainer.pop(bottom)
-            #self.insert(top, take(self.columns, self.default_line))
             self.linecontainer.insert(top, self._create_line())
         else:
             self.cursor_up()
@@ -517,7 +459,6 @@ class TermScreen(pyte.Screen):
             for line in range(self.cursor.y,
                               min(bottom + 1, self.cursor.y + count)):
                 self.linecontainer.pop(bottom)
-                #self.insert(line, take(self.columns, self.default_line))
                 self.linecontainer.insert(line, self._create_line())
 
             self.carriage_return()
@@ -538,8 +479,6 @@ class TermScreen(pyte.Screen):
             #                v -- +1 to include the bottom margin.
             for _ in range(min(bottom - self.cursor.y + 1, count)):
                 self.linecontainer.pop(self.cursor.y)
-                # self.insert(bottom, list(
-                #     repeat(self.cursor.attrs, self.columns)))
                 self.linecontainer.insert(bottom, self._create_line(self.cursor.attrs))
 
             self.carriage_return()
@@ -554,9 +493,6 @@ class TermScreen(pyte.Screen):
         """
         count = count or 1
 
-        # for _ in range(min(self.columns - self.cursor.x, count)):
-        #     self[self.cursor.y].insert(self.cursor.x, self.cursor.attrs)
-        #     self[self.cursor.y].pop()
         self.linecontainer[self.cursor.y].insert_characters(self.cursor.x,
                                                             count,
                                                             self.cursor.attrs)
@@ -571,9 +507,6 @@ class TermScreen(pyte.Screen):
         """
         count = count or 1
 
-        # for _ in range(min(self.columns - self.cursor.x, count)):
-        #     self[self.cursor.y].pop(self.cursor.x)
-        #     self[self.cursor.y].append(self.cursor.attrs)
         self.linecontainer[self.cursor.y].delete_characters(self.cursor.x,
                                                             count,
                                                             self.cursor.attrs)
@@ -594,9 +527,6 @@ class TermScreen(pyte.Screen):
         """
         count = count or 1
 
-        # for column in range(self.cursor.x,
-        #                     min(self.cursor.x + count, self.columns)):
-        #     self[self.cursor.y][column] = self.cursor.attrs
         self.linecontainer[self.cursor.y].erase_characters(self.cursor.x,
                                                            count,
                                                            self.cursor.attrs)
@@ -614,19 +544,6 @@ class TermScreen(pyte.Screen):
         :param bool private: when ``True`` character attributes are left
                              unchanged **not implemented**.
         """
-        # interval = (
-        #     # a) erase from the cursor to the end of line, including
-        #     # the cursor,
-        #     range(self.cursor.x, self.columns),
-        #     # b) erase from the beginning of the line to the cursor,
-        #     # including it,
-        #     range(0, self.cursor.x + 1),
-        #     # c) erase the entire line.
-        #     range(0, self.columns)
-        # )[type_of]
-
-        # for column in interval:
-        #     self[self.cursor.y][column] = self.cursor.attrs
         self.linecontainer[self.cursor.y].erase_in_line(type_of,
                                                         self.cursor.x,
                                                         self.cursor.attrs)
@@ -660,8 +577,6 @@ class TermScreen(pyte.Screen):
             )[type_of]
 
             for line in interval:
-                # self[line][:] = \
-                #     (self.cursor.attrs for _ in range(self.columns))
                 # erase the whole line
                 self.linecontainer[line].erase_in_line(2, 0, self.cursor.attrs)
 
@@ -690,15 +605,13 @@ class TermScreen(pyte.Screen):
             for _ in range(i+1):
                 self.linecontainer.insert(bottom+1, self._create_line())
 
-    ### iframe extensions
+    ## iframe extensions
+
     def iframe_enter(self):
         # move cursor to last line
         # insert an iframe line at the current cursor position
         # all following chars are written to that frame via
         # iframe.document.write
-
-        #self.index()
-        #self.linecontainer.pop(self.cursor.y)
 
         if self.iframe_mode == None:
             self.linecontainer.iframe_enter()
@@ -727,17 +640,24 @@ class TermScreen(pyte.Screen):
         self.linecontainer.iframe_close()
         self.iframe_mode = 'closed'
 
-    def iframe_register_resource(self, name, data_b64):
-        #print "registering resource:", name, len(data), "chars"
+    def iframe_register_resource(self, name_b64, data_b64):
+        name = base64.b64decode(name_b64)
         data = base64.b64decode(data_b64)
         self.linecontainer.iframe_register_resource(name, data)
 
     def iframe_respond(self, request_id, data_b64):
+        """
+        Respond to the request identified by request_id.
+        data_b64 is the full, base64 encoded response data, includung
+        HTTP status line, headers and data.
+        """
         data = base64.b64decode(data_b64)
         self.linecontainer.iframe_respond(request_id, data)
 
     def iframe_debug(self, b64_debugmsg):
-        # write a debugstring to sys stdout of the emulator process
+        """
+        Write a string to sys stdout of the emulator process.
+        """
         data = base64.b64decode(b64_debugmsg)
         self.linecontainer.iframe_debug(data)
 
@@ -753,29 +673,11 @@ class SchirmStream(pyte.Stream):
                 'escape': self._escape,
                 })
 
-    #def consume(self, char):
-        #oldstate  = self.state
-        #super(SchirmStream, self).consume(char)
-        #print "consume:", char, ord(char) #, "--", oldstate, " -> ",self.state
-
-    # def feed(self, bytes):
-    #     # All js characters are json-encoded anyway.
-    #     # All terminal control chars are 7bit.
-    #     self.feed_stream(StringIO(bytes))
-
     def feed(self, bytes):
         """
         Like feed() but directly use a stream and do not return until
         everything has been read.
         """
-        # TODO NEXT:
-        # when in iframe (data) mode/state, read in chunks, use
-        # String.index to scan for escape-chars, if nothin is found
-        # directly process, otherwise fallback to slow
-        # single-char-read-with-statemachine
-        # purpose: speed up the reading of large static files (like pictures and js files.)
-        
-        #rdr = codecs.getreader('utf-8')(stream, 'ignore')
         chunksize = 8192
         src = bytes.decode('utf-8', 'ignore')
         i = 0
@@ -784,7 +686,6 @@ class SchirmStream(pyte.Stream):
             if self.state == 'iframe_data':
                 # shortcut for iframe data to be able to transmit
                 # large requests faster
-
                 chunk = src[i:i+chunksize]
                 esc_idx = chunk.find("\033")
                 if esc_idx == -1:
@@ -821,8 +722,8 @@ class SchirmStream(pyte.Stream):
             else:
                 raise
 
-    # I use my own dispatch function - I don't need multiple listeners
-    # ignore the only flag too
+    # I use my own dispatch function - I don't need multiple listeners.
+    # Ignore the only flag too.
     def dispatch(self, event, *args, **kwargs):
         (listener, only) = self.listeners[0] # ignore 'only'
         if self.listeners:
@@ -830,7 +731,6 @@ class SchirmStream(pyte.Stream):
             if handler:
                 if hasattr(listener, "__before__"):
                     listener.__before__(event)
-                #print "calling: ", event, args
                 handler(*args, **self.flags)
 
                 if hasattr(listener, "__after__"):
@@ -842,10 +742,9 @@ class SchirmStream(pyte.Stream):
 
     # - ESC x leave iframe mode, interpreted at any time, ignored when
     #   not in iframe mode
-    # - ESC R register-resource ESC ; <resource-name> ESC ; <escaped-data> ESC Q
+    # - ESC R register-resource ESC ; <base64-encoded-resource-name> ESC ; <b64-encoded-data> ESC Q
     #   Register a given resource to be served to the webkit view upon
     #   request. Content-Type is determined by examining name (a file name).
-    #   Resource name must not contain a ";" character.
     def _escape(self, char, **kwargs):
         """Like pyte.Stream._escape, but additionally capture all
         iframe commands: ESC R *args.
@@ -868,9 +767,8 @@ class SchirmStream(pyte.Stream):
         elif char == "\033":
             self.dispatch('iframe_write', "\033", iframe=True)
         else:
-            #raise Exception("Invalid Iframe Mode Command: ESC {} ({})".format(char, ord(char)))
-            #print "Invalid Iframe Mode Command: ESC {} ({})".format(char, ord(char))
             # leave the iframe mode on invalid commands
+            logging.debug("Invalid Iframe Mode Command: ESC {} ({})".format(char, ord(char)))
             self.dispatch('iframe_leave')
 
     def _iframe_data(self, char):
@@ -902,9 +800,7 @@ class SchirmStream(pyte.Stream):
             args = self.params[1:]
             self.dispatch(cmd, *args, iframe=True)
         else:
-            print "Unknown escape sequence in iframe data:", "ESC", char
-            #raise Exception("Unknown escape sequence in iframe data")
-            pass
+            logging.debug("Unknown escape sequence in iframe data: ESC-{}".format(repr(char)))
 
     def _iframe_write(self, char):
         """Read a normal char: written to an iframe using document.write().

@@ -8,15 +8,14 @@ import time
 import urllib
 import threading
 import simplejson
+import logging
+import gtk
 
 from webkit_wrapper import GtkThread, launch_browser, establish_browser_channel, install_key_events
 from promise import Promise
 import webserver
-# import shellinabox
 
 import term
-
-import gtk # for key handler
 
 state = None
 gtkthread = None
@@ -38,20 +37,10 @@ def quit():
     except:
         pass
 
-
-# navigation-request is deprecated
-last_nav_request = None
-def my_navigation_request_handler(view, frame, networkRequest):
-    print "navigation-request", networkRequest.get_uri()
-    global last_nav_request
-    last_nav_request = (view, frame, networkRequest)
+def resource_requested_handler(view, frame, resource, request, response):
     return 0
 
-def my_resource_requested_handler(view, frame, resource, request, response):
-    return 0
-
-# browser.connect('console-message', my_console_message_handler)
-def my_console_message_handler(view, msg, line, source_id, user_data):
+def sample_console_message_handler(view, msg, line, source_id, user_data):
     """
     webView : the object on which the signal is emitted
     message : the message text
@@ -94,12 +83,8 @@ def handle_keypress(event, pty):
     key = pty.map_key(name)
     #print name
     if not key:
-        # if len(event.string) == 1:
-        #     print "string-ord:", ord(event.string), event.string
-        # else:
-        #     print "string-ord:", 'not a char:', event.string
         key = event.string
-    
+
     if key:
         pty.q_write(key)
 
@@ -113,11 +98,8 @@ def webkit_event_loop():
     receive, execute = establish_browser_channel(gtkthread, browser)
    
     # handle links
-    #gtkthread.invoke(lambda : browser.browser.connect('navigation-requested', lambda view, frame, networkRequest: 0))
-    #gtkthread.invoke(lambda : browser.connect_navigation_requested(my_navigation_request_handler))
-    
     gtkthread.invoke(lambda : browser.connect('destroy', lambda *args, **kwargs: quit()))
-    gtkthread.invoke(lambda : browser.connect('resource-request-starting', my_resource_requested_handler))
+    gtkthread.invoke(lambda : browser.connect('resource-request-starting', resource_requested_handler))
 
     pty = term.Pty([80,24])
     gtkthread.invoke(lambda : install_key_events(window, lambda widget, event: handle_keypress(event, pty)))
@@ -126,9 +108,9 @@ def webkit_event_loop():
     # for responses because I did not find a way to mock or get a
     # proxy of libsoup.
     server = webserver.Server(pty).start()
-    pty.set_webserver(server) # currently pty handles register_resource commands directly
+    pty.set_webserver(server)
     
-    global state # to make interactive development and debugging easier
+    global state # make interactive development and debugging easier
     state = dict(browser=browser,
                  receive=receive,
                  execute=execute,
@@ -163,32 +145,28 @@ def webkit_event_loop():
     t = threading.Thread(target=lambda : pty_loop(pty, execute))
     t.start()
 
-
-
     # read from webkit though console.log messages starting with 'schirm'
     # and containing json data
     while running():
-        msg = receive(block=True, timeout=1) # timeout to make waiting for events interruptible
+        msg = receive(block=True, timeout=0.1) # timeout to make waiting for events interruptible
         if msg:
-            #print "received:", msg
             if receive_handler(msg, pty):
-                pass
+                logging.info("webkit-console (schirm IPC): {}".format(msg))
             elif msg == "show_webkit_inspector": # shows a blank window :/
                 gtkthread.invoke(browser.show_inspector)
+            else:
+                logging.info("webkit-console: {}".format(msg))
     quit()
-
 
 def pty_loop(pty, execute):
     execute("termInit();")
     try:
         while running():
             jslist = pty.read_and_feed_and_render()
-            #print "\n".join(jslist)
             execute("\n".join(jslist))
             execute('term.scrollToBottom();')
     except OSError:
         stop()
-
 
 def main():
     try:
@@ -199,8 +177,8 @@ def main():
     except:
         webkit_event_loop()
 
-    
 if __name__ == '__main__':
     signal.signal(signal.SIGINT, lambda sig, stackframe: quit())
     signal.siginterrupt(signal.SIGINT, True)
+    logging.basicConfig(level=logging.INFO)
     main()

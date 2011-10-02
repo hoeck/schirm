@@ -5,6 +5,7 @@ import mimetypes
 import threading
 import base64
 import time
+import logging
 from BaseHTTPServer import BaseHTTPRequestHandler
 from StringIO import StringIO
 
@@ -56,7 +57,6 @@ class Server(object):
         backlog = 5
         self.socket.bind(('localhost',0))
         self.socket.listen(backlog)
-        print "Server started: localhost:{0}".format(self.getport())
         self.listen_thread = threading.Thread(target=self.listen)
         self.listen_thread.start()
         return self
@@ -66,7 +66,8 @@ class Server(object):
         return port
     
     def listen(self):
-        # todo: thread to close up unused connections
+        # todo: thread to close unused connections
+        logging.debug("Server listening on localhost:{}".format(self.getport()))
         while 1:
             client, address = self.socket.accept()
             self.receive(client)
@@ -82,13 +83,15 @@ class Server(object):
 
         rfile = client.makefile()
         req = HTTPRequest(rfile)
-       
+        logging.info("request: {r.command} {r.path}".format(r=req))
+
         if req.error_code:
             client.sendall(req.error_message)
             client.close()
 
         elif req.command == 'GET' and req.path in self.resources:
             # its a known static resource, serve it!
+            logging.debug("serving static resource {}".format(req.path))
             client.sendall(self.resources[req.path])
             client.close()
 
@@ -115,13 +118,9 @@ class Server(object):
                 data.append(req.headers[k])
 
             if req.headers.get("Content-Length"):
-                #print "reading data:", req.headers.get("Content-Length")
                 data.append(req.rfile.read(long(req.headers.get("Content-Length"))))
             else:
                 data.append("")
-            # print "request is:"
-            # for x in data:
-            #     print "  ", x
 
             pty_request = START + SEP.join(base64.encodestring(x) for x in data) + END + NEWLINE
 
@@ -136,12 +135,11 @@ class Server(object):
                 timeout -= wait
                 time.sleep(wait)
 
-            #print "request is:", repr(pty_request)
             if self.pty.screen.iframe_mode == 'closed':
                 self.pty.q_write_iframe(pty_request)
 
     def respond(self, req_id, data):
-        #print "respond:", req_id, data
+        logging.debug("server responding to {} with {}...".format(req_id, data[:60]))
         rid = int(req_id)
         if rid in self.requests:
             client = self.requests[rid]
@@ -154,6 +152,8 @@ class Server(object):
         name to guess an appropriate content-type.
         """
         guessed_type, encoding = mimetypes.guess_type(name, strict=False)
+        if not guessed_type:
+            guessed_type = "text/plain"
         response = "\n".join(("HTTP/1.1 200 OK",
                               "Content-Type: " + guessed_type,
                               "Content-Length: " + str(len(data)),

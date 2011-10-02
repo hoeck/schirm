@@ -11,6 +11,7 @@ import json
 import struct
 import Queue
 import threading
+import logging
 from itertools import cycle
 from UserList import UserList
 
@@ -128,11 +129,6 @@ class EventRenderer():
 
     @staticmethod
     def pop(index, line):
-        #if index == 0:
-        #    # do not remove, let it become part of the history, but
-        #    # apply its chages first
-        #    return set_line_to(index, renderline(line))
-        #else:
         return "term.removeLine({});".format(index)
 
     @staticmethod
@@ -180,7 +176,6 @@ class Pty(object):
 
         self.screen = TermScreen(*size)
         self.last_cursor_line = 0
-        #self.stream = pyte.Stream()
         self.stream = SchirmStream()
         self.stream.attach(self.screen)
 
@@ -218,62 +213,25 @@ class Pty(object):
         os.write(self._pty, s)
 
     def fake_input(self, input_string):
-        #TIOCSTI const char *argp
-        #Insert the given byte in the input queue.
+        # TIOCSTI const char *argp
+        # Insert the given byte in the input queue.
+        # doesn't work
         fcntl.ioctl(self._pty, termios.TIOCSTI, input_string)
 
     def q_fake_input(self, input_string):
         self.input_queue.put(lambda : self.fake_input(input_string))
 
-    def echo_off(self):
-        if 1: # works, but echo on does not always work :/
-            new = termios.tcgetattr(self._pty)
-            new[3] = new[3] & ~termios.ECHO # lflags
-            termios.tcsetattr(self._pty,
-                              #termios.TCSADRAIN,
-                              termios.TCSANOW,
-                              new)
-
-    def echo_on(self):
-        if 1: # sometimes under unknown circumstances refuses to set echo to on
-            import time
-            time.sleep(2)
-            #termios.tcflush(self._pty, termios.TCIOFLUSH)
-            buf = struct.pack('i',0)
-            ret = fcntl.ioctl(self._pty, termios.FIONREAD, buf)
-
-            buf = struct.pack('i',0)
-            ret = fcntl.ioctl(self._pty, termios.TIOCOUTQ, buf)
-
-            new = termios.tcgetattr(self._pty)
-            new[3] = new[3] | termios.ECHO # lflags
-            ret = termios.tcsetattr(self._pty,
-                                    #termios.TCSADRAIN,
-                                    termios.TCSANOW,
-                                    new)
-
     def set_size(self, h, w): # h/lines, w/columns
         """
         Use the TIOCSWINSZ ioctl to change the size of _pty if neccessary.
-
-        TODO: also set LINES/COLUMNS env vars for the child process
         """
         oldw, oldh = self._size
         if oldw != w or oldh != h and w > 0 and h > 0:
-            # TIOCSSIZE
-            #win = struct.pack('HHHH',0,0,0,0)
-            #fcntl.ioctl(pty, termios.TIOCGSIZE, win)
-            #w,h,x,y = struct.unpack('HHHH', win)
-            #win = struct.pack('HHHH', widht, height, x, y)
-            #fcntl.ioctl(pty, termios.TIOCSSIZE, win)
-
-            # TIOCGWINSZ
             empty_win = struct.pack('HHHH',0,0,0,0)
             win = fcntl.ioctl(self._pty, termios.TIOCGWINSZ, empty_win)
             _h,_w,x,y = struct.unpack('HHHH', win)
             win = struct.pack('HHHH', h, w, x, y)
             fcntl.ioctl(self._pty, termios.TIOCSWINSZ, win)
-
             self._size = [w, h]
 
     def set_webserver(self, server):
@@ -284,12 +242,6 @@ class Pty(object):
 
     def resize(self, lines, cols):
         self.screen.resize(lines, cols)
-
-        # don't emit sigwinch when in normal mode, because it makes
-        # bash (any shell?) redraw the (unchanged) prompt to be at the
-        # top of the terminal, but we want it to stay where it
-        # currently is
-        #if self.screen._application_mode():
         self.set_size(lines, cols)
 
     def read(self):
@@ -305,7 +257,7 @@ class Pty(object):
         events = lines.get_and_clear_events()
 
         for e in events:
-            if e[0] == 'iframe_register_resource': # kludge, needs some real (attribute based) polymorphism
+            if e[0] == 'iframe_register_resource':
                 self._server.register_resource(e[1], e[2])
             elif e[0] == 'iframe_respond':
                 self._server.respond(e[1], e[2])
@@ -315,13 +267,11 @@ class Pty(object):
                 # resources, so we want them to be around even if we
                 # already left iframe mode.
                 self._server.clear_resources()
-                #self.q_echo_off()
                 pass
             elif e[0] == 'iframe_leave':
-                #self.q_echo_on()
-                pass
+                js.append(EventRenderer.iframe_close())
             elif e[0] == 'iframe_debug':
-                print 'IFRAME-DEBUG:', e[1]
+                print e[1]
             else:
                 js.append(getattr(EventRenderer, e[0])(*e[1:]))
             
@@ -332,55 +282,54 @@ class Pty(object):
 
         return js
 
-
     def read_and_feed_and_render(self):
         self.read_and_feed()
         return self.render_changes()
 
 
-# VT100 Key    Standard    Applications     IBM Keypad
-# =====================================================
-
-#                                           NUMLOK - On
-# Keypad:
-
-#    0            0           ESC O p           0
-#    1            1           ESC O q           1
-#    2            2           ESC O r           2
-#    3            3           ESC O s           3
-#    4            4           ESC O t           4
-#    5            5           ESC O u           5
-#    6            6           ESC O v           6
-#    7            7           ESC O w           7
-#    8            8           ESC O x           8
-#    9            9           ESC O y           9
-#    -            -           ESC O m           -
-#    ,            ,           ESC O l      * (on PrtSc key)
-#    .            .           ESC O n           .
-# Return       Return         ESC O M           +
-
-
-#                                          NUMLOK - Off
-# Arrows:
-
-#    Up        ESC [ A        ESC O A           Up
-#   Down       ESC [ B        ESC O B          Down
-#   Right      ESC [ C        ESC O C          Right
-#   Left       ESC [ D        ESC O D          Left
-
-#    Up        ESC [ A        ESC O A          Alt 9
-#   Down       ESC [ B        ESC O B          Alt 0
-#   Right      ESC [ C        ESC O C          Alt -
-#   Left       ESC [ D        ESC O D          Alt =
-#   Note that either set of keys may be used to send VT100 arrow keys.
-#   The Alt 9,0,-, and = do not require NumLok to be off.
-
-# Functions:
-
-# PF1 - Gold   ESC O P        ESC O P           F1
-# PF2 - Help   ESC O Q        ESC O Q           F2
-# PF3 - Next   ESC O R        ESC O R           F3
-# PF4 - DelBrk ESC O S        ESC O S           F4
+    # VT100 Key    Standard    Applications     IBM Keypad
+    # =====================================================
+    #
+    #                                           NUMLOK - On
+    # Keypad:
+    #
+    #    0            0           ESC O p           0
+    #    1            1           ESC O q           1
+    #    2            2           ESC O r           2
+    #    3            3           ESC O s           3
+    #    4            4           ESC O t           4
+    #    5            5           ESC O u           5
+    #    6            6           ESC O v           6
+    #    7            7           ESC O w           7
+    #    8            8           ESC O x           8
+    #    9            9           ESC O y           9
+    #    -            -           ESC O m           -
+    #    ,            ,           ESC O l      * (on PrtSc key)
+    #    .            .           ESC O n           .
+    # Return       Return         ESC O M           +
+    #
+    #
+    #                                          NUMLOK - Off
+    # Arrows:
+    #
+    #    Up        ESC [ A        ESC O A           Up
+    #   Down       ESC [ B        ESC O B          Down
+    #   Right      ESC [ C        ESC O C          Right
+    #   Left       ESC [ D        ESC O D          Left
+    #
+    #    Up        ESC [ A        ESC O A          Alt 9
+    #   Down       ESC [ B        ESC O B          Alt 0
+    #   Right      ESC [ C        ESC O C          Alt -
+    #   Left       ESC [ D        ESC O D          Alt =
+    #   Note that either set of keys may be used to send VT100 arrow keys.
+    #   The Alt 9,0,-, and = do not require NumLok to be off.
+    #
+    # Functions:
+    #
+    # PF1 - Gold   ESC O P        ESC O P           F1
+    # PF2 - Help   ESC O Q        ESC O Q           F2
+    # PF3 - Next   ESC O R        ESC O R           F3
+    # PF4 - DelBrk ESC O S        ESC O S           F4
 
     _keycodes = {
         # gtk-keyname: (cursor-positioning-mode, applications-mode)

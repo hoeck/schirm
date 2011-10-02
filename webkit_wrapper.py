@@ -27,7 +27,11 @@ class Webkit(object):
         self._inspector = Inspector(self.browser.get_web_inspector())
 
     def exec_js(self, script):
-        self.browser.execute_script(script)
+        if script:
+            self.browser.execute_script(script)
+        else:
+            if script == None:
+                print "script was None!!!"
 
     def connect_title_changed(self, f):
         # connect title changed events
@@ -211,37 +215,10 @@ def launch_browser():
     scrollview = gtk.ScrolledWindow()
     scrollview.add(browser.browser)
 
-    # if quit_function is not None:
-    #     file_menu = gtk.Menu()
-    #     quit_item = gtk.MenuItem('Quit')
-    #     accel_group = gtk.AccelGroup()
-    #     quit_item.add_accelerator('activate',
-    #                               accel_group,
-    #                               ord('Q'),
-    #                               gtk.gdk.CONTROL_MASK,
-    #                               gtk.ACCEL_VISIBLE)
-    #     window.add_accel_group(accel_group)
-    #     file_menu.append(quit_item)
-    #     quit_item.connect('activate', quit_function)
-    #     quit_item.show()
-    #
-    #     menu_bar = gtk.MenuBar()
-    #     menu_bar.show()
-    #     file_item = gtk.MenuItem('File')
-    #     file_item.show()
-    #     file_item.set_submenu(file_menu)
-    #     menu_bar.append(file_item)
-    #     box.pack_start(menu_bar, expand=False, fill=True, padding=0)
-
-    # if quit_function is not None:
-    #     window.connect('destroy', quit_function)
-
     box.pack_start(scrollview, expand=True, fill=True, padding=0)
 
     window.set_default_size(800, 600)
     window.show_all()
-
-    #browser.open_uri(uri)
 
     return window, browser
 
@@ -262,10 +239,8 @@ def establish_browser_channel(gtkthread, browser):
 
     def console_message(msg):
         message_queue.put(msg)
-        #return 1 # do not invoke the default console message handler
-        return 0
+        return 1 # do not invoke the default console message handler
 
-    #browser.connect_title_changed(title_changed)
     browser.connect('console-message', lambda view, msg, *args: console_message(msg))
 
     def receive(block=True, timeout=None):
