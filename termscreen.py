@@ -88,6 +88,7 @@ class Line(UserList):
 class IframeLine(Line):
 
     def __init__(self):
+        self.data = []
         self.changed = False
 
     def set_size(self, size):
