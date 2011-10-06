@@ -16,7 +16,6 @@ pre {
 
 iframe {
   border: None;
-  width: 100%;
 }
 
 // poor mans templating system:
@@ -41,6 +40,16 @@ function getPreSize(element) {
   return { lines: lines, cols: cols }
 }
 
+
+function getIframeResizeHandler(iframe) {
+  return function() {
+    var body = iframe.contentDocument.body;
+    if (body) {
+      iframe.height = body.scrollHeight;
+      iframe.width = body.scrollWidth;
+    }
+  };
+}
 
 // rendering the terminal in normal mode
 // linesElement:
@@ -102,7 +111,6 @@ var Lines = (function(linesElement, term) {
       }
       
       var div = document.createElement('span');
-      div.setAttribute("foobar");
       if (term.size.lines <= linenumber) {
         linesElement.appendChild(div);
       } else {
@@ -112,7 +120,8 @@ var Lines = (function(linesElement, term) {
       var iframe = document.createElement('iframe');
       iframe.name = "termIframe";
       div.appendChild(iframe);
-      
+      iframe.contentDocument.addEventListener('load', getIframeResizeHandler(iframe));
+
       var newline = document.createElement('span');
       newline.innerHTML = "\n";
       div.appendChild(newline);
@@ -137,10 +146,12 @@ var Lines = (function(linesElement, term) {
     // call .close on the iframe document.
     iframeCloseDocument: function () {
       var iframe = term.currentIframe;
-      //console.log("closing iframe document!");
-      var body = iframe.contentDocument.getElementsByTagName("body")[0];
+      iframe.addEventListener('load', getIframeResizeHandler(iframe));
       iframe.contentDocument.close();
-      iframe.height = iframe.contentDocument.height;
+      // Resize the iframe if its contents are modified.
+      // DOMSubtreeModified is deprecated, but I haven't found a
+      // better way to do this
+      iframe.contentDocument.addEventListener('DOMSubtreeModified', getIframeResizeHandler(iframe));
     },
 
     getSize: function() {
@@ -376,7 +387,6 @@ var Term = function() {
   return fn;
 };
 
-
 var term;
 
 function termInit() {
@@ -391,6 +401,6 @@ function termInit() {
 
 </head>
 <body>
-<div id="termdiv"><pre id="term" style="overflow-y:scroll;overflow-x:hide;width:100%;height:100%;"></pre><pre id="app" style="overflow:hide;display:none;width:100%;height:100%;"></pre></div>
+<div id="termdiv"><pre id="term" style="overflow-y:scroll;overflow-x:visible;width:100%;height:100%;"></pre><pre id="app" style="overflow:hide;display:none;width:100%;height:100%;"></pre></div>
 </body>
 </html>
