@@ -1,0 +1,61 @@
+#!/usr/bin/env python
+
+import sys
+import cgi
+import MySQLdb as mysql
+import schirmclient
+
+
+def print_table(columns, rows):
+    head = """
+    <html>
+      <head>
+        <style type="text/css">
+          body {{ margin:0px; }}
+          tr.alt-row {{ background-color: #dddddd; }}
+        </style>'
+      </head>
+      <body>
+        <table>
+          <thead>
+            <th>{}</th>
+          </thead>
+          <tbody>
+    """
+    foot = """
+          </tbody>
+        </table>
+      </body>
+    </html>
+    """
+    def print_row(row, classes=[]):
+        print '<tr class="{}">'.format(" ".join(classes))
+        for col in row:
+            print "<td>{}</td>".format(cgi.escape(str(col)))
+        print "</tr>"
+    
+    with schirmclient.frame():
+        print head.format("".join(map("<td>{}</td>".format, map(cgi.escape, columns))))
+        alt_row = False
+        for r in rows:
+            print_row(r, ['alt-row'] if alt_row else [])
+            alt_row = not alt_row
+        print "</table>"
+
+
+def main():
+    conn = mysql.connect(host='localhost', user='root', passwd='root');
+    cur = conn.cursor()
+    
+    while 1:
+        print "mysql> ",
+        stmt = sys.stdin.readline()
+        cur.execute(stmt)
+        rows = cur.fetchall()
+        if rows:
+            print_table([d[0] for d in (cur.description or [])], rows)
+        else:
+            print "empty"
+            
+if __name__ == '__main__':
+    main()
