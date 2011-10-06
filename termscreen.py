@@ -685,8 +685,8 @@ class SchirmStream(pyte.Stream):
         l = len(src)
         while i < l:
             if self.state == 'iframe_data':
-                # shortcut for iframe data to be able to transmit
-                # large requests faster
+                # shortcut for iframe data to be able to
+                # transmit large requests faster
                 chunk = src[i:i+chunksize]
                 esc_idx = chunk.find("\033")
                 if esc_idx == -1:
@@ -696,6 +696,21 @@ class SchirmStream(pyte.Stream):
                 else:
                     # fallback to normal state machine
                     self.current.append(chunk[:esc_idx])
+                    i += esc_idx
+                    self.consume(src[i])
+                    i += 1
+            elif self.state == 'iframe_write':
+                # short-circuit the state machine for iframe_writes
+                chunk = src[i:i+chunksize]
+                esc_idx = chunk.find("\033")
+                if esc_idx == -1:
+                    # no escape commands in chunk
+                    self._iframe_write(chunk)
+                    i += chunksize
+                else:
+                    # write the escape-free chars
+                    self._iframe_write(chunk[:esc_idx])
+                    # and continue parsing the rest
                     i += esc_idx
                     self.consume(src[i])
                     i += 1
@@ -799,13 +814,15 @@ class SchirmStream(pyte.Stream):
             # todo: check for valid commands
             cmd = "iframe_{}".format(self.params[0])
             args = self.params[1:]
+            self.current = []
             self.dispatch(cmd, *args, iframe=True)
         else:
             logging.debug("Unknown escape sequence in iframe data: ESC-{}".format(repr(char)))
 
     def _iframe_write(self, char):
-        """Read a normal char: written to an iframe using document.write().
-        Advance state to 'escape' if an unescaped ESC is found.
+        """Read a normal char or string and write it to an iframe
+        using document.write().  Advance state to 'escape' if an ESC
+        is found.
         """
         if char == "\033":
             self.state = 'iframe_esc'
