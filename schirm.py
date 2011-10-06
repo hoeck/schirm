@@ -11,6 +11,7 @@ import simplejson
 import logging
 import gtk
 import argparse
+import warnings
 
 from webkit_wrapper import GtkThread, launch_browser, establish_browser_channel, install_key_events
 from promise import Promise
@@ -89,34 +90,42 @@ def handle_keypress(event, pty):
     if key:
         pty.q_write(key)
 
+    if pty.screen.iframe_mode:
+        # let the webview see this event too
+        return False
+    else:
+        # no need for the webview to react on key events when not in
+        # iframe mode
+        return True
 
 def webkit_event_loop():
 
     global gtkthread
     gtkthread = GtkThread()
-      
+
     window, browser = gtkthread.invoke_s(launch_browser)
     receive, execute = establish_browser_channel(gtkthread, browser)
-   
+
     # handle links
     gtkthread.invoke(lambda : browser.connect('destroy', lambda *args, **kwargs: quit()))
     gtkthread.invoke(lambda : browser.connect('resource-request-starting', resource_requested_handler))
 
     pty = term.Pty([80,24])
-    gtkthread.invoke(lambda : install_key_events(window, lambda widget, event: handle_keypress(event, pty)))
+    gtkthread.invoke(lambda : install_key_events(window, lambda widget, event: handle_keypress(event, pty), lambda *_: True))
 
     # A local webserver to write requests to the PTYs stdin and wait
     # for responses because I did not find a way to mock or get a
     # proxy of libsoup.
     server = webserver.Server(pty).start()
     pty.set_webserver(server)
-    
+
     global state # make interactive development and debugging easier
     state = dict(browser=browser,
                  receive=receive,
                  execute=execute,
                  pty=pty,
-                 server=server)
+                 server=server,
+                 window=window)
 
     # setup onetime load finished handler
     load_finished = Promise()
@@ -137,7 +146,7 @@ def webkit_event_loop():
     with open(file, "r") as f:
         doc = f.read()
         doc = doc.replace("//TERM-CSS-PLACEHOLDER", term_css)
-        
+
     gtkthread.invoke(lambda : browser.load_string(doc, base_uri="http://localhost:{}".format(server.getport())))
 
     load_finished.get()
@@ -185,8 +194,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="A linux compatible terminal emulator which supports rendering (interactive) html documents.")
     parser.add_argument("-v", "--verbose", help="be verbose, -v for info, -vv for debug log level", action="count")
     args = parser.parse_args()
-     
+
     if args.verbose:
         logging.basicConfig(level=[logging.INFO, logging.DEBUG][args.verbose])
+
+    if not (args.verbose and args.verbose > 1):
+        warnings.simplefilter('ignore')
 
     main()
