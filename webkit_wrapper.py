@@ -63,6 +63,7 @@ class Webkit(object):
 
     def my_settings(self):
         # from https://github.com/mackstann/htpicker/blob/dabf5cb377dce9e4b05b39d2b2afa7bb1f11baa7/htpicker/browser.py (public domain)
+        # documentation: http://webkitgtk.org/reference/WebKitWebSettings.html
         settings_values = (
             ("enable-default-context-menu",           True,  '1.1.18'),
             ("enable-java-applet",                    False, '1.1.22'),
@@ -72,8 +73,10 @@ class Webkit(object):
             ("tab-key-cycles-through-elements",       False, '1.1.17'),
             ("enable-developer-extras",               True,  '1.1.17'),
             ("user-stylesheet-uri",                   'file://{}'.format(os.path.abspath("schirmstyles.css")), '???'),
-            ("default-font-size",                     10,    '???'   ),
-            ("default-monospace-font-size",           10,    '???'   )
+            ("default-font-size",                     9,     '???'   ),
+            ("default-monospace-font-size",           9,     '???'   ),
+            ("enable-caret-browsing",                 False, '1.1.6' ),
+            ("enable-developer-extras",               True,  '1.1.13')
         )
 
         settings = self.browser.get_settings()
@@ -212,11 +215,9 @@ def launch_browser():
     box = gtk.VBox(homogeneous=False, spacing=0)
     window.add(box)
 
-    scrollview = gtk.ScrolledWindow()
-    scrollview.add(browser.browser)
-
-    box.pack_start(scrollview, expand=True, fill=True, padding=0)
-
+    box.pack_start(browser.browser, expand=True, fill=True, padding=0)
+    
+    window.props.has_resize_grip = False 
     window.set_default_size(800, 600)
     window.show_all()
 
@@ -239,7 +240,8 @@ def establish_browser_channel(gtkthread, browser):
 
     def console_message(msg):
         message_queue.put(msg)
-        return 1 # do not invoke the default console message handler
+        #return 1 # do not invoke the default console message handler
+        return 0
 
     browser.connect('console-message', lambda view, msg, *args: console_message(msg))
 
