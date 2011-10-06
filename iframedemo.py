@@ -6,121 +6,13 @@ import random
 import time
 import base64
 import termios
+import fcntl
 from contextlib import contextmanager
 
-ESC = "\033"
-INTRO = "\033R"
-END = "\033Q"
-SEP = "\033;"
-EXIT = "\033x"
-
-def echo_on():
-    new = termios.tcgetattr(sys.stdin)
-    new[3] = new[3] | termios.ECHO # lflags
-    termios.tcsetattr(sys.stdin,
-                      termios.TCSANOW,
-                      new)
-
-def echo_off():
-    new = termios.tcgetattr(sys.stdin)
-    new[3] = new[3] & ~termios.ECHO # lflags
-    termios.tcsetattr(sys.stdin,
-                      termios.TCSANOW,
-                      new)
-
-def enter():
-    """
-    Enter the frame mode.
-    """
-    sys.stdout.write("".join((INTRO, 'enter', END)))
-    sys.stdout.flush()
-
-def leave():
-    """
-    Get back to normal terminal mode.
-    """
-    sys.stdout.write(EXIT)
-    sys.stdout.flush()
-
-def close():
-    """
-    If in frame mode, close the current document (triggering document.load events).
-    Any subsequent writes to stdout reopen and clear the current document again.
-    """
-    sys.stdout.write("".join((INTRO, 'close', END)))
-    sys.stdout.flush()
-
-@contextmanager
-def frame():
-    try:
-        enter()
-        yield
-    finally:
-        leave()
-
-def register_resource(path, name=None):
-    if not name:
-        _, name = os.path.split(path)
-    sys.stdout.write("".join((INTRO, "register_resource", SEP, base64.b64encode(name), SEP)))
-    with open(path, "rb") as f:
-        sys.stdout.write(base64.b64encode(f.read()))
-    sys.stdout.write(END)  
-
-def respond(rid, data):
-    sys.stdout.write("".join((INTRO, "respond", SEP, rid, SEP)))
-    sys.stdout.write(base64.b64encode(data))
-    sys.stdout.write(END)
-
-def debug(data):
-    sys.stdout.write("".join((INTRO, "debug", SEP)))
-    sys.stdout.write(base64.b64encode(data))
-    sys.stdout.write(END)
-
-def decode_request(input_stream):
-    pass
-
-def read_next_request():
-    req = []
-    buf = []
-    state = None
-    #print '<pre>'
-    while 1:
-        ch = sys.stdin.read(1)
-        #print 'ESC' if ch == '\033' else ch
-        if state == 'esc':
-            if ch == "Q":
-                req.append(base64.decodestring("".join(buf)))
-                return req
-            elif ch == ';':
-                req.append(base64.decodestring("".join(buf)))
-                buf = []
-                state = 'arg'
-            elif ch == 'R':
-                state = 'arg'
-                req = []
-                buf = []
-            else:
-                raise Exception("Illegal escape sequence in input.")
-        elif state == 'arg':
-            if ch == ESC:
-                state = 'esc'
-            else:
-                buf.append(ch)
-        elif state == None:
-            if ch == ESC:
-                state = 'esc'
-            else:
-                # raise Exception("Ignoring input: " + str(ch))
-                pass
-        #debug("{} ({}) state: {}".format(ch, ord(ch), state))
-
-
-def serve_requests(input_stream, handler, use_thread=False):
-    pass
+from schirmclient import *
 
 
 def testIframeModeHeight():
-    #print "plain term"
     try:
         enter()
         register_resource("x.gif")
@@ -154,29 +46,30 @@ def ajax_demo():
     try:
         enter()
         register_resource("jquery-1.6.2.js", "jquery.js")
-        print "<html><head>"
-        print '<script type="text/javascript" src="jquery.js"></script>'
         print """
+<html><head>
+<script type="text/javascript" src="jquery.js"></script>
 <script type="text/javascript">
 
 $(document).ready(function() {
-  $("#butt").click(function() {
-    $("#container").load("content");
+  $("#button").click(function() {
+    $("#container").load("content", {data: $('#txt').attr('value')});
   });
 });
 </script>
+</head><body>
+<h3>ajax-demo</h3>
+<input id="txt" length="30">
+<div id="container"><input type="button" id="button" value="submit"/></div>
+</body></html>
 """
-        print "</head><body>"
-        print "<h3>ajax-demo</h3>"
-        print '<div id="container"><input type="button" id="butt" value="click me"/></div>'
-        print "</body></html>"
-        print "    "
-        #return
         close()
+        # wait for the requst
         req = read_next_request()
         rid, ver, method, path = req[:4]
-        if method == 'GET' and path == '/content':
-            content = "<h2>filled</h2>"
+        if method == 'POST' and path.startswith('/content'):
+            data = req[-1][5:]
+            content = "<h2>clicked</h2><br><h2>{}</h2>".format(data)
             respond(rid,
                     "\n".join(("{} 200 OK".format(ver),
                                "Content-Type: text/html",
@@ -185,7 +78,6 @@ $(document).ready(function() {
                                content)))
     finally:
         leave()
-        #print req
 
 
 def pprint_dict(d):
@@ -225,5 +117,7 @@ if __name__ == '__main__':
     #     except control characters??
     #   - ESC R <digits> ; <escaped-data> ESC Q
 
-    #ajax_demo()
-    echotest2()
+    ajax_demo()
+
+    #for _ in range(100):
+    #    echotest2()
