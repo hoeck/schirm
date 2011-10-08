@@ -66,14 +66,16 @@ class CursorMarker():
     def __init__(self, ch):
         self.char = ch
 
-def group_by_attrs(line, cursorpos=None):
+def group_by_attrs(line):
     """
     Return a list of groups of _Char tuples having the same attributes.
     """
     prev_tuple = None
     groups = []
+    cursorpos = line.cursorpos
+
     for i, chartuple in enumerate(line):
-        if cursorpos and cursorpos==i:
+        if cursorpos==i:
             groups.append(CursorMarker(chartuple))
             prev_tuple = None
         elif equal_attrs(prev_tuple, chartuple):
@@ -99,11 +101,11 @@ def create_span(group):
     else:
         return tmpl.format("", "")
 
-def renderline(line, cursorpos=None):
+def renderline(line):
     """
     Given a line of pyte.Chars, create a string of spans with appropriate style.
     """
-    return "".join(map(create_span, group_by_attrs(line, cursorpos)))
+    return "".join(map(create_span, group_by_attrs(line)))
 
 def wrap_in_span(s):
     return '<span>{0}</span>'.format(s)
@@ -254,9 +256,16 @@ class Pty(object):
     def render_changes(self):
         js = []
         lines = self.screen.linecontainer
+        
+        if not self.screen.cursor.hidden:
+            # make sure the cursor is drawn
+            lines.show_cursor(self.screen.cursor.y, self.screen.cursor.x)
+
         events = lines.get_and_clear_events()
 
         for e in events:
+            # iframe events do sometimes more than just updating the
+            # screen
             if e[0] == 'iframe_register_resource':
                 self._server.register_resource(e[1], e[2])
             elif e[0] == 'iframe_respond':
@@ -273,13 +282,19 @@ class Pty(object):
             elif e[0] == 'iframe_debug':
                 print e[1]
             else:
+                # plain old terminal screen updating
                 js.append(getattr(EventRenderer, e[0])(*e[1:]))
-            
+        
         for i,line in enumerate(lines):
             if line.changed:
                 line.changed = False
                 js.append(set_line_to(i, renderline(line)))
 
+        if not self.screen.cursor.hidden:
+            # make sure our current cursor will be deleted next time
+            # we update the screen
+            lines.hide_cursor(self.screen.cursor.y)
+                
         return js
 
     def read_and_feed_and_render(self):

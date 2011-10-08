@@ -21,6 +21,9 @@ class Line(UserList):
         self.default_char = default_char
         self.data = [self.default_char] * self.size
         self.changed = True
+        # if set to a number, render a cursor block on this line at
+        # the given position:
+        self.cursorpos = None
 
     def set_size(self, size):
         """ set the size in columns for this line """
@@ -164,6 +167,16 @@ class LineContainer():
         # do we need an __iter__ method?
         return self.lines[self.realLineIndex(0):].__iter__()
 
+    ## cursor show and hide events
+
+    def show_cursor(self, index, column):
+        self[index].changed = True
+        self[index].cursorpos = column
+
+    def hide_cursor(self, index):
+        self[index].changed = True
+        self[index].cursorpos = None
+        
     ## iframe events, not directly line-based
 
     def iframecharinsert(self, char):
@@ -344,7 +357,7 @@ class TermScreen(pyte.Screen):
             self.cursor.hidden = False
 
     def _application_mode(self):
-        return mo.DECAPP in self.mode
+        return mo.DECAPP in self.modes
 
     def reset_mode(self, *modes, **kwargs):
         """Resets (disables) a given list of modes.
