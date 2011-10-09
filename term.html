@@ -4,14 +4,15 @@
 <style type="text/css">
 #termdiv {
   position: absolute;
-  top:0px;
-  bottom:0px;
-  left:0px;
-  right:0px;
+  top:1px;
+  bottom:2px;
+  left:1px;
+  right:2px;
 }
 
 pre {
   margin:0px;
+  padding:1px;
 }
 
 iframe {
@@ -201,7 +202,7 @@ var Lines = (function(linesElement, term) {
          var span = document.createElement("span");
          linesElement.appendChild(span);
       }
-    }
+    },
   };
 
   return fn;
