@@ -123,8 +123,9 @@ class EventRenderer():
     @staticmethod
     def reset(lines):
         if lines:
-            return "term.reset();\n{}" \
-                .format("\n".join([set_line_to(i,renderline(l))
+            return "term.reset({});\n{}" \
+                .format(len(lines),
+                        "\n".join([set_line_to(i,renderline(l))
                                    for i,l in enumerate(lines)]))
         else:
             return "term.reset();"
@@ -151,12 +152,21 @@ class EventRenderer():
             return "term.insertLine({}, {});".format(index, json.dumps(content))
 
     @staticmethod
+    def scroll_to_bottom():
+        return 'term.scrollToBottom();'
+
+    @staticmethod
     def iframe(content):
         return 'term.iframeWrite({});'.format(json.dumps(content))
     
     @staticmethod
     def iframe_close():
         return 'term.iframeCloseDocument();'
+
+    @staticmethod
+    def iframe_leave():
+        return 'term.iframeLeave();'
+
 
 class Pty(object):
             
@@ -243,6 +253,7 @@ class Pty(object):
         self.input_queue.put(lambda : self.resize(lines, cols))
 
     def resize(self, lines, cols):
+        print "resize", lines, cols
         self.screen.resize(lines, cols)
         self.set_size(lines, cols)
 
@@ -263,7 +274,12 @@ class Pty(object):
 
         events = lines.get_and_clear_events()
 
+        triggers = {}
         for e in events:
+            # some events trigger some actions (like scrolling)
+            if e[0] in set(('append', 'pop_bottom', 'insert')):
+                triggers['scroll_to_bottom'] = EventRenderer.scroll_to_bottom
+
             # iframe events do sometimes more than just updating the
             # screen
             if e[0] == 'iframe_register_resource':
@@ -279,6 +295,7 @@ class Pty(object):
                 pass
             elif e[0] == 'iframe_leave':
                 js.append(EventRenderer.iframe_close())
+                js.append(EventRenderer.iframe_leave())
             elif e[0] == 'iframe_debug':
                 print e[1]
             else:
@@ -290,11 +307,15 @@ class Pty(object):
                 line.changed = False
                 js.append(set_line_to(i, renderline(line)))
 
+        for _, action in triggers.iteritems():
+            print "appending", action()
+            js.append(action())
+
         if not self.screen.cursor.hidden:
             # make sure our current cursor will be deleted next time
             # we update the screen
             lines.hide_cursor(self.screen.cursor.y)
-                
+
         return js
 
     def read_and_feed_and_render(self):

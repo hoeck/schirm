@@ -171,10 +171,10 @@ def webkit_event_loop():
 def pty_loop(pty, execute):
     execute("termInit();")
     try:
+        pty.render_changes() # render initial term state
         while running():
             jslist = pty.read_and_feed_and_render()
             execute("\n".join(jslist))
-            execute('term.scrollToBottom();')
     except OSError:
         stop()
 

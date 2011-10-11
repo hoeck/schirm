@@ -59,6 +59,15 @@ function getIframeResizeHandler(iframe) {
 var Lines = (function(linesElement, term) {
  
   var fn = {
+
+    init: function(lines) {
+      linesElement.innerHTML = "";
+      for (var i=0; i<lines; i++) {
+         var span = document.createElement("span");
+         linesElement.appendChild(span);
+      }
+    },
+
     show: function(enable) {
       linesElement.style.display = enable ? "block" : "none";
     },
@@ -104,7 +113,52 @@ var Lines = (function(linesElement, term) {
       linesElement.removeChild(linesElement.lastChild);
     },
 
-    // iframe
+    getSize: function() {
+      return getPreSize(linesElement);
+    },
+    
+    // Resize linesElement to display the given number of lines.
+    // Reuse existing history to fill new lines when getting larger.
+    // Like the scrolling employed by contemporary terminal emulators like
+    // gnome-terminal
+    resize: function(oldLines, newLines) {
+      // curLines = linesElement.childNodes.length;
+
+      // var is_empty_line = function(element) {
+      //   return element && (element.tagName == 'span') && (element.innerHTML == '');
+      // };
+
+      // if (curLines < newLines) {
+      //   // insert blank lines at the bottom
+      //   for (var i=0; i<(newLines-curLines); i++) {
+      //     linesElement.appendChild(document.createElement('span'));
+      //   }
+      // } else {
+      //   // try to remove blank lines from the bottom
+      //   linesToRemove = oldLines - newLines;
+      //   while (is_empty_line(linesElement.lastChild) && (linesToRemove > 0)) {
+      //     linesElement.removeChild(linesElement.lastChild);
+      //     linesToRemove--;
+      //   }
+      // }
+    },
+
+    reset: function(lines) {
+      linesElement.innerHtml = "";
+      for (var i; i<lines; i++) {
+        term.appendLine("");
+      }
+      // var lines = lines || term.size.lines;
+      // console.log("resetting terminal to "+lines+" lines");
+      // linesElement.innerHTML = "";
+      // for (var i=0; i<lines; i++) {
+      //   var span = document.createElement("span");
+      //   linesElement.appendChild(span);
+      // }
+      // term.size.lines = lines;
+    },
+
+    // iframe functions
     insertIframe: function (linenumber) {
       // close the old iframe
       if (term.currentIframe) {
@@ -138,14 +192,26 @@ var Lines = (function(linesElement, term) {
       var iframe = term.currentIframe;
       iframe.contentDocument.write(content);
       var body = iframe.contentDocument.getElementsByTagName("body")[0];
+      // body may be undefined if nothing has been written to the iframe
       if (body) {
-        // body may be undefined if nothing has been written to the iframe
+        // don't show scrollbars on term iframes
         iframe.height = body.scrollHeight;
+
+        // ensure the iframe is visible inside the linesElement
+        if (frame.offsetHeight < linesElement.offsetHeight) {
+          // iframe is smaller than our screen
+          if (frame.offsetTop > (linesElement.offsetHeight - linesElement.offsetTop)) {
+            linesElement.scrollTop = frame.offsetTop;
+          }
+        } else {
+          linesElement.scrollTop = frame.offsetTop + (frame.offsetHeight - linesElement.offsetHeight);
+        }
+        //linesElement.scrollTop = linesElement.scrollHeight;
       }
     },
 
     // call .close on the iframe document.
-    iframeCloseDocument: function () {
+    iframeCloseDocument: function() {
       var iframe = term.currentIframe;
       iframe.addEventListener('load', getIframeResizeHandler(iframe));
       iframe.contentDocument.close();
@@ -155,54 +221,13 @@ var Lines = (function(linesElement, term) {
       iframe.contentDocument.addEventListener('DOMSubtreeModified', getIframeResizeHandler(iframe));
     },
 
-    getSize: function() {
-      return getPreSize(linesElement);
-    },
-    
-    // Resize linesElement to display the given number of lines.
-    // Reuse existing history to fill new lines when getting larger.
-    // Like the scrolling employed by contemporary terminal emulators like
-    // gnome-terminal
-    resize: function(oldLines, newLines) {
-      // curLines = linesElement.childNodes.length;
+    // set the the current iframe document to null
+    // so that we know wether were in iframe mode or not
+    iframeLeave: function() {
+      term.currentIframe = null;
+      // should we remove the DOMSubtreeModified listener??
+    }
 
-      // var is_empty_line = function(element) {
-      //   return element && (element.tagName == 'span') && (element.innerHTML == '');
-      // };
-
-      // if (curLines < newLines) {
-      //   // insert blank lines at the bottom
-      //   for (var i=0; i<(newLines-curLines); i++) {
-      //     linesElement.appendChild(document.createElement('span'));
-      //   }
-      // } else {
-      //   // try to remove blank lines from the bottom
-      //   linesToRemove = oldLines - newLines;
-      //   while (is_empty_line(linesElement.lastChild) && (linesToRemove > 0)) {
-      //     linesElement.removeChild(linesElement.lastChild);
-      //     linesToRemove--;
-      //   }
-      // }
-    },
-
-    reset: function(lines) {
-      // var lines = lines || term.size.lines;
-      // console.log("resetting terminal to "+lines+" lines");
-      // linesElement.innerHTML = "";
-      // for (var i=0; i<lines; i++) {
-      //   var span = document.createElement("span");
-      //   linesElement.appendChild(span);
-      // }
-      // term.size.lines = lines;
-    },
-
-    init: function(lines) {
-      linesElement.innerHTML = "";
-      for (var i=0; i<lines; i++) {
-         var span = document.createElement("span");
-         linesElement.appendChild(span);
-      }
-    },
   };
 
   return fn;
@@ -214,6 +239,14 @@ var Lines = (function(linesElement, term) {
 var App = (function(appElement, term) {
 
   var fn = {
+
+    init: function(lines) {
+      linesElement.innerHTML = "";
+      for (var i=0; i<lines; i++) {
+         var span = document.createElement("span");
+         linesElement.appendChild(span);
+      }
+    },
 
     show: function(enable) {
       appElement.style.display = enable ? "block" : "none";
@@ -252,6 +285,36 @@ var App = (function(appElement, term) {
       appElement.removeChild(appElement.childNodes[this.elementIndex(linenumber)]);
     },
 
+
+    getSize: function() {
+      return getPreSize(appElement);
+    },
+
+    // Resize the terminal space used to render the screen in
+    // application mode
+    resize: function(oldLines, newLines) {
+      // var curLines = appElement.childNodes.length;
+      // if (curLines < newLines) {
+      //   for (var i=0; i<(newLines-curLines); i++) {
+      //     appElement.appendChild(document.createElement('span'));
+      //   }
+      // } else {
+      //   for (var i=0; i<(curLines-newLines); i++) {
+      //     appElement.removeChild(appElement.firstChild);
+      //   }
+      // }
+    },
+
+    reset: function() { // todo: should take lines, cols param
+      // appElement.innerHTML = "";
+
+      // for (var i=0; i<term.size.lines; i++) {
+      //   var span = document.createElement("span");
+      //   appElement.appendChild(span);
+      // }
+    },
+
+    // iframe
     // TODO
     // insert iframe as large as the whole screen
     // or use a second gtk webview instead - might be safer & more robust
@@ -282,45 +345,13 @@ var App = (function(appElement, term) {
     
     // contentDocument.write content (a string) to the currentIframe and
     // resize it (vertically) if necessary
-    iframeWrite: function (content) {
+    iframeWrite: function(content) {
       var iframe = term.currentIframe;
       iframe.contentDocument.write(content);
     },
 
-    getSize: function() {
-      return getPreSize(appElement);
-    },
-
-    // Resize the terminal space used to render the screen in
-    // application mode
-    resize: function(oldLines, newLines) {
-      // var curLines = appElement.childNodes.length;
-      // if (curLines < newLines) {
-      //   for (var i=0; i<(newLines-curLines); i++) {
-      //     appElement.appendChild(document.createElement('span'));
-      //   }
-      // } else {
-      //   for (var i=0; i<(curLines-newLines); i++) {
-      //     appElement.removeChild(appElement.firstChild);
-      //   }
-      // }
-    },
-
-    reset: function() { // todo: should take lines, cols param
-      // appElement.innerHTML = "";
-
-      // for (var i=0; i<term.size.lines; i++) {
-      //   var span = document.createElement("span");
-      //   appElement.appendChild(span);
-      // }
-    },
-
-    init: function(lines) {
-      linesElement.innerHTML = "";
-      for (var i=0; i<lines; i++) {
-         var span = document.createElement("span");
-         linesElement.appendChild(span);
-      }
+    iframeLeave: function(content) {
+      term.currentIframe = null;
     }
   };
 
@@ -378,6 +409,7 @@ var Term = function() {
     insertIframe: function (linenumber) { fn.getScreen().insertIframe(linenumber); },
     iframeWrite: function (content) { fn.getScreen().iframeWrite(content); },
     iframeCloseDocument: function() { fn.getScreen().iframeCloseDocument(); },
+    iframeLeave: function() { fn.getScreen().iframeLeave(); },
 
     getSize: function() { return fn.getScreen().getSize(); },
     resize: function(oldLines, newLines) { fn.getScreen().resize(oldLines, newLines); },

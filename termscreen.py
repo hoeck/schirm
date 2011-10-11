@@ -167,6 +167,9 @@ class LineContainer():
         # do we need an __iter__ method?
         return self.lines[self.realLineIndex(0):].__iter__()
 
+    def resize(self):
+        self.events.append(("scroll_to_bottom", ))
+
     ## cursor show and hide events
 
     def show_cursor(self, index, column):
@@ -300,8 +303,7 @@ class TermScreen(pyte.Screen):
             while self._is_empty_line(lc.lines[-1]) and lines_to_remove > 0:
                 lc.pop_bottom();
                 lines_to_remove -= 1;
-
-            cursordelta = -(self.lines - lines - lines_to_remove - 1)
+            cursordelta = lines_to_remove
 
         newcursory = self.cursor.y + cursordelta
         self.cursor.y = min(max(newcursory, 0), lines-1)
@@ -315,6 +317,8 @@ class TermScreen(pyte.Screen):
 
         self.lines, self.columns = lines, columns
         self.margins = Margins(0, self.lines - 1)
+
+        lc.resize()
 
     def set_mode(self, *modes, **kwargs):
         """Sets (enables) a given list of modes.
