@@ -44,10 +44,15 @@ function getPreSize(element) {
 
 function getIframeResizeHandler(iframe) {
   return function() {
+    console.log("handler:" + iframe.opts);
     var body = iframe.contentDocument.body;
     if (body) {
-      iframe.height = body.scrollHeight;
-      iframe.width = body.scrollWidth;
+      if (iframe.opts.height == 'auto') {
+        iframe.height = body.scrollHeight;
+      }
+      if (iframe.opts.width == 'auto') {
+        iframe.width = body.scrollWidth;
+      }
     }
   };
 }
@@ -159,7 +164,11 @@ var Lines = (function(linesElement, term) {
     },
 
     // iframe functions
-    insertIframe: function (linenumber) {
+    insertIframe: function (linenumber, opts) {
+      // insert an iframe 'line' before linenumber
+      // opts are:
+      //  width, height .. one of '100%' or 'auto'
+
       // close the old iframe
       if (term.currentIframe) {
         term.currentIframe.contentDocument.close();
@@ -175,14 +184,24 @@ var Lines = (function(linesElement, term) {
       var iframe = document.createElement('iframe');
       iframe.name = "termIframe";
       div.appendChild(iframe);
-      iframe.contentDocument.addEventListener('load', getIframeResizeHandler(iframe));
-
+      
       var newline = document.createElement('span');
       newline.innerHTML = "\n";
       div.appendChild(newline);
-      
+
       term.currentIframe = iframe;
-      iframe.height = "1";
+
+      iframe.opts = opts
+      iframe.contentDocument.addEventListener('load', getIframeResizeHandler(iframe));
+      if (opts.height == 'auto') {
+        iframe.height = "1";
+      } else if (opts.height == '100%') {
+        iframe.style.height = '100%';
+      }
+      if (opts.width == '100%') {
+        iframe.style.width = '100%';
+      }
+
       iframe.contentDocument.open("text/html");
     },
     
@@ -198,13 +217,13 @@ var Lines = (function(linesElement, term) {
         iframe.height = body.scrollHeight;
 
         // ensure the iframe is visible inside the linesElement
-        if (frame.offsetHeight < linesElement.offsetHeight) {
+        if (iframe.offsetHeight < linesElement.offsetHeight) {
           // iframe is smaller than our screen
-          if (frame.offsetTop > (linesElement.offsetHeight - linesElement.offsetTop)) {
-            linesElement.scrollTop = frame.offsetTop;
+          if (iframe.offsetTop > (linesElement.offsetHeight - linesElement.offsetTop)) {
+            linesElement.scrollTop = iframe.offsetTop;
           }
         } else {
-          linesElement.scrollTop = frame.offsetTop + (frame.offsetHeight - linesElement.offsetHeight);
+          linesElement.scrollTop = iframe.offsetTop + (iframe.offsetHeight - linesElement.offsetHeight);
         }
         //linesElement.scrollTop = linesElement.scrollHeight;
       }
@@ -318,7 +337,7 @@ var App = (function(appElement, term) {
     // TODO
     // insert iframe as large as the whole screen
     // or use a second gtk webview instead - might be safer & more robust
-    insertIframe: function (linenumber) {
+    insertIframe: function (linenumber, opts) {
       // close the old iframe
       // if (term.currentIframe) {
       //   term.currentIframe.contentDocument.close();
@@ -406,7 +425,7 @@ var Term = function() {
     removeLine: function(linenumber) { fn.getScreen().removeLine(linenumber); },
     removeLastLine: function() { fn.getScreen().removeLastLine(); },
 
-    insertIframe: function (linenumber) { fn.getScreen().insertIframe(linenumber); },
+    insertIframe: function (linenumber, opts) { fn.getScreen().insertIframe(linenumber, opts); },
     iframeWrite: function (content) { fn.getScreen().iframeWrite(content); },
     iframeCloseDocument: function() { fn.getScreen().iframeCloseDocument(); },
     iframeLeave: function() { fn.getScreen().iframeLeave(); },

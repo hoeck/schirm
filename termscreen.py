@@ -90,7 +90,18 @@ class Line(UserList):
 
 class IframeLine(Line):
 
-    def __init__(self):
+    def __init__(self, args):
+        """
+        Create an IframeLine.
+        Args is a list of strings, interpreted as a dictionary used to set options:
+          width, height: width/height of the iframe
+            defaults: width='100%', height='auto'
+            possible values:
+              '100%': make the iframe as large as the schirm window in this dimension
+              'auto': resize the iframe whenever its content changes
+          """
+        self.args = {'width':'100%', 'height':'auto'}
+        self.args.update(dict(args[i:i+2] for i in range(0, len(args), 2)))
         self.data = []
         self.changed = False
 
@@ -625,15 +636,15 @@ class TermScreen(pyte.Screen):
 
     ## iframe extensions
 
-    def iframe_enter(self):
-        # move cursor to last line
-        # insert an iframe line at the current cursor position
+    def iframe_enter(self, *args):
+        # insert an iframe line at the current cursor position (like self.index())
         # all following chars are written to that frame via
         # iframe.document.write
+        # For arguments, see IframeLine
 
         if self.iframe_mode == None:
             self.linecontainer.iframe_enter()
-            self.linecontainer.insert(self.cursor.y, IframeLine())
+            self.linecontainer.insert(self.cursor.y, IframeLine(args))
             self.iframe_mode = 'open' # iframe document opened
         elif self.iframe_mode == 'closed':
             self.iframe_mode = 'open'

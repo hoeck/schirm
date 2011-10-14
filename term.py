@@ -146,7 +146,7 @@ class EventRenderer():
     @staticmethod
     def insert(index, line):
         if isinstance(line, termscreen.IframeLine):
-            return 'term.insertIframe({}); '.format(index)
+            return 'term.insertIframe({}, {});'.format(index, json.dumps(line.args))
         else:
             content = renderline(line)
             return "term.insertLine({}, {});".format(index, json.dumps(content))
@@ -308,7 +308,6 @@ class Pty(object):
                 js.append(set_line_to(i, renderline(line)))
 
         for _, action in triggers.iteritems():
-            print "appending", action()
             js.append(action())
 
         if not self.screen.cursor.hidden:

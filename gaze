@@ -5,9 +5,9 @@ import sys
 import schirmclient as schirm
 
 def view_file(fname):
-    with schirm.frame():
+    with schirm.frame(width='100%'):
         schirm.register_resource(fname, 'x')
-        print '<div style="overflow:visible"> <img src="x"></div>'
+        print '<div style="overflow:visible"> <img style="width:100%;" src="x"></div>'
 
 if __name__ == '__main__':
 
