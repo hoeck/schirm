@@ -11,6 +11,9 @@ import gtk
 import gobject
 
 import webkit
+
+import ctypes
+import ctypes.util
 #import jswebkit
 
 from promise import Promise
@@ -96,6 +99,19 @@ class Webkit(object):
 
     def show_inspector(self):
         self._get_inspector().inspect()
+
+    def set_proxy(self, uri):
+        """
+        Set the proxy URL using the default SoupSession of this webview.
+        """
+        libgobject = ctypes.CDLL(ctypes.util.find_library('gobject-2.0'))
+        libsoup = ctypes.CDLL(ctypes.util.find_library('soup-2.4'))
+        libwebkit = ctypes.CDLL(ctypes.util.find_library('webkitgtk-1.0'))
+
+        proxy_uri = libsoup.soup_uri_new(uri)
+
+        session = libwebkit.webkit_get_default_session()
+        libgobject.g_object_set(session, "proxy-uri", proxy_uri, None)
 
 
 # from the python-webkit examples, gpl
