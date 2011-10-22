@@ -14,7 +14,6 @@ import webkit
 
 import ctypes
 import ctypes.util
-#import jswebkit
 
 from promise import Promise
 
@@ -34,7 +33,7 @@ class Webkit(object):
             self.browser.execute_script(script)
         else:
             if script == None:
-                print "script was None!!!"
+                logging.warn("script is None")
 
     def connect_title_changed(self, f):
         # connect title changed events
@@ -54,7 +53,7 @@ class Webkit(object):
 
     def connect(self, *args, **kwargs):
         return self.browser.connect(*args, **kwargs)
-    
+
     def disconnect(self, *args, **kwargs):
         return self.browser.disconnect(*args, **kwargs)
 
@@ -182,14 +181,14 @@ class Inspector (gtk.Window):
 
 
 class GtkThread(object):
-    
+
     def __init__(self):
         self._start()
 
     def _start(self):
         try:
             if __IPYTHON__:
-                print "IPython detected -> gtk.set_interactive(False)"
+                logging.info("IPython detected -> gtk.set_interactive(False)")
                 gtk.set_interactive(False)
         except NameError:
             pass
@@ -218,7 +217,7 @@ class GtkThread(object):
         self.invoke(p, *args, **kwargs)
         return p.get()
 
-    
+
 def launch_browser():
 
     window = gtk.Window()
@@ -232,8 +231,8 @@ def launch_browser():
     window.add(box)
 
     box.pack_start(browser.browser, expand=True, fill=True, padding=0)
-    
-    window.props.has_resize_grip = False 
+
+    window.props.has_resize_grip = False
     window.set_default_size(800, 600)
     window.show_all()
 
@@ -243,7 +242,7 @@ def launch_browser():
 def establish_browser_channel(gtkthread, browser):
     """
     return two functions, receive and execute.
-    
+
     Receive pops a string of a message queue filled up with
     javascript console messages.
 
@@ -254,12 +253,15 @@ def establish_browser_channel(gtkthread, browser):
     def title_changed(title):
         if title != 'null': message_queue.put(title)
 
-    def console_message(msg):
+    def console_message(view, msg, line, source_id, *user_data):
+        # source_id .. uri string of the document the console.log occured in
         message_queue.put(msg)
-        #return 1 # do not invoke the default console message handler
-        return 0
 
-    browser.connect('console-message', lambda view, msg, *args: console_message(msg))
+        # 1 .. do not invoke the default console message handler
+        # 0 .. invoke other handlers
+        return 1
+
+    browser.connect('console-message', console_message)
 
     def receive(block=True, timeout=None):
         """
@@ -281,12 +283,12 @@ def install_key_events(window, press_cb=None, release_cb=None):
     """
     Install keypress and keyrelease signal handlers on the given gtk
     window.
-    
+
     callback example:
     def callback(widget, event):
        # event has the following attributes:
        print event.time, event.state, event.keyval, event.string
-    
+
     see: http://www.pygtk.org/pygtk2tutorial/sec-EventHandling.html
 
     window.set_events(gtk.gdk.KEY_PRESS_MASK | gtk.gdk.KEY_RELEASE_MASK)
@@ -296,3 +298,5 @@ def install_key_events(window, press_cb=None, release_cb=None):
         window.connect('key_press_event', press_cb)
     if release_cb:
         window.connect('key_release_event', release_cb)
+
+
