@@ -1,11 +1,13 @@
 
 import os
+import re
 import socket
 import mimetypes
 import threading
 import base64
 import time
 import logging
+import urlparse
 from BaseHTTPServer import BaseHTTPRequestHandler
 from StringIO import StringIO
 
@@ -32,7 +34,7 @@ class Server(object):
     enumerates them and writes them to the pty using a special ESC code:
     ESC R <id> ESC ; <base64-encoded-request-data> \033 Q
     the id is required to know which response belongs to which request.
-    
+
     2) A function to handle responses from the pty and write them to the
     webkit socket.
 
@@ -64,7 +66,7 @@ class Server(object):
     def getport(self):
         addr, port = self.socket.getsockname()
         return port
-    
+
     def listen(self):
         # todo: thread to close unused connections
         logging.debug("Server listening on localhost:{}".format(self.getport()))
@@ -73,40 +75,50 @@ class Server(object):
             self.receive(client)
 
     def clear_resources(self):
-        self.resources = {}
+        #self.resources = {}
+        pass
 
     def receive(self, client):
         """
         Receive a request and ignore, serve static files or ask the
         pty to provide a response.
         """
-
         rfile = client.makefile()
         req = HTTPRequest(rfile)
         logging.info("request: {r.command} {r.path}".format(r=req))
-
+        (scheme, netloc, path, params, query, fragment) = urlparse.urlparse(req.path)
+        m = re.match("(.+)\.localhost", netloc)
+        if m:
+            iframe_id = m.group(1)
+        else:
+            iframe_id = None
+    
         if req.error_code:
             client.sendall(req.error_message)
             client.close()
 
-        elif req.command == 'GET' and req.path in self.resources:
+        elif req.command == 'GET' \
+                and iframe_id \
+                and iframe_id in self.resources \
+                and path in self.resources[iframe_id]:
             # its a known static resource, serve it!
-            logging.debug("serving static resource {}".format(req.path))
-            client.sendall(self.resources[req.path])
+            logging.debug("serving static resource {} for iframe {}".format(path, iframe_id))
+            client.sendall(self.resources[iframe_id][path])
             client.close()
 
-        elif req.command == 'GET' and req.path in self.not_found:
-            # ignore some requests (favicon & /)
+        elif req.command == 'GET' and path in self.not_found:
+            # ignore some requests (e.g. favicon)
             client.sendall("HTTP/1.1 404 Not Found")
-        
+
         elif not self.pty.screen.iframe_mode:
-            # only serve dynamic requests if terminal is in iframe mode
+            # only serve non-static requests if terminal is in iframe mode
             client.sendall("HTTP/1.1 404 Not Found")
             client.close()
+
         else:
             req_id = self._getnextid()
             self.requests[req_id] = client
-            
+
             # transmitting: req_id, method, path, (k, v)*, data
             data = [str(req_id),
                     req.request_version,
@@ -146,7 +158,7 @@ class Server(object):
             client.sendall(data)
             client.close()
 
-    def register_resource(self, name, data):
+    def register_resource(self, frame_id, name, data):
         """
         Add a static resource name to be served. Use the resources
         name to guess an appropriate content-type.
@@ -162,4 +174,6 @@ class Server(object):
 
         if not name.startswith("/"):
             name = "/" + name
-        self.resources[name] = response
+        if frame_id not in self.resources:
+            self.resources[frame_id] = {}
+        self.resources[frame_id][name] = response

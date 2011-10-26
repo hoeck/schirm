@@ -90,18 +90,20 @@ class Line(UserList):
 
 class IframeLine(Line):
 
-    def __init__(self, args):
+    def __init__(self, id, args):
         """
         Create an IframeLine.
+        Id must be a unique identifier to be able to map webview requests to iframes.
         Args is a list of strings, interpreted as a dictionary used to set options:
           width, height: width/height of the iframe
             defaults: width='100%', height='auto'
             possible values:
               '100%': make the iframe as large as the schirm window in this dimension
               'auto': resize the iframe whenever its content changes
-          """
+        """
         self.args = {'width':'100%', 'height':'auto'}
         self.args.update(dict(args[i:i+2] for i in range(0, len(args), 2)))
+        self.id = id
         self.data = []
         self.changed = False
 
@@ -196,8 +198,8 @@ class LineContainer():
     def iframecharinsert(self, char):
         self.events.append(('iframe', char))
 
-    def iframe_register_resource(self, name, data):
-        self.events.append(('iframe_register_resource', name, data))
+    def iframe_register_resource(self, id, name, data):
+        self.events.append(('iframe_register_resource', id, name, data))
 
     def iframe_respond(self, name, data):
         self.events.append(('iframe_respond', name, data))
@@ -222,6 +224,7 @@ class TermScreen(pyte.Screen):
         self.lines, self.columns = lines, columns
         self.linecontainer = LineContainer()
         self.iframe_mode = None
+        self.iframe_id = None
         self.reset()
 
     def __before__(self, command):
@@ -257,7 +260,7 @@ class TermScreen(pyte.Screen):
         self.linecontainer.reset(lines)
 
         if self.iframe_mode:
-            self.iframe_leaeve()
+            self.iframe_leave()
 
         self.mode = set([mo.DECAWM, mo.DECTCEM, mo.LNM, mo.DECTCEM])
         self.margins = Margins(0, self.lines - 1)
@@ -636,6 +639,9 @@ class TermScreen(pyte.Screen):
 
     ## iframe extensions
 
+    def get_next_iframe_id(self):
+        return (self.iframe_id or 0) + 1;
+
     def iframe_enter(self, *args):
         # insert an iframe line at the current cursor position (like self.index())
         # all following chars are written to that frame via
@@ -644,7 +650,8 @@ class TermScreen(pyte.Screen):
 
         if self.iframe_mode == None:
             self.linecontainer.iframe_enter()
-            self.linecontainer.insert(self.cursor.y, IframeLine(args))
+            self.iframe_id = self.get_next_iframe_id()
+            self.linecontainer.insert(self.cursor.y, IframeLine(str(self.iframe_id), args))
             self.iframe_mode = 'open' # iframe document opened
         elif self.iframe_mode == 'closed':
             self.iframe_mode = 'open'
@@ -672,7 +679,7 @@ class TermScreen(pyte.Screen):
     def iframe_register_resource(self, name_b64, data_b64):
         name = base64.b64decode(name_b64)
         data = base64.b64decode(data_b64)
-        self.linecontainer.iframe_register_resource(name, data)
+        self.linecontainer.iframe_register_resource(str(self.iframe_id), name, data)
 
     def iframe_respond(self, request_id, data_b64):
         """

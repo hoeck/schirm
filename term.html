@@ -164,7 +164,7 @@ var Lines = (function(linesElement, term) {
     },
 
     // iframe functions
-    insertIframe: function (linenumber, opts) {
+    insertIframe: function (linenumber, id, opts) {
       // insert an iframe 'line' before linenumber
       // opts are:
       //  width, height .. one of '100%' or 'auto'
@@ -182,7 +182,7 @@ var Lines = (function(linesElement, term) {
       }
 
       var iframe = document.createElement('iframe');
-      iframe.name = "termIframe";
+      iframe.name = id;
       div.appendChild(iframe);
       
       var newline = document.createElement('span');
@@ -337,7 +337,7 @@ var App = (function(appElement, term) {
     // TODO
     // insert iframe as large as the whole screen
     // or use a second gtk webview instead - might be safer & more robust
-    insertIframe: function (linenumber, opts) {
+    insertIframe: function (linenumber, id, opts) {
       // close the old iframe
       // if (term.currentIframe) {
       //   term.currentIframe.contentDocument.close();
@@ -425,7 +425,7 @@ var Term = function() {
     removeLine: function(linenumber) { fn.getScreen().removeLine(linenumber); },
     removeLastLine: function() { fn.getScreen().removeLastLine(); },
 
-    insertIframe: function (linenumber, opts) { fn.getScreen().insertIframe(linenumber, opts); },
+    insertIframe: function (linenumber, id, opts) { fn.getScreen().insertIframe(linenumber, id, opts); },
     iframeWrite: function (content) { fn.getScreen().iframeWrite(content); },
     iframeCloseDocument: function() { fn.getScreen().iframeCloseDocument(); },
     iframeLeave: function() { fn.getScreen().iframeLeave(); },

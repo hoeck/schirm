@@ -12,6 +12,7 @@ import logging
 import gtk
 import argparse
 import warnings
+import urlparse
 
 from webkit_wrapper import GtkThread, launch_browser, establish_browser_channel, install_key_events
 from promise import Promise
@@ -40,6 +41,13 @@ def quit():
         pass
 
 def resource_requested_handler(view, frame, resource, request, response):
+    (scheme, netloc, path, params, query, fragment) = urlparse.urlparse(request.get_uri())
+
+    if netloc == 'termframe.localhost' and frame.get_name():
+        uri = request.get_uri().replace("http://termframe.localhost", "http://{}.localhost".format(frame.get_name()))
+        request.set_uri(uri)
+
+    logging.info("{} requested uri: {}".format(frame.get_name(), request.get_uri()))
     return 0
 
 def sample_console_message_handler(view, msg, line, source_id, user_data):
@@ -118,6 +126,7 @@ def webkit_event_loop():
     # proxy of libsoup.
     server = webserver.Server(pty).start()
     pty.set_webserver(server)
+    browser.set_proxy("http://localhost:{}".format(server.getport()))
 
     global state # make interactive development and debugging easier
     state = dict(browser=browser,
@@ -147,7 +156,7 @@ def webkit_event_loop():
         doc = f.read()
         doc = doc.replace("//TERM-CSS-PLACEHOLDER", term_css)
 
-    gtkthread.invoke(lambda : browser.load_string(doc, base_uri="http://localhost:{}".format(server.getport())))
+    gtkthread.invoke(lambda : browser.load_string(doc, base_uri="http://termframe.localhost"))
 
     load_finished.get()
 
@@ -158,14 +167,15 @@ def webkit_event_loop():
     # read from webkit though console.log messages starting with 'schirm'
     # and containing json data
     while running():
-        msg = receive(block=True, timeout=0.1) # timeout to make waiting for events interruptible
+
+        msg, line, source = receive(block=True, timeout=0.1) or (None, None, None) # timeout to make waiting for events interruptible
         if msg:
             if receive_handler(msg, pty):
                 logging.info("webkit-console (schirm IPC): {}".format(msg))
             elif msg == "show_webkit_inspector": # shows a blank window :/
                 gtkthread.invoke(browser.show_inspector)
             else:
-                logging.info("webkit-console: {}".format(msg))
+                logging.info("webkit-console: {}:{} {}".format(source, line, msg))
     quit()
 
 def pty_loop(pty, execute):
@@ -188,6 +198,7 @@ def main():
         webkit_event_loop()
 
 if __name__ == '__main__':
+
     signal.signal(signal.SIGINT, lambda sig, stackframe: quit())
     signal.siginterrupt(signal.SIGINT, True)
 

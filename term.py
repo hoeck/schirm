@@ -146,7 +146,7 @@ class EventRenderer():
     @staticmethod
     def insert(index, line):
         if isinstance(line, termscreen.IframeLine):
-            return 'term.insertIframe({}, {});'.format(index, json.dumps(line.args))
+            return 'term.insertIframe({}, {}, {});'.format(index, json.dumps(line.id), json.dumps(line.args))
         else:
             content = renderline(line)
             return "term.insertLine({}, {});".format(index, json.dumps(content))
@@ -283,7 +283,7 @@ class Pty(object):
             # iframe events do sometimes more than just updating the
             # screen
             if e[0] == 'iframe_register_resource':
-                self._server.register_resource(e[1], e[2])
+                self._server.register_resource(e[1], e[2], e[3])
             elif e[0] == 'iframe_respond':
                 self._server.respond(e[1], e[2])
             elif e[0] == 'iframe_enter':

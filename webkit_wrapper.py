@@ -99,18 +99,30 @@ class Webkit(object):
     def show_inspector(self):
         self._get_inspector().inspect()
 
+    def _get_libwebkit(self):
+        if getattr(self, '_libwekit_handle', None):
+            return self._libwekit_handle
+        else:
+            self._libwekit_handle = ctypes.CDLL(ctypes.util.find_library('webkitgtk-1.0'))
+            return self._libwekit_handle
+
     def set_proxy(self, uri):
         """
         Set the proxy URL using the default SoupSession of this webview.
         """
         libgobject = ctypes.CDLL(ctypes.util.find_library('gobject-2.0'))
         libsoup = ctypes.CDLL(ctypes.util.find_library('soup-2.4'))
-        libwebkit = ctypes.CDLL(ctypes.util.find_library('webkitgtk-1.0'))
+        libwebkit = self._get_libwebkit()
 
         proxy_uri = libsoup.soup_uri_new(uri)
 
         session = libwebkit.webkit_get_default_session()
         libgobject.g_object_set(session, "proxy-uri", proxy_uri, None)
+
+    def execute_in_frame(self, frame, script_uri, script_source):
+        # see https://github.com/karottenreibe/luakit/blob/develop/widgets/webview/javascript.c
+        pass
+
 
 
 # from the python-webkit examples, gpl
@@ -255,7 +267,7 @@ def establish_browser_channel(gtkthread, browser):
 
     def console_message(view, msg, line, source_id, *user_data):
         # source_id .. uri string of the document the console.log occured in
-        message_queue.put(msg)
+        message_queue.put((msg, line, source_id))
 
         # 1 .. do not invoke the default console message handler
         # 0 .. invoke other handlers
