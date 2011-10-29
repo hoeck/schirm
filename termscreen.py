@@ -192,7 +192,7 @@ class LineContainer():
     def hide_cursor(self, index):
         self[index].changed = True
         self[index].cursorpos = None
-        
+
     ## iframe events, not directly line-based
 
     def iframecharinsert(self, char):
@@ -215,6 +215,12 @@ class LineContainer():
 
     def iframe_leave(self):
         self.events.append(('iframe_leave', ))
+
+    def iframe_execute(self, source):
+        self.events.append(('iframe_execute', source))
+
+    def iframe_eval(self, source):
+        self.events.append(('iframe_eval', source))
 
 
 class TermScreen(pyte.Screen):
@@ -351,7 +357,7 @@ class TermScreen(pyte.Screen):
             # todo: implement event so that we can switch to/from appmode
             # in term.html
             pass
-            
+
         # When DECOLM mode is set, the screen is erased and the cursor
         # moves to the home position.
         if mo.DECCOLM in modes:
@@ -616,7 +622,7 @@ class TermScreen(pyte.Screen):
             if type_of in [0, 1]:
                 self.erase_in_line(type_of)
         else: # type_of == 2
-            # erase the whole display -> 
+            # erase the whole display ->
             # Push every visible line to the history == add blank
             # lines until all current non-blank lines are above the
             # top of the term window. (thats what xterm does and
@@ -629,7 +635,7 @@ class TermScreen(pyte.Screen):
             for i in range(self.lines-1, -1, -1):
                 if not self._is_empty_line(lc.lines[i]):
                     break
-            
+
             # fill the screen with enough empty lines to push all
             # other nonempty lines (and an additional newline) to the
             # history
@@ -697,6 +703,15 @@ class TermScreen(pyte.Screen):
         data = base64.b64decode(b64_debugmsg)
         self.linecontainer.iframe_debug(data)
 
+    def iframe_execute(self, b64_source):
+        source = base64.b64decode(b64_source)
+        self.linecontainer.iframe_execute(source)
+
+    def iframe_eval(self, b64_source):
+        source = base64.b64decode(b64_source)
+        self.linecontainer.iframe_eval(source)
+
+
 class SchirmStream(pyte.Stream):
 
     def __init__(self, *args, **kwargs):
@@ -763,7 +778,7 @@ class SchirmStream(pyte.Stream):
         try:
             self.handlers.get(self.state)(char)
         except TypeError:
-            pass
+            raise
         except KeyError:
             if __debug__:
                 self.flags["state"] = self.state
@@ -789,6 +804,8 @@ class SchirmStream(pyte.Stream):
 
             if kwargs.get("reset", True): self.reset()
             if kwargs.get("iframe", False): self.state = 'iframe_write'
+        else:
+            logging.warn("no listener set")
 
 
     # - ESC x leave iframe mode, interpreted at any time, ignored when

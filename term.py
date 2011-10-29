@@ -167,6 +167,14 @@ class EventRenderer():
     def iframe_leave():
         return 'term.iframeLeave();'
 
+    @staticmethod
+    def iframe_execute(source):
+        return ('iframe-execute', source)
+
+    @staticmethod
+    def iframe_eval(source):
+        return ('iframe-eval', source)
+
 
 class Pty(object):
             
@@ -204,7 +212,7 @@ class Pty(object):
         t.start()
 
     def q_write(self, s):
-        "Queued version of self.write()"
+        "Queued version of self.write()."
         self.input_queue.put(lambda : self.write(s))
 
     def q_write_iframe(self, s):
@@ -222,7 +230,15 @@ class Pty(object):
         self.input_queue.put(lambda : self.echo_off())
 
     def write(self, s):
-        os.write(self._pty, s)
+        """
+        Writes the given string or each string in the given list/tuple to
+        the pty.
+        """
+        if isinstance(s, basestring):
+            os.write(self._pty, s)
+        else:
+            for x in s:
+                os.write(self._pty, x)
 
     def fake_input(self, input_string):
         # TIOCSTI const char *argp
@@ -265,6 +281,9 @@ class Pty(object):
         self.stream.feed(response)
 
     def render_changes(self):
+        """
+        Find changes and return a list of strings.
+        """
         js = []
         lines = self.screen.linecontainer
         
@@ -291,7 +310,7 @@ class Pty(object):
                 # The embedded webkit takes some time to load
                 # resources, so we want them to be around even if we
                 # already left iframe mode.
-                self._server.clear_resources()
+                #self._server.clear_resources()
                 pass
             elif e[0] == 'iframe_leave':
                 js.append(EventRenderer.iframe_close())
@@ -301,11 +320,14 @@ class Pty(object):
             else:
                 # plain old terminal screen updating
                 js.append(getattr(EventRenderer, e[0])(*e[1:]))
-        
+
+        # line changes
+        line_js = []
         for i,line in enumerate(lines):
             if line.changed:
                 line.changed = False
-                js.append(set_line_to(i, renderline(line)))
+                line_js.append(set_line_to(i, renderline(line)))
+        js.append("\n".join(line_js))
 
         for _, action in triggers.iteritems():
             js.append(action())
@@ -414,3 +436,4 @@ class Pty(object):
                 return keydef[0]
         else:
             return keydef
+

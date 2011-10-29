@@ -103,21 +103,36 @@ def echotest2():
     close()
     leave()
 
+
+def frame_in_frame_test():
+    with frame():
+#        register_resource("bla.html")
+#        register_resource("x.gif")
+#        register_resource("jquery-1.6.2.js", "jquery.js")
+#<iframe src="http://www.heise.de">
+#         print """
+# <html><head>
+# <script type="text/javascript" src="jquery.js">
+# <script>
+# 
+# </script>
+# </head><body>
+# <h3>empty</h3>
+# <span>test</span><img src=\"x.gif\">
+# </body></html>
+# """
+        close()
+        # execute("""console.log("execute_window: " + window);""")
+        # execute("""console.log("execute_document: " + document);""")
+        # execute("""value = "value set"; console.log("value: " + value); console.log("window.value: " + window.value);""")
+        # execute("""console.log("value again: " + value);""")
+        time.sleep(3)
+        execute("""console.log("iframe-exec")""")
+        eval("""console.log("iframe-eval")""")
+        eval("""console.log("iframe-eval-2")""")
+        execute("""console.log("iframe-exec-2")""")
+
 if __name__ == '__main__':
-#    for x in range(1):
-        #print "-----------------------------"
-        #testIframeMode("iframe #{}".format(x))
-    #for x in range(1):
-    #    testIframeModeHeight()
-    #enterIframeMode()   
-#    print "x:\033  \033 -----"
+    frame_in_frame_test()
+    #ajax_demo()
 
-    # special input command (via stdin) in iframemode:
-    #   - normal keyboard input is redirected to the webkit view
-    #     except control characters??
-    #   - ESC R <digits> ; <escaped-data> ESC Q
-
-    ajax_demo()
-
-    #for _ in range(100):
-    #    echotest2()

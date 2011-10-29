@@ -12,9 +12,10 @@ from BaseHTTPServer import BaseHTTPRequestHandler
 from StringIO import StringIO
 
 
-START = "\033R"
-SEP = "\033;"
-END = "\033Q"
+ESC = "\033"
+SEP = ESC + ";"
+START_REQ = ESC + "R" + "request" + SEP
+END = ESC + "Q"
 NEWLINE = "\n" # somehow required for 'flushing', tcflush and other ioctls didn't work :/
 
 class HTTPRequest(BaseHTTPRequestHandler):
@@ -92,7 +93,7 @@ class Server(object):
             iframe_id = m.group(1)
         else:
             iframe_id = None
-    
+
         if req.error_code:
             client.sendall(req.error_message)
             client.close()
@@ -134,7 +135,7 @@ class Server(object):
             else:
                 data.append("")
 
-            pty_request = START + SEP.join(base64.encodestring(x) for x in data) + END + NEWLINE
+            pty_request = START_REQ + SEP.join(base64.encodestring(x) for x in data) + END + NEWLINE
 
             # Do only send requests when the terminals iframe document
             # is 'closed' so that requests are not echoed into the

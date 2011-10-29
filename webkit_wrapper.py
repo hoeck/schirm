@@ -16,6 +16,7 @@ import ctypes
 import ctypes.util
 
 from promise import Promise
+import webkitutils
 
 class Webkit(object):
 
@@ -27,6 +28,7 @@ class Webkit(object):
         self.browser = browser
         self.my_settings()
         self._inspector = Inspector(self.browser.get_web_inspector())
+        self._track_last_frame()
 
     def exec_js(self, script):
         if script:
@@ -34,6 +36,27 @@ class Webkit(object):
         else:
             if script == None:
                 logging.warn("script is None")
+
+    def _track_last_frame(self):
+        """
+        Keep the last created child frame of the main webview frame in
+        self._last_frame.
+        """
+        self._last_frame = None
+        
+        def frame_created_cb(view, frame, *user_data):
+            if frame.get_parent() and not frame.get_parent().get_parent():
+                self._last_frame = frame
+
+        self.browser.connect('frame_created', frame_created_cb)
+
+    def eval_js_in_last_frame(self, script_uri, script_source):
+        """
+        Evaluate the given script in the context of self._last_frame
+        and return the resulting string.
+        """
+        context = self._last_frame.get_global_context()
+        return webkitutils.eval_js(context, script_uri, script_source)      
 
     def connect_title_changed(self, f):
         # connect title changed events
@@ -106,7 +129,7 @@ class Webkit(object):
             self._libwekit_handle = ctypes.CDLL(ctypes.util.find_library('webkitgtk-1.0'))
             return self._libwekit_handle
 
-    def set_proxy(self, uri):
+    def _set_proxy(self, uri):
         """
         Set the proxy URL using the default SoupSession of this webview.
         """
@@ -119,10 +142,8 @@ class Webkit(object):
         session = libwebkit.webkit_get_default_session()
         libgobject.g_object_set(session, "proxy-uri", proxy_uri, None)
 
-    def execute_in_frame(self, frame, script_uri, script_source):
-        # see https://github.com/karottenreibe/luakit/blob/develop/widgets/webview/javascript.c
-        pass
-
+    def set_proxy(self, uri):
+        webkitutils.set_proxy(uri)
 
 
 # from the python-webkit examples, gpl

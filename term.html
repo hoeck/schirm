@@ -26,7 +26,6 @@ iframe {
 
 <script type="text/javascript">
 
-
 // Return the size in columns and lines of the given PRE element
 function getPreSize(element) {
   var specimen = document.createElement("span");
@@ -44,7 +43,6 @@ function getPreSize(element) {
 
 function getIframeResizeHandler(iframe) {
   return function() {
-    console.log("handler:" + iframe.opts);
     var body = iframe.contentDocument.body;
     if (body) {
       if (iframe.opts.height == 'auto') {
@@ -183,8 +181,12 @@ var Lines = (function(linesElement, term) {
 
       var iframe = document.createElement('iframe');
       iframe.name = id;
+      iframe.id = id;
       div.appendChild(iframe);
       
+      // provide a means to send messages to the pty
+      iframe.contentWindow.schirmlog = function(msg) { console.log("frame" + frame_id + " " + msg); };
+
       var newline = document.createElement('span');
       newline.innerHTML = "\n";
       div.appendChild(newline);
