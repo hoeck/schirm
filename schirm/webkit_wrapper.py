@@ -1,3 +1,21 @@
+# -*- coding: utf-8 -*-
+
+# Schirm - a linux compatible terminal emulator providing html modes.
+# Copyright (C) 2011  Erik Soehnel
+# 
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+# 
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 import os
 import time
 import Queue
@@ -333,3 +351,31 @@ def install_key_events(window, press_cb=None, release_cb=None):
         window.connect('key_release_event', release_cb)
 
 
+
+
+def frame_evaluate_script(frame, source_uri, script_string):
+    ctx = frame.get_global_context()
+
+    JSEvaluateScript(ctx, script_string, None, JSStringRef)
+
+# JSEvaluateScript
+# 
+# Evaluates a string of JavaScript.
+# 
+# JS_EXPORT JSValueRef JSEvaluateScript(
+#     JSContextRef ctx,
+#     JSStringRef script,
+#     JSObjectRef thisObject,
+#     JSStringRef sourceURL,
+#     int startingLineNumber,
+#     JSValueRef *exception);  
+# 
+# Parameters
+# 
+#     ctx: The execution context to use.
+#     script: A JSString containing the script to evaluate.
+#     thisObject: The object to use as "this," or NULL to use the global object as "this."
+#     sourceURL: A JSString containing a URL for the script's source file. This is only used when reporting exceptions. Pass NULL if you do not care to include source file information in exceptions.
+#     startingLineNumber: An integer value specifying the script's starting line number in the file located at sourceURL. This is only used when reporting exceptions.
+#     exception: A pointer to a JSValueRef in which to store an exception, if any. Pass NULL if you do not care to store an exception.
+#     Return Value: The JSValue that results from evaluating script, or NULL if an exception is thrown.

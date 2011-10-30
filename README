@@ -1,0 +1,10 @@
+Schirm
+
+A linux compatible terminal emulator which exposes additional html
+rendering modes to clients.
+
+Copyright (C) 2011 Erik Soehnel <eriksoehnel@googlemail.com>
+
+Licenced under the GPLv3.
+
+Client library is BSD licenced.

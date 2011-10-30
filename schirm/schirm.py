@@ -1,6 +1,22 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+# Schirm - a linux compatible terminal emulator providing html modes.
+# Copyright (C) 2011  Erik Soehnel
+# 
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+# 
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 import sys
 import signal
 import os
@@ -14,6 +30,7 @@ import argparse
 import warnings
 import urlparse
 import base64
+import pkg_resources
 
 from webkit_wrapper import GtkThread, launch_browser, establish_browser_channel, install_key_events
 from promise import Promise
@@ -141,7 +158,8 @@ def webkit_event_loop():
                  server=server,
                  window=window)
 
-    # setup onetime load finished handler
+    # setup onetime load finished handler to track load status of the
+    # term.html document
     load_finished = Promise()
     load_finished_id = None
     def load_finished_cb(view, frame, user_data=None):
@@ -150,19 +168,12 @@ def webkit_event_loop():
             browser.disconnect(load_finished_id)
     load_finished_id = gtkthread.invoke_s(lambda : browser.connect('document-load-finished', load_finished_cb))
 
-    # load term document
-    file = os.path.abspath("term.html")
-    uri = 'file://' + urllib.pathname2url(file)
-
-    with open("term.css") as f:
-        term_css = f.read()
-
-    with open(file, "r") as f:
-        doc = f.read()
-        doc = doc.replace("//TERM-CSS-PLACEHOLDER", term_css)
+    # create and load term document
+    term_css = pkg_resources.resource_string("resources", "term.css")
+    doc = pkg_resources.resource_string("resources", "term.html")
+    doc = doc.replace("//TERM-CSS-PLACEHOLDER", term_css)
 
     gtkthread.invoke(lambda : browser.load_string(doc, base_uri="http://termframe.localhost"))
-
     load_finished.get()
 
     # start a thread to send js expressions to webkit
@@ -207,15 +218,6 @@ def pty_loop(pty, execute, browser):
         stop()
 
 def main():
-    try:
-        __IPYTHON__
-        print "IPython detected, starting webkit loop in its own thread"
-        t = threading.Thread(target=webkit_event_loop)
-        t.start()
-    except:
-        webkit_event_loop()
-
-if __name__ == '__main__':
 
     signal.signal(signal.SIGINT, lambda sig, stackframe: quit())
     signal.siginterrupt(signal.SIGINT, True)
@@ -230,4 +232,14 @@ if __name__ == '__main__':
     if not (args.verbose and args.verbose > 1):
         warnings.simplefilter('ignore')
 
+    try:
+        __IPYTHON__
+        print "IPython detected, starting webkit loop in its own thread"
+        t = threading.Thread(target=webkit_event_loop)
+        t.start()
+    except:
+        webkit_event_loop()
+
+
+if __name__ == '__main__':
     main()
