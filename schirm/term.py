@@ -284,7 +284,6 @@ class Pty(object):
         self.input_queue.put(lambda : self.resize(lines, cols))
 
     def resize(self, lines, cols):
-        print "resize", lines, cols
         self.screen.resize(lines, cols)
         self.set_size(lines, cols)
 

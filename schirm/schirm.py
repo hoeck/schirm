@@ -169,8 +169,8 @@ def webkit_event_loop():
     load_finished_id = gtkthread.invoke_s(lambda : browser.connect('document-load-finished', load_finished_cb))
 
     # create and load term document
-    term_css = pkg_resources.resource_string("resources", "term.css")
-    doc = pkg_resources.resource_string("resources", "term.html")
+    term_css = pkg_resources.resource_string("schirm.resources", "term.css")
+    doc = pkg_resources.resource_string("schirm.resources", "term.html")
     doc = doc.replace("//TERM-CSS-PLACEHOLDER", term_css)
 
     gtkthread.invoke(lambda : browser.load_string(doc, base_uri="http://termframe.localhost"))
@@ -222,7 +222,7 @@ def main():
     signal.signal(signal.SIGINT, lambda sig, stackframe: quit())
     signal.siginterrupt(signal.SIGINT, True)
 
-    parser = argparse.ArgumentParser(description="A linux compatible terminal emulator which supports rendering (interactive) html documents.")
+    parser = argparse.ArgumentParser(description="A linux compatible terminal emulator providing modes for rendering (interactive) html documents.")
     parser.add_argument("-v", "--verbose", help="be verbose, -v for info, -vv for debug log level", action="count")
     args = parser.parse_args()
 
