@@ -1,7 +1,27 @@
 Schirm
+======
 
 A linux compatible terminal emulator which exposes additional html
 rendering modes to clients.
+
+
+Installing
+==========
+
+requirements:
+      - python 2.7
+      - pywebkitgtk (libwebkitgtk-1.0-0)
+      - pyte (included)
+      - C compiler to create extension module
+
+fetch the source::
+      hg clone https://bitbucket.org/hoeck/schirm
+
+build and install, see python setup.py --help for more options::
+      sudo python setup.py install
+
+Licence
+=======
 
 Copyright (C) 2011 Erik Soehnel <eriksoehnel@googlemail.com>
 
