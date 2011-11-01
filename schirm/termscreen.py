@@ -215,8 +215,8 @@ class LineContainer():
     def iframecharinsert(self, char):
         self.events.append(('iframe', char))
 
-    def iframe_register_resource(self, id, name, data):
-        self.events.append(('iframe_register_resource', id, name, data))
+    def iframe_register_resource(self, id, name, mimetype, data):
+        self.events.append(('iframe_register_resource', id, name, mimetype, data))
 
     def iframe_respond(self, name, data):
         self.events.append(('iframe_respond', name, data))
@@ -699,10 +699,11 @@ class TermScreen(pyte.Screen):
         self.linecontainer.iframe_close()
         self.iframe_mode = 'closed'
 
-    def iframe_register_resource(self, name_b64, data_b64):
+    def iframe_register_resource(self, name_b64, mimetype_b64, data_b64):
         name = base64.b64decode(name_b64)
         data = base64.b64decode(data_b64)
-        self.linecontainer.iframe_register_resource(str(self.iframe_id), name, data)
+        mimetype = base64.b64decode(mimetype_b64)
+        self.linecontainer.iframe_register_resource(str(self.iframe_id), name, mimetype, data)
 
     def iframe_respond(self, request_id, data_b64):
         """
@@ -827,7 +828,7 @@ class SchirmStream(pyte.Stream):
 
     # - ESC x leave iframe mode, interpreted at any time, ignored when
     #   not in iframe mode
-    # - ESC R register-resource ESC ; <base64-encoded-resource-name> ESC ; <b64-encoded-data> ESC Q
+    # - ESC R register-resource ESC ; <base64-encoded-resource-name> ESC ; <b64-encoded-mimetype> ESC ; <b64-encoded-data> ESC Q
     #   Register a given resource to be served to the webkit view upon
     #   request. Content-Type is determined by examining name (a file name).
     def _escape(self, char, **kwargs):

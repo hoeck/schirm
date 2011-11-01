@@ -316,7 +316,7 @@ class Pty(object):
             # iframe events do sometimes more than just updating the
             # screen
             if e[0] == 'iframe_register_resource':
-                self._server.register_resource(e[1], e[2], e[3])
+                self._server.register_resource(*e[1:])
             elif e[0] == 'iframe_respond':
                 self._server.respond(e[1], e[2])
             elif e[0] == 'iframe_enter':

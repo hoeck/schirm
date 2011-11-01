@@ -89,7 +89,7 @@ def frame(width='100%', height='auto'):
     finally:
         leave()
 
-def register_resource(path, name=None):
+def register_resource(path, name=None, mimetype=''):
     """
     Make the resource name available to the current iframe. Name must
     have a valid file-ending so that the content type can be
@@ -98,13 +98,25 @@ def register_resource(path, name=None):
     out = sys.stdout
     if not name:
         _, name = os.path.split(path)
-    out.write("".join((INTRO,
-                       "register_resource",
-                       SEP,
-                       base64.b64encode(name),
-                       SEP)))
+    out.write("".join((INTRO, "register_resource", SEP,
+                       base64.b64encode(name), SEP,
+                       base64.b64encode(mimetype), SEP)))
     with open(path, "rb") as f:
         out.write(base64.b64encode(f.read()))
+    out.write(END)
+
+def register_resource_data(data, name, mimetype=''):
+    """
+    Make the given data available as resource 'name' to the current
+    iframe.
+    """
+    out = sys.stdout
+    if not name:
+        _, name = os.path.split(path)
+    out.write("".join((INTRO, "register_resource", SEP,
+                       base64.b64encode(name), SEP,
+                       base64.b64encode(mimetype), SEP)))
+    out.write(base64.b64encode(data))
     out.write(END)
 
 def debug(msg):

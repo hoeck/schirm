@@ -176,16 +176,19 @@ class Server(object):
             client.sendall(data)
             client.close()
 
-    def register_resource(self, frame_id, name, data):
+    def register_resource(self, frame_id, name, mimetype, data):
         """
         Add a static resource name to be served. Use the resources
-        name to guess an appropriate content-type.
+        name to guess an appropriate content-type if no mimetype is
+        provided.
         """
-        guessed_type, encoding = mimetypes.guess_type(name, strict=False)
-        if not guessed_type:
-            guessed_type = "text/plain"
+        if not mimetype:
+            mimetype, encoding = mimetypes.guess_type(name, strict=False)
+            if not mimetype:
+                guessed_type = "text/plain"
+
         response = "\n".join(("HTTP/1.1 200 OK",
-                              "Content-Type: " + guessed_type,
+                              "Content-Type: " + mimetype,
                               "Content-Length: " + str(len(data)),
                               "",
                               data))
