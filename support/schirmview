@@ -1,0 +1,58 @@
+#!/usr/bin/env python
+
+import sys
+import magic
+import argparse
+import schirmclient as schirm
+
+
+def render_image(data, mimetype=''):
+    schirm.register_resource_data(data, 'x', mimetype)
+    print '<div style="width:100%;"> <img src="x"></div>'
+#style="overflow:visible"
+
+def render_text(text):
+    print text
+
+def magicmime(s):
+    cookie = magic.open(magic.MAGIC_MIME_TYPE)
+    cookie.load()
+    return cookie.buffer(s) or ''
+
+def read(source):
+
+    def readall(f):
+        buf = ""
+        while 1:
+            x = f.read()
+            if x:
+                buf += x
+            else:
+                return buf
+
+    if source == '-':
+        return readall(sys.stdin)
+    else:
+        with open(source, "r") as f:
+            return readall(f)
+
+
+def main():
+    parser = argparse.ArgumentParser(description="View html documents or images in the browser")
+    #parser.add_argument("-v", "--verbose", help="be verbose, -v for info, -vv for debug log level", action="count")
+    parser.add_argument("source", metavar="FILE", default="-", nargs="?")
+    args = parser.parse_args()
+    #import pprint
+    #pprint.pprint(args.__dict__)
+    
+    buf = read(args.source)
+    mimetype = magicmime(buf)
+    if mimetype.startswith('text'):
+        with schirm.frame(width='100%'):
+            render_text(buf)
+    else:
+        with schirm.frame(width='auto'):
+            render_image(buf, mimetype)
+
+if __name__ == '__main__':
+    main()
