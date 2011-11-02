@@ -4,6 +4,7 @@
 
 /* normal */
 .f-default           {                            }
+.f-default-reversed  { color:            #ffffff; }
 .f-red               { color:            #cd0000; }
 .f-green             { color:            #00cd00; }
 .f-brown             { color:            #cdcd00; }
@@ -23,6 +24,8 @@
 .f-bold-white        { color:            #ffffff; }
 
 /* normal */
+.b-default           {                            }
+.b-default-reversed  { background-color: #000000; }
 .b-black             { background-color: #000000; }
 .b-red               { background-color: #cd0000; }
 .b-green             { background-color: #00cd00; }
@@ -31,7 +34,6 @@
 .b-magenta           { background-color: #cd00cd; }
 .b-cyan              { background-color: #00cdcd; }
 .b-white             { background-color: #e5e5e5; }
-.b-default           {                            }
 
 /* bg bold for reverse? */
 /* .b9             { background-color: #ff0000; } */

@@ -48,9 +48,13 @@ def create_class_string(chartuple, additional_classes=[]):
     data, fg, bg, bold, italics, underscore, strikethrough, reverse = chartuple
     c = []
     if reverse:
-        if fg != 'default':
+        if fg == 'default':
+            c.append("f-default-reversed")
+        else:
             c.append("f-{0}".format(bg))
-        if bg != 'default':
+        if bg == 'default':
+            c.append("b-default-reversed")
+        else:
             c.append("b-{0}".format(fg))
     else:
         if fg != 'default':
