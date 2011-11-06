@@ -202,7 +202,7 @@ var Lines = (function(linesElement, term) {
       div.appendChild(iframe);
       
       // provide a means to send messages to the pty
-      iframe.contentWindow.schirmlog = function(msg) { console.log("frame" + frame_id + " " + msg); };
+      iframe.contentWindow.schirmlog = function(msg) { console.log("frame" + id + " " + msg); };
 
       var newline = document.createElement('span');
       newline.innerHTML = "\n";

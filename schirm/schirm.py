@@ -92,9 +92,10 @@ def receive_handler(msg, pty):
 
         return True
     elif msg.startswith("frame"):
-        frame_id = msg[5, msg.find(" ")]
-        if frame_id == pty.screen.iframe_id:
-            pty.q_write(["\033Rmessage\033;", base64.encodestring(msg[msg.find(" "):]), "\033Q", "\n"])
+        frame_id = msg[5:msg.find(" ")]
+        logging.debug("Log message for iframe {}".format(frame_id))
+        if frame_id == str(pty.screen.iframe_id):
+            pty.q_write(["\033Rmessage\033;", base64.encodestring(msg[msg.find(" ")+1:]), "\033Q", "\n"])
             return True
     else:
         return False # not handled
