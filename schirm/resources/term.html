@@ -58,6 +58,8 @@ function getPreSize(element) {
 }
 
 
+// return a function which performs a resize of the given iframe
+// honoring iframe.opts
 function getIframeResizeHandler(iframe) {
   return function() {
     var body = iframe.contentDocument.body;
@@ -229,12 +231,17 @@ var Lines = (function(linesElement, term) {
     iframeWrite: function (content) {
       var iframe = term.currentIframe;
       iframe.contentDocument.write(content);
+      this.iframeEnsureVisibility();
+    },
+
+    // make sure we can see at least the bottom of the current iframe
+    iframeEnsureVisibility: function() {
+      var iframe = term.currentIframe;
       var body = iframe.contentDocument.getElementsByTagName("body")[0];
       // body may be undefined if nothing has been written to the iframe
       if (body) {
         // don't show scrollbars on term iframes
         iframe.height = body.scrollHeight;
-
         // ensure the iframe is visible inside the linesElement
         if (iframe.offsetHeight < linesElement.offsetHeight) {
           // iframe is smaller than our screen
@@ -244,7 +251,6 @@ var Lines = (function(linesElement, term) {
         } else {
           linesElement.scrollTop = iframe.offsetTop + (iframe.offsetHeight - linesElement.offsetHeight);
         }
-        //linesElement.scrollTop = linesElement.scrollHeight;
       }
     },
 
@@ -257,13 +263,14 @@ var Lines = (function(linesElement, term) {
       // DOMSubtreeModified is deprecated, but I haven't found a
       // better way to do this
       iframe.contentDocument.addEventListener('DOMSubtreeModified', getIframeResizeHandler(iframe));
+      this.iframeEnsureVisibility();
     },
 
     // set the the current iframe document to null
     // so that we know wether were in iframe mode or not
     iframeLeave: function() {
+      this.iframeEnsureVisibility();
       term.currentIframe = null;
-      // should we remove the DOMSubtreeModified listener??
     }
 
   };
