@@ -1,16 +1,16 @@
 # -*- coding: utf-8 -*-
 # Copyright 2011 Erik Soehnel. All rights reserved.
-# 
+#
 # Redistribution and use in source and binary forms, with or without modification, are
 # permitted provided that the following conditions are met:
-# 
+#
 #    1. Redistributions of source code must retain the above copyright notice, this list of
 #       conditions and the following disclaimer.
-# 
+#
 #    2. Redistributions in binary form must reproduce the above copyright notice, this list
 #       of conditions and the following disclaimer in the documentation and/or other materials
 #       provided with the distribution.
-# 
+#
 # THIS SOFTWARE IS PROVIDED BY <COPYRIGHT HOLDER> ''AS IS'' AND ANY EXPRESS OR IMPLIED
 # WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND
 # FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL <COPYRIGHT HOLDER> OR
@@ -162,16 +162,25 @@ def read_next():
     def read_args():
         current = []
         args = []
+
+        def append_arg(a):
+            if args:
+                # all subsequent args are b64 encoded
+                args.append(base64.decodestring(a))
+            else:
+                # the first arg is the request type name
+                args.append(a)
+
         while 1:
             ch = sys.stdin.read(1)
             if ch == ESC:
                 ch = sys.stdin.read(1)
                 if ch == ';':
-                    # read another arg
-                    args.append(base64.decodestring("".join(current)))
+                    # read another arg, store the current one
+                    append_arg("".join(current))
                     current = []
                 elif ch == 'Q':
-                    args.append(base64.decodestring("".join(current)))
+                    append_arg("".join(current))
                     return tuple(args)
                 else:
                     pass
