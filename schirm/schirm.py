@@ -58,14 +58,34 @@ def quit():
     except:
         pass
 
+
+def get_term_iframe(view, frame):
+    """Given a frame, return the frames iframe-mode frame ancestor or None.
+
+    The iframe-mode ancestor is the first child of the root frame (the
+    one that contains term.html and the terminal lines.)
+    """
+    main_frame = view.get_main_frame()
+    f = frame
+    while 1:
+        p = f.get_parent()
+        if not p:
+            return None # f was the main frame
+        elif p == main_frame:
+            return f
+        else:
+            f = p
+
+last_frame = None
 def resource_requested_handler(view, frame, resource, request, response):
     (scheme, netloc, path, params, query, fragment) = urlparse.urlparse(request.get_uri())
 
-    if netloc == 'termframe.localhost' and frame.get_name():
-        uri = request.get_uri().replace("http://termframe.localhost", "http://{}.localhost".format(frame.get_name()))
+    mode_frame = get_term_iframe(view, frame) or frame
+    if netloc == 'termframe.localhost' and mode_frame.get_name():
+        uri = request.get_uri().replace("http://termframe.localhost", "http://{}.localhost".format(mode_frame.get_name()))
         request.set_uri(uri)
 
-    logging.info("{} requested uri: {}".format(frame.get_name(), request.get_uri()))
+    logging.info("{} requested uri: {}".format(mode_frame.get_name(), request.get_uri()))
     return 0
 
 def sample_console_message_handler(view, msg, line, source_id, user_data):
