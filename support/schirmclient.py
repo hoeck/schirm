@@ -38,6 +38,7 @@ import os
 import sys
 import fcntl
 import base64
+from collections import namedtuple
 from contextlib import contextmanager
 
 ESC   = "\033"
@@ -47,11 +48,17 @@ SEP   = ESC + ";"
 EXIT  = ESC + "x"
 
 def enter(**kwargs):
-    """
-    Enter the frame mode.
+    """Enter the frame mode.
 
-    Creates an iframe in the schirm terminal and all subsequent writes
-    are written with document.write to the iframes document.
+    Creates an iframe in the schirm terminal on the current line. All
+    subsequent writes are written with document.write() to the iframes
+    document.
+
+    When you have written the document, call close() to trigger the
+    javascript document.load() handler. Call leave() to go back to
+    normal terminal emulation mode.
+
+    See also the frame() contextmanager.
     """
     sys.stdout.write("".join((INTRO, 'enter')))
     sys.stdout.write("".join("".join((SEP, k, SEP, v)) for k,v in kwargs.items()))
@@ -59,10 +66,9 @@ def enter(**kwargs):
     sys.stdout.flush()
 
 def leave():
-    """
-    Get back to normal terminal emulation mode.
+    """Get back to normal terminal emulation mode.
 
-    If not already done, invoke close to close the iframe
+    If not already done, invoke close() to close the iframe
     document. All static resources remain available until a new iframe
     is opened again.
     """
@@ -70,19 +76,17 @@ def leave():
     sys.stdout.flush()
 
 def close():
-    """
-    If in frame mode, close the current iframe document (triggering
-    document.load events). Any subsequent writes to stdout reopen
-    (and therefor clear) the current document again.
+    """If in frame mode, close the current iframe document (triggering document.load events).
+
+    Any subsequent writes to stdout reopen (and therefor clear) the
+    current document again.
     """
     sys.stdout.write("".join((INTRO, 'close', END)))
     sys.stdout.flush()
 
 @contextmanager
 def frame(width='100%', height='auto'):
-    """
-    Enter frame mode, leaving it on return or exceptions.
-    """
+    """Enter frame mode, leaving it on return or exceptions."""
     try:
         enter(width=width, height=height)
         yield
@@ -90,10 +94,12 @@ def frame(width='100%', height='auto'):
         leave()
 
 def register_resource(path, name=None, mimetype=''):
-    """
-    Make the resource name available to the current iframe. Name must
-    have a valid file-ending so that the content type can be
-    determined properly (as a fallback, text/plain is used).
+    """Make the resource name available to the current iframe.
+    
+    Name defaults to the filename.
+
+    If no mimetype is given, uses names file-ending to determine the
+    content type or text/plain.
     """
     out = sys.stdout
     if not name:
@@ -106,10 +112,7 @@ def register_resource(path, name=None, mimetype=''):
     out.write(END)
 
 def register_resource_data(data, name, mimetype=''):
-    """
-    Make the given data available as resource 'name' to the current
-    iframe.
-    """
+    """Make the given data available as resource 'name' to the current iframe."""
     out = sys.stdout
     if not name:
         _, name = os.path.split(path)
@@ -120,9 +123,10 @@ def register_resource_data(data, name, mimetype=''):
     out.write(END)
 
 def debug(msg):
-    """
-    Write a message to the schirm terminal process stdout. Use this
-    instead of print to print-debug running frame mode programms.
+    """Write a message to the schirm terminal process stdout.
+
+    Use this instead of print to print-debug running frame mode
+    programms.
     """
     out = sys.stdout
     out.write("".join((INTRO, "debug", SEP)))
@@ -130,74 +134,91 @@ def debug(msg):
     out.write(END)
 
 def set_block(fd, block=True):
-    """
-    Make fd a blocking or non-blocking file
-    """
+    """Make fd a blocking or non-blocking file"""
     fl = fcntl.fcntl(fd, fcntl.F_GETFL)
     if block:
         fcntl.fcntl(fd, fcntl.F_SETFL, fl & ~os.O_NONBLOCK)
     else:
         fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
 
-def read_next():
+
+def read_list():
+    """Read a list of strings from stdin and return it.
+    
+    All arguments are separated by '\033;', terminated with '\033Q'.
+    The first element is plain text, the following elements are base64
+    encoded.
     """
-    Read characters off sys.stdin until a full request, a message or
-    result has been read.
+    current = []
+    args = []
 
-    Returns a tuple of (<type>, *<data>).
-
-    Possible types are:
-    'request',
-      data: (requestid, protokoll, method, path, header-key*, header-value*, [post-data])
-      Note: Use the returned requestid and the response function to
-            send a response to the schirm terminal.
-
-    'message',
-      data: the message string (messages are send from the browser using: schirmlog(<msg>))
-
-    'result',
-      data: the result string of a former eval() invocation.
-    """
-
-    def read_args():
-        current = []
-        args = []
-
-        def append_arg(a):
-            if args:
-                # all subsequent args are b64 encoded
-                args.append(base64.decodestring(a))
-            else:
-                # the first arg is the request type name
-                args.append(a)
-
-        while 1:
-            ch = sys.stdin.read(1)
-            if ch == ESC:
-                ch = sys.stdin.read(1)
-                if ch == ';':
-                    # read another arg, store the current one
-                    append_arg("".join(current))
-                    current = []
-                elif ch == 'Q':
-                    append_arg("".join(current))
-                    return tuple(args)
-                else:
-                    pass
-            else:
-                current.append(ch)
+    def append_arg(a):
+        if args:
+            # all subsequent args are b64 encoded
+            args.append(base64.decodestring(a))
+        else:
+            # the first arg is the request type name
+            args.append(a)
 
     while 1:
         ch = sys.stdin.read(1)
         if ch == ESC:
             ch = sys.stdin.read(1)
-            if ch == 'R':
-                return read_args()
+            if ch == ';':
+                # read another arg, store the current one
+                append_arg("".join(current))
+                current = []
+            elif ch == 'Q':
+                append_arg("".join(current))
+                return args
+            else:
+                pass
+        else:
+            current.append(ch)
 
+_request = namedtuple('Request', ('type', 'id', 'protocol', 'method', 'path', 'header', 'data'))
+class Request(_request):
+    """
+    Represents HTTP request data.
+
+    The type field is always 'request'.
+
+    Note: Use the returned id and the schirmclient.response() function to
+    send a response to the schirm terminal emulator.
+    """
+    pass
+
+_message = namedtuple('Message', ('type', 'data'))
+class Message(_message):
+    """
+    Represents schirmlog messages (type='message') or js evaluation
+    results (type='result').
+    
+    The data slot contains the result as a string.
+    """
+    pass
+
+def read_next():
+    """Read characters off sys.stdin until a full request, a message or result has been read.
+
+    Returns a namedtuple of type Request or Message.
+    """
+    while 1:
+        ch = sys.stdin.read(1)
+        if ch == ESC:
+            ch = sys.stdin.read(1)
+            if ch == 'R':
+                args = read_args()
+                if args[0] == 'request':
+                    # (requestid, protocol, method, path, header-key*, header-value*, [post-data])
+                    headers = dict((args[i], args[i+1]) for i in range(4, len(args), 2))
+                    return Request(args[0], args[1], args[2], args[3], headers, args[-1] if len(args)%2 else None)
+                else:
+                    return Message(*args)
 
 def respond(requestid, response):
-    """
-    Write a response to requestid to the schirm terminal.
+    """Write a response to requestid to the schirm terminal.
+
     Response must be a http response.
     """
     out = sys.stdout
@@ -207,8 +228,10 @@ def respond(requestid, response):
 
 
 def execute(src):
-    """
-    Execute the given javascript string src in the current frames context.
+    """Execute the given javascript string src in the current frames context.
+
+    Discard the result (use schirmlog("message"); to send strings to
+    the client from javascript).
     """
     out = sys.stdout
     out.write("".join((INTRO, "execute", SEP)))
@@ -217,11 +240,10 @@ def execute(src):
 
 
 def eval(src):
-    """
-    Execute the given javascript string src in the current frames context.
-    The result will be returned as a base64 encoded string over stdin starting
-    with '\033Rresult\033;' (see read_next_request)
+    """Execute the given javascript string src in the current frames context.
 
+    The result will be returned as a base64 encoded string over stdin starting
+    with '\033Rresult\033;' (see read_next)
     """
     out = sys.stdout
     out.write("".join((INTRO, "eval", SEP)))

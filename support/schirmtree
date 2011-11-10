@@ -151,7 +151,7 @@ def show_tree(tree):
         print html
         schirm.close()
         # wait for the 'done' message
-        reqtype, msg = schirm.read_next()
+        req = schirm.read_next()
 
 def main():
     parser = argparse.ArgumentParser(description="Display the current dir or PATH as a node link tree")
