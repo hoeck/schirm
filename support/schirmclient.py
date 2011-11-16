@@ -122,7 +122,7 @@ def register_resource_data(data, name, mimetype=''):
     out.write(base64.b64encode(data))
     out.write(END)
 
-def debug(msg):
+def debug(*msg):
     """Write a message to the schirm terminal process stdout.
 
     Use this instead of print to print-debug running frame mode
@@ -130,7 +130,7 @@ def debug(msg):
     """
     out = sys.stdout
     out.write("".join((INTRO, "debug", SEP)))
-    out.write(base64.b64encode(msg))
+    out.write(base64.b64encode(" ".join(map(str, msg))))
     out.write(END)
 
 def set_block(fd, block=True):
@@ -208,11 +208,11 @@ def read_next():
         if ch == ESC:
             ch = sys.stdin.read(1)
             if ch == 'R':
-                args = read_args()
+                args = read_list()
                 if args[0] == 'request':
                     # (requestid, protocol, method, path, header-key*, header-value*, [post-data])
                     headers = dict((args[i], args[i+1]) for i in range(4, len(args), 2))
-                    return Request(args[0], args[1], args[2], args[3], headers, args[-1] if len(args)%2 else None)
+                    return Request('request', args[1], args[2], args[3], args[4], headers, args[-1] if len(args)%2 else None)
                 else:
                     return Message(*args)
 
@@ -242,8 +242,9 @@ def execute(src):
 def eval(src):
     """Execute the given javascript string src in the current frames context.
 
-    The result will be returned as a base64 encoded string over stdin starting
-    with '\033Rresult\033;' (see read_next)
+    The result will be returned as a base64 encoded string over stdin
+    starting with '\033Rresult\033;' (see read_next). Results will be
+    delivered asynchronously but in the order of the evals.
     """
     out = sys.stdout
     out.write("".join((INTRO, "eval", SEP)))
