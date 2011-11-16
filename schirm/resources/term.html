@@ -47,7 +47,7 @@ iframe {
 function getPreSize(element) {
   var specimen = document.createElement("span");
   specimen.innerHTML = "x";
-  
+
   element.appendChild(specimen);
   var cols  = Math.floor(element.clientWidth/specimen.offsetWidth);
   var lines = Math.floor(element.clientHeight/specimen.offsetHeight);
@@ -82,7 +82,7 @@ function getIframeResizeHandler(iframe) {
 // a PRE element holding the terminals lines
 // each line is a span of nested spans for styles
 var Lines = (function(linesElement, term) {
- 
+
   var fn = {
 
     init: function(lines) {
@@ -100,11 +100,19 @@ var Lines = (function(linesElement, term) {
     elementIndex: function(lineNumber) {
       return linesElement.childNodes.length - term.size.lines + lineNumber;
     },
-  
+
     scrollToBottom: function() {
       linesElement.scrollTop = linesElement.scrollHeight;
     },
-  
+
+    scrollPageUp: function() {
+      linesElement.scrollTop -= linesElement.offsetHeight;
+    },
+
+    scrollPageDown: function() {
+      linesElement.scrollTop += linesElement.offsetHeight;
+    },
+
     setLine: function(linenumber, content) {
       linesElement.childNodes[this.elementIndex(linenumber)].innerHTML = content + "\n";
     },
@@ -141,7 +149,7 @@ var Lines = (function(linesElement, term) {
     getSize: function() {
       return getPreSize(linesElement);
     },
-    
+
     // Resize linesElement to display the given number of lines.
     // Reuse existing history to fill new lines when getting larger.
     // Like the scrolling employed by contemporary terminal emulators like
@@ -196,7 +204,7 @@ var Lines = (function(linesElement, term) {
         } catch (e) {
         }
       }
-      
+
       var div = document.createElement('span');
       if (term.size.lines <= linenumber) {
         linesElement.appendChild(div);
@@ -208,7 +216,7 @@ var Lines = (function(linesElement, term) {
       iframe.name = id;
       iframe.id = id;
       div.appendChild(iframe);
-      
+
       // provide a means to send messages to the pty
       iframe.contentWindow.schirmlog = function(msg) { console.log("frame" + id + " " + msg); };
 
@@ -231,7 +239,7 @@ var Lines = (function(linesElement, term) {
 
       iframe.contentDocument.open("text/html");
     },
-    
+
     // contentDocument.write content (a string) to the currentIframe and
     // resize it (vertically) if necessary
     iframeWrite: function (content) {
@@ -318,9 +326,13 @@ var App = (function(appElement, term) {
     elementIndex: function(lineNumber) {
       return lineNumber;
     },
-  
+
     scrollToBottom: function() { },
-  
+
+    scrollPageUp: function() { },
+
+    scrollPageDown: function() { },
+
     setLine: function(linenumber, content) {
       appElement.childNodes[this.elementIndex(linenumber)].innerHTML = content + "\n";
     },
@@ -386,7 +398,7 @@ var App = (function(appElement, term) {
       // if (term.currentIframe) {
       //   term.currentIframe.contentDocument.close();
       // }
-      
+
       // var div = document.createElement('div');
       // if (term.height <= linenumber) {
       //   linesElement.appendChild(div);
@@ -396,16 +408,16 @@ var App = (function(appElement, term) {
 
       // var iframe = document.createElement('iframe');
       // div.appendChild(iframe);
-      
+
       // var newline = document.createElement('span');
       // newline.innerHTML = "\n";
       // div.appendChild(newline);
-      
+
       // term.currentIframe = iframe;
       // iframe.height = "1";
       // iframe.contentDocument.open("text/html");
     },
-    
+
     // contentDocument.write content (a string) to the currentIframe and
     // resize it (vertically) if necessary
     iframeWrite: function(content) {
@@ -427,15 +439,15 @@ var Term = function() {
   var state = {
     currentIframe: undefined,
     appmode: false,
-    size: { lines: 24, cols: 80 },  
+    size: { lines: 24, cols: 80 },
   };
 
   var termdiv = document.getElementById('termdiv');
   var lines = Lines(document.getElementById('term'), state); // one screen to render lines + history
   var app = App(document.getElementById('app'), state); // the other for rendering a char matrix w/o history
-  
+
   var fn = {
-    
+
     getState: function() {
       return state;
     },
@@ -462,6 +474,8 @@ var Term = function() {
     },
 
     scrollToBottom: function() { fn.getScreen().scrollToBottom(); },
+    scrollPageUp: function() { fn.getScreen().scrollPageUp(); },
+    scrollPageDown: function() { fn.getScreen().scrollPageDown(); },
 
     setLine: function(linenumber, content) { fn.getScreen().setLine(linenumber, content); },
     insertLine: function(linenumber, content) { fn.getScreen().insertLine(linenumber, content); },
@@ -479,7 +493,7 @@ var Term = function() {
     reset: function(lines) { fn.getScreen().reset(lines); },
     init: function(lines) { fn.getScreen().init(lines); }
   };
-  
+
   return fn;
 };
 

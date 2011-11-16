@@ -81,6 +81,7 @@ def resource_requested_handler(view, frame, resource, request, response):
     (scheme, netloc, path, params, query, fragment) = urlparse.urlparse(request.get_uri())
 
     mode_frame = get_term_iframe(view, frame) or frame
+
     if netloc == 'termframe.localhost' and mode_frame.get_name():
         uri = request.get_uri().replace("http://termframe.localhost", "http://{}.localhost".format(mode_frame.get_name()))
         request.set_uri(uri)
@@ -97,7 +98,6 @@ def sample_console_message_handler(view, msg, line, source_id, user_data):
     user_data : user data set when the signal handler was connected.
     """
     pass
-
 
 def receive_handler(msg, pty):
     if msg.startswith("schirm"):
@@ -123,9 +123,12 @@ def receive_handler(msg, pty):
 def keypress_cb(widget, event):
     print "keypress:",event.time, event.keyval, event.string, event.string and ord(event.string)
 
-def handle_keypress(event, pty):
+def handle_keypress(event, pty, execute):
     """
     Map gtk keyvals/strings to terminal keys.
+    
+    Intercept some standard terminal key combos, like
+    shift + PageUp/Down for scrolling.
     """
     # KEY_PRESS
     # KEY_RELEASE            time
@@ -134,11 +137,15 @@ def handle_keypress(event, pty):
     #                        string
     name = gtk.gdk.keyval_name(event.keyval)
     key = pty.map_key(name)
-    #print name
     if not key:
         key = event.string
 
-    if key:
+    shift = event.state == gtk.gdk.SHIFT_MASK
+    if name == 'Page_Up' and shift:
+        execute('term.scrollPageUp();')
+    elif name == 'Page_Down' and shift:
+        execute('term.scrollPageDown();')
+    elif key:
         pty.q_write(key)
 
     if pty.screen.iframe_mode:
@@ -162,7 +169,7 @@ def webkit_event_loop():
     gtkthread.invoke(lambda : browser.connect('resource-request-starting', resource_requested_handler))
 
     pty = term.Pty([80,24])
-    gtkthread.invoke(lambda : install_key_events(window, lambda widget, event: handle_keypress(event, pty), lambda *_: True))
+    gtkthread.invoke(lambda : install_key_events(window, lambda widget, event: handle_keypress(event, pty, execute), lambda *_: True))
 
     # A local webserver to write requests to the PTYs stdin and wait
     # for responses because I did not find a way to mock or get a
