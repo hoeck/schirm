@@ -112,6 +112,7 @@ class Server(object):
             iframe_id = None
 
         if req.error_code:
+            logging.debug(req.error_message)
             client.sendall(req.error_message)
             client.close()
 
@@ -124,11 +125,13 @@ class Server(object):
             client.sendall(self.resources[iframe_id][path])
             client.close()
 
-        elif req.command == 'GET' and path in self.not_found:
+        elif iframe_id and req.command == 'GET' and path in self.not_found:
+            logging.debug("Ignoring request ({})".format(path))
             # ignore some requests (e.g. favicon)
             client.sendall("HTTP/1.1 404 Not Found")
 
         elif not self.pty.screen.iframe_mode:
+            logging.debug("Not in iframe mode - responding with 404")
             # only serve non-static requests if terminal is in iframe mode
             client.sendall("HTTP/1.1 404 Not Found")
             client.close()
@@ -188,6 +191,7 @@ class Server(object):
                 guessed_type = "text/plain"
 
         response = "\n".join(("HTTP/1.1 200 OK",
+                              "Cache-Control: " + "no-cache",
                               "Content-Type: " + mimetype,
                               "Content-Length: " + str(len(data)),
                               "",
