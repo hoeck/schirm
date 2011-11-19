@@ -2,17 +2,17 @@
 
 # Schirm - a linux compatible terminal emulator providing html modes.
 # Copyright (C) 2011  Erik Soehnel
-# 
+#
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
@@ -36,6 +36,7 @@ import ctypes.util
 from promise import Promise
 import webkitutils
 
+
 class Webkit(object):
 
     @classmethod
@@ -45,8 +46,13 @@ class Webkit(object):
     def __init__(self, browser):
         self.browser = browser
         self.my_settings()
-        self._inspector = Inspector(self.browser.get_web_inspector())
         self._track_last_frame()
+        # scale other content besides from text as well
+        self.browser.set_full_content_zoom(True)
+
+        # customize the default right-click menu
+        self.browser.connect_after("populate-popup", self.populate_popup_cb)
+
 
     def exec_js(self, script):
         if script:
@@ -61,7 +67,7 @@ class Webkit(object):
         self._last_frame.
         """
         self._last_frame = None
-        
+
         def frame_created_cb(view, frame, *user_data):
             if frame.get_parent() and not frame.get_parent().get_parent():
                 self._last_frame = frame
@@ -74,7 +80,7 @@ class Webkit(object):
         and return the resulting string.
         """
         context = self._last_frame.get_global_context()
-        return webkitutils.eval_js(context, script_uri, script_source)      
+        return webkitutils.eval_js(context, script_uri, script_source)
 
     def connect_title_changed(self, f):
         # connect title changed events
@@ -132,14 +138,6 @@ class Webkit(object):
                     "{1}.  For best compatibility, use at least version "
                     "1.1.22.").format(key, version))
 
-    def _get_inspector(self):
-        if not hasattr(self,'_inspector'):
-            self._inspector = Inspector(self.browser.get_web_inspector())
-        return self._inspector
-
-    def show_inspector(self):
-        self._get_inspector().inspect()
-
     def _get_libwebkit(self):
         if getattr(self, '_libwekit_handle', None):
             return self._libwekit_handle
@@ -162,6 +160,42 @@ class Webkit(object):
 
     def set_proxy(self, uri):
         webkitutils.set_proxy(uri)
+
+    def zoom_in_cb(self, menu_item, web_view):
+        """Zoom into the page"""
+        web_view.zoom_in()
+
+    def zoom_out_cb(self, menu_item, web_view):
+        """Zoom out of the page"""
+        web_view.zoom_out()
+
+    def zoom_hundred_cb(self, menu_item, web_view):
+        """Zoom 100%"""
+        if not (web_view.get_zoom_level() == 1.0):
+            web_view.set_zoom_level(1.0)
+
+    def populate_popup_cb(self, view, menu):
+
+        # remove 'back', 'forward', 'stop' and 'reload' items
+        menu.remove(menu.get_children()[0])
+        menu.remove(menu.get_children()[0])
+        menu.remove(menu.get_children()[0])
+        menu.remove(menu.get_children()[0])
+
+        zoom_in = gtk.ImageMenuItem(gtk.STOCK_ZOOM_IN)
+        zoom_in.connect('activate', self.zoom_in_cb, view)
+        menu.prepend(zoom_in)
+
+        zoom_out = gtk.ImageMenuItem(gtk.STOCK_ZOOM_OUT)
+        zoom_out.connect('activate', self.zoom_out_cb, view)
+        menu.prepend(zoom_out)
+
+        zoom_hundred = gtk.ImageMenuItem(gtk.STOCK_ZOOM_100)
+        zoom_hundred.connect('activate', self.zoom_hundred_cb, view)
+        menu.prepend(zoom_hundred)
+
+        menu.show_all()
+        return False
 
 
 # from the python-webkit examples, gpl
@@ -193,6 +227,7 @@ class Inspector (gtk.Window):
         scrolled_window = gtk.ScrolledWindow()
         scrolled_window.props.hscrollbar_policy = gtk.POLICY_AUTOMATIC
         scrolled_window.props.vscrollbar_policy = gtk.POLICY_AUTOMATIC
+
         webview = webkit.WebView()
         scrolled_window.add(webview)
         scrolled_window.show_all()
@@ -225,10 +260,6 @@ class Inspector (gtk.Window):
         self._web_inspector = 0
         self.destroy()
         return False
-
-    def inspect(self):
-        self._show_window_cb(None)
-        self._inspect_web_view_cb(None, None)
 
 
 class GtkThread(object):
@@ -359,19 +390,19 @@ def frame_evaluate_script(frame, source_uri, script_string):
     JSEvaluateScript(ctx, script_string, None, JSStringRef)
 
 # JSEvaluateScript
-# 
+#
 # Evaluates a string of JavaScript.
-# 
+#
 # JS_EXPORT JSValueRef JSEvaluateScript(
 #     JSContextRef ctx,
 #     JSStringRef script,
 #     JSObjectRef thisObject,
 #     JSStringRef sourceURL,
 #     int startingLineNumber,
-#     JSValueRef *exception);  
-# 
+#     JSValueRef *exception);
+#
 # Parameters
-# 
+#
 #     ctx: The execution context to use.
 #     script: A JSString containing the script to evaluate.
 #     thisObject: The object to use as "this," or NULL to use the global object as "this."
