@@ -50,6 +50,8 @@ class Webkit(object):
         # scale other content besides from text as well
         self.browser.set_full_content_zoom(True)
 
+        self._inspector = Inspector(self.browser.get_web_inspector())
+
         # customize the default right-click menu
         self.browser.connect_after("populate-popup", self.populate_popup_cb)
 
@@ -176,12 +178,11 @@ class Webkit(object):
 
     def populate_popup_cb(self, view, menu):
 
-        # remove 'back', 'forward', 'stop' and 'reload' items
-        menu.remove(menu.get_children()[0])
-        menu.remove(menu.get_children()[0])
-        menu.remove(menu.get_children()[0])
-        menu.remove(menu.get_children()[0])
+        # remove all items but the 'inspect element' one
+        for ch in list(menu.get_children())[:-2]:
+            menu.remove(menu.get_children()[0])
 
+        # customizing the menu
         zoom_in = gtk.ImageMenuItem(gtk.STOCK_ZOOM_IN)
         zoom_in.connect('activate', self.zoom_in_cb, view)
         menu.prepend(zoom_in)
