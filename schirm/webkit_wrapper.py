@@ -301,26 +301,48 @@ class GtkThread(object):
         return p.get()
 
 
+def init_styles():
+    
+    # 'hide' horizontal scrollbars in the terminal scrollwindow
+    s = """
+    style "hide_hscrollbar"
+    {
+        GtkRange::slider-width = 0
+        GtkRange::trough-border = 0
+    }
+
+    widget "*term_hscrollbar*" style "hide_hscrollbar"
+    """
+    # see http://www.pygtk.org/pygtk2tutorial/sec-ExampleRcFile.html
+    gtk.rc_parse_string(s)
+
 def launch_browser():
+    
+    init_styles()
 
     window = gtk.Window()
     # prepare to receive keyboard and mouse events
-    window.set_events(gtk.gdk.KEY_PRESS_MASK
-                      | gtk.gdk.KEY_RELEASE_MASK)
-
-    browser = Webkit.create()
+    window.set_events(gtk.gdk.KEY_PRESS_MASK | gtk.gdk.KEY_RELEASE_MASK)
 
     box = gtk.VBox(homogeneous=False, spacing=0)
     window.add(box)
 
-    box.pack_start(browser.browser, expand=True, fill=True, padding=0)
+    browser = Webkit.create()
+    scrollview = gtk.ScrolledWindow()
+    scrollview.props.vscrollbar_policy = gtk.POLICY_ALWAYS
+    scrollview.props.hscrollbar_policy = gtk.POLICY_NEVER
+    # gtk.POLICY_NEVER seems to be ignored, hscrollbar renders anyway
+    # using styles to hide it, see init_styles()
+    scrollview.get_hscrollbar().set_name("term_hscrollbar")
+    scrollview.add(browser.browser)
 
-    window.props.has_resize_grip = False
+    box.pack_start(scrollview, expand=True, fill=True, padding=0)
+
+    window.props.has_resize_grip = True
     window.set_default_size(800, 600)
     window.show_all()
 
     return window, browser
-
 
 def establish_browser_channel(gtkthread, browser):
     """
