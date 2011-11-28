@@ -55,6 +55,9 @@ class Webkit(object):
         # customize the default right-click menu
         self.browser.connect_after("populate-popup", self.populate_popup_cb)
 
+        # when True, automatically scroll to bottom when the WebView
+        # size changes
+        self.autoscroll = True
 
     def exec_js(self, script):
         if script:
@@ -198,6 +201,11 @@ class Webkit(object):
         menu.show_all()
         return False
 
+    def scroll_to_bottom(self):
+        scrollview = self.browser.parent
+        va = scrollview.get_vadjustment()
+        va.set_value(va.get_upper())
+
 
 # from the python-webkit examples, gpl
 class Inspector (gtk.Window):
@@ -316,6 +324,7 @@ def init_styles():
     # see http://www.pygtk.org/pygtk2tutorial/sec-ExampleRcFile.html
     gtk.rc_parse_string(s)
 
+# todo: move parts of this into Browser.create
 def launch_browser():
     
     init_styles()
@@ -327,6 +336,7 @@ def launch_browser():
     box = gtk.VBox(homogeneous=False, spacing=0)
     window.add(box)
 
+    # scrolling
     browser = Webkit.create()
     scrollview = gtk.ScrolledWindow()
     scrollview.props.vscrollbar_policy = gtk.POLICY_ALWAYS
@@ -335,6 +345,23 @@ def launch_browser():
     # using styles to hide it, see init_styles()
     scrollview.get_hscrollbar().set_name("term_hscrollbar")
     scrollview.add(browser.browser)
+
+    # enable automatic scrolling when we are at the bottom of the
+    # terminal
+    ignore_adjustment = [False]
+    def value_changed_cb(adjustment, *user_data):
+        if adjustment.value >= (adjustment.get_upper() - adjustment.page_size - 10):
+            browser.autoscroll = True
+        else:
+            browser.autoscroll = False
+    va = scrollview.get_vadjustment()
+    va.connect('value-changed', value_changed_cb)
+
+    def scroll_to_bottom_cb(widget, req, *user_data):
+        if browser.autoscroll:
+            va = scrollview.get_vadjustment()
+            va.set_value(va.get_upper() - va.page_size)
+    browser.connect('size-request', scroll_to_bottom_cb)
 
     box.pack_start(scrollview, expand=True, fill=True, padding=0)
 
@@ -382,7 +409,6 @@ def establish_browser_channel(gtkthread, browser):
         gtkthread.invoke(browser.exec_js, msg)
 
     return receive, execute
-
 
 def install_key_events(window, press_cb=None, release_cb=None):
     """

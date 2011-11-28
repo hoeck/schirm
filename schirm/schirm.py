@@ -239,6 +239,8 @@ def pty_loop(pty, execute, browser):
                     ret = gtkthread.invoke_s(lambda : browser.eval_js_in_last_frame("", x[1]))
                     logging.debug('iframe-eval: {} -> {}'.format(x[1], ret))
                     pty.q_write(("\033Rresult\033;", base64.encodestring(ret), "\033Q", "\n"))
+                elif x[0] == 'scroll_to_bottom':
+                    pass
                 else:
                     logging.warn("unknown render event: {}".format(x[0]))
 

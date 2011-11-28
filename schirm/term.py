@@ -172,7 +172,7 @@ class EventRenderer():
 
     @staticmethod
     def scroll_to_bottom():
-        return 'term.scrollToBottom();'
+        return ('scroll_to_bottom',)
 
     @staticmethod
     def iframe(content):
