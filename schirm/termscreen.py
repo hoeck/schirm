@@ -198,7 +198,7 @@ class LineContainer():
         return self.lines[self.realLineIndex(0):].__iter__()
 
     def resize(self):
-        self.events.append(("scroll_to_bottom", ))
+        pass
 
     ## cursor show and hide events
 

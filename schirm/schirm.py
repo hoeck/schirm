@@ -31,6 +31,7 @@ import warnings
 import urlparse
 import base64
 import pkg_resources
+import types
 
 from webkit_wrapper import GtkThread, launch_browser, establish_browser_channel, install_key_events
 from promise import Promise
@@ -228,19 +229,12 @@ def pty_loop(pty, execute, browser):
         pty.render_changes() # render initial term state
         while running():
             for x in pty.read_and_feed_and_render():
+                # strings are executed in a js context
+                # functions are executed with pty, browser as the arguments
                 if isinstance(x, basestring):
                     execute(x)
-                elif x[0] == 'iframe-execute':
-                    # execute and discard the result
-                    gtkthread.invoke(lambda : bool(browser.eval_js_in_last_frame("", x[1])))
-                    logging.debug('iframe-execute: {}'.format(x[1]))
-                elif x[0] == 'iframe-eval':
-                    # execute and 'return' the result
-                    ret = gtkthread.invoke_s(lambda : browser.eval_js_in_last_frame("", x[1]))
-                    logging.debug('iframe-eval: {} -> {}'.format(x[1], ret))
-                    pty.q_write(("\033Rresult\033;", base64.encodestring(ret), "\033Q", "\n"))
-                elif x[0] == 'scroll_to_bottom':
-                    pass
+                elif isinstance(x, types.FunctionType):
+                    x(pty, browser, gtkthread)
                 else:
                     logging.warn("unknown render event: {}".format(x[0]))
 

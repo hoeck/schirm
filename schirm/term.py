@@ -27,6 +27,7 @@ import struct
 import Queue
 import threading
 import logging
+import base64
 from itertools import cycle
 from UserList import UserList
 
@@ -171,10 +172,6 @@ class EventRenderer():
             return "term.insertLine({}, {});".format(index, json.dumps(content))
 
     @staticmethod
-    def scroll_to_bottom():
-        return ('scroll_to_bottom',)
-
-    @staticmethod
     def iframe(content):
         return 'term.iframeWrite({});'.format(json.dumps(content))
     
@@ -188,12 +185,24 @@ class EventRenderer():
 
     @staticmethod
     def iframe_execute(source):
-        return ('iframe-execute', source)
+        """Execute and discard the result."""
+        def _iframe_execute(pty, browser, gtkthread):
+            gtkthread.invoke(lambda : bool(browser.eval_js_in_last_frame("", source)))
+            logging.debug('iframe-execute: {}'.format(source))
+        return _iframe_execute
 
     @staticmethod
     def iframe_eval(source):
-        return ('iframe-eval', source)
+        """Execute and write the result to the pty."""
+        def eval_and_write_to_pty(js_str, pty, browser):
+            ret = browser.eval_js_in_last_frame("", js_str)
+            logging.debug('iframe-eval: {} -> {}'.format(js_str, ret))
+            pty.q_write(("\033Rresult\033;", base64.encodestring(ret), "\033Q", "\n"))
 
+        def _iframe_eval(pty, browser, gtkthread):
+            gtkthread.invoke(eval_and_write_to_pty, source, pty, browser)
+
+        return _iframe_eval
 
 class Pty(object):
             
@@ -302,7 +311,7 @@ class Pty(object):
         """
         Find changes and return a list of strings.
         """
-        js = []
+        q = []
         lines = self.screen.linecontainer
         
         if not self.screen.cursor.hidden:
@@ -313,10 +322,6 @@ class Pty(object):
 
         triggers = {}
         for e in events:
-            # some events trigger some actions (like scrolling)
-            if e[0] in set(('append', 'pop_bottom', 'insert')):
-                triggers['scroll_to_bottom'] = EventRenderer.scroll_to_bottom
-
             # iframe events do sometimes more than just updating the
             # screen
             if e[0] == 'iframe_register_resource':
@@ -331,31 +336,28 @@ class Pty(object):
                 #self._server.clear_resources()
                 pass
             elif e[0] == 'iframe_leave':
-                js.append(EventRenderer.iframe_close())
-                js.append(EventRenderer.iframe_leave())
+                q.append(EventRenderer.iframe_close())
+                q.append(EventRenderer.iframe_leave())
             elif e[0] == 'iframe_debug':
                 print e[1]
             else:
                 # plain old terminal screen updating
-                js.append(getattr(EventRenderer, e[0])(*e[1:]))
+                q.append(getattr(EventRenderer, e[0])(*e[1:]))
 
         # line changes
-        line_js = []
+        line_q = []
         for i,line in enumerate(lines):
             if line.changed:
                 line.changed = False
-                line_js.append(set_line_to(i, renderline(line)))
-        js.append("\n".join(line_js))
-
-        for _, action in triggers.iteritems():
-            js.append(action())
+                line_q.append(set_line_to(i, renderline(line)))
+        q.append("\n".join(line_q))
 
         if not self.screen.cursor.hidden:
             # make sure our current cursor will be deleted next time
             # we update the screen
             lines.hide_cursor(self.screen.cursor.y)
 
-        return js
+        return q
 
     def read_and_feed_and_render(self):
         self.read_and_feed()
