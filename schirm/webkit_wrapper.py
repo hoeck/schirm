@@ -59,6 +59,8 @@ class Webkit(object):
         # size changes
         self.autoscroll = True
 
+        self.browser.set_name('term-webview')
+
     def exec_js(self, script):
         if script:
             self.browser.execute_script(script)
@@ -206,6 +208,28 @@ class Webkit(object):
         va = scrollview.get_vadjustment()
         va.set_value(va.get_upper())
 
+    def search(self, s, jump_to=True, mark=True, forward=True, case_sensitive=False, wrap=True):
+        # gboolean            webkit_web_view_search_text         (WebKitWebView *webView,
+        #                                                          const gchar *text,
+        #                                                          gboolean case_sensitive,
+        #                                                          gboolean forward,
+        #                                                          gboolean wrap);
+        if mark:
+            # guint               webkit_web_view_mark_text_matches   (WebKitWebView *webView,
+            #                                                          const gchar *string,
+            #                                                          gboolean case_sensitive,
+            #                                                          guint limit);
+            res = self.browser.mark_text_matches(s, case_sensitive, 0)
+            self.browser.set_highlight_text_matches(True)
+
+        if jump_to:
+            res = self.browser.search_text(s, case_sensitive, forward, wrap)
+
+        return res
+
+    def unmark(self):
+        self.browser.unmark_text_matches()
+
 
 # from the python-webkit examples, gpl
 class Inspector (gtk.Window):
@@ -319,12 +343,26 @@ def init_styles():
         GtkRange::trough-border = 0
     }
 
+    style "no_scrollbarborder"
+    {
+        GtkScrolledWindow::scrollbar-spacing = 0
+    }
+
+    style "top_border_only"
+    {
+        GtkWidget::draw-border = {10,0,0,0}
+    }
+
     widget "*term_hscrollbar*" style "hide_hscrollbar"
+    widget "*ScrolledWindow*" style "no_scrollbarborder"
+    widget "*Frame*" style "top_border_only"
     """
     # see http://www.pygtk.org/pygtk2tutorial/sec-ExampleRcFile.html
     gtk.rc_parse_string(s)
 
+
 # todo: move parts of this into Browser.create
+#       rename browser.browser to browser.webview
 def launch_browser():
     
     init_styles()
@@ -341,6 +379,7 @@ def launch_browser():
     scrollview = gtk.ScrolledWindow()
     scrollview.props.vscrollbar_policy = gtk.POLICY_ALWAYS
     scrollview.props.hscrollbar_policy = gtk.POLICY_NEVER
+    scrollview.set_property('border-width', 0)
     # gtk.POLICY_NEVER seems to be ignored, hscrollbar renders anyway
     # using styles to hide it, see init_styles()
     scrollview.get_hscrollbar().set_name("term_hscrollbar")
@@ -365,11 +404,33 @@ def launch_browser():
 
     box.pack_start(scrollview, expand=True, fill=True, padding=0)
 
+    # search box:
+    searchbox = gtk.HBox(homogeneous=False)
+    searchentry = gtk.Entry() #editable=True, width_chars=80)
+    searchentry.set_property('editable', True)
+    searchentry.set_property('width_chars', 40)
+    searchentry.set_name('searchinput')
+    searchlabel = gtk.Label("Search:")
+    searchbox.pack_start(searchlabel, expand=False, fill=False, padding=5)
+    searchbox.pack_start(searchentry, expand=False, fill=False) #expand=True, fill=False, padding=0)
+
+    searchframe = gtk.Frame()
+    searchframe.set_border_width(0)
+    searchframe.add(searchbox)
+
+    def entry_changed_cb(browser, editable, *user_data):
+        browser.unmark()
+        val = editable.get_property('text')
+        browser.search(val, jump_to=False)
+    searchentry.connect('changed', lambda editable, *user_data: entry_changed_cb(browser, editable, *user_data))
+
+    box.pack_start(searchframe, expand=False)
+
     window.props.has_resize_grip = True
     window.set_default_size(800, 600)
     window.show_all()
 
-    return window, browser
+    return window, browser, searchbox
 
 def establish_browser_channel(gtkthread, browser):
     """
@@ -430,8 +491,36 @@ def install_key_events(window, press_cb=None, release_cb=None):
     if release_cb:
         window.connect('key_release_event', release_cb)
 
+def get_absolute_position(webkit_dom_html_element):
+    """Return the absolute position in pixels an element has.
 
+    Works across frames.
+    """
+    if webkit_dom_html_element.get_property('node-type') == 3: # text
+        el = webkit_dom_html_element.get_property('parent-element')
+    else:
+        el = webkit_dom_html_element
 
+    offsets = [el.get_property('offset-top')]
+
+    while 1:
+        global xxx; xxx=el
+        parent = el.get_property('offset-parent') # None for body elements
+        if parent:
+            el = parent
+        else:
+            # try to break out of frames
+            od = el.get_property('owner-document')
+            if od:
+                el = od.get_property('default-view').get_property('frame-element')
+
+        if el:
+            print el.get_property('node-name'), el.get_property('node-type')
+            offsets.append(el.get_property('offset-top'))
+        else:
+            break
+
+    return sum(offsets)
 
 def frame_evaluate_script(frame, source_uri, script_string):
     ctx = frame.get_global_context()

@@ -34,6 +34,7 @@ import pkg_resources
 import types
 
 from webkit_wrapper import GtkThread, launch_browser, establish_browser_channel, install_key_events
+import webkit_wrapper as wr
 from promise import Promise
 import webserver
 
@@ -58,7 +59,6 @@ def quit():
         gtkthread.kill()
     except:
         pass
-
 
 def get_term_iframe(view, frame):
     """Given a frame, return the frames iframe-mode frame ancestor or None.
@@ -124,13 +124,18 @@ def receive_handler(msg, pty):
 def keypress_cb(widget, event):
     print "keypress:",event.time, event.keyval, event.string, event.string and ord(event.string)
 
-def handle_keypress(event, pty, execute):
+def handle_keypress(window, event, pty, execute):
     """
     Map gtk keyvals/strings to terminal keys.
     
     Intercept some standard terminal key combos, like
     shift + PageUp/Down for scrolling.
     """
+    
+    # only handle events for the webview
+    if window.focus_widget.get_name() != 'term-webview':
+        return False
+
     # KEY_PRESS
     # KEY_RELEASE            time
     #                        state
@@ -162,7 +167,7 @@ def webkit_event_loop():
     global gtkthread
     gtkthread = GtkThread()
 
-    window, browser = gtkthread.invoke_s(launch_browser)
+    window, browser, searchbox = gtkthread.invoke_s(launch_browser)
     receive, execute = establish_browser_channel(gtkthread, browser)
 
     # handle links
@@ -170,7 +175,7 @@ def webkit_event_loop():
     gtkthread.invoke(lambda : browser.connect('resource-request-starting', resource_requested_handler))
 
     pty = term.Pty([80,24])
-    gtkthread.invoke(lambda : install_key_events(window, lambda widget, event: handle_keypress(event, pty, execute), lambda *_: True))
+    gtkthread.invoke(lambda : install_key_events(window, lambda widget, event: handle_keypress(widget, event, pty, execute), lambda *_: True))
 
     # A local webserver to write requests to the PTYs stdin and wait
     # for responses because I did not find a way to mock or get a
@@ -185,7 +190,8 @@ def webkit_event_loop():
                  execute=execute,
                  pty=pty,
                  server=server,
-                 window=window)
+                 window=window,
+                 searchbox=searchbox)
 
     # setup onetime load finished handler to track load status of the
     # term.html document
