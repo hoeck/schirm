@@ -139,12 +139,20 @@ class Server(object):
         else:
             req_id = self._getnextid()
             self.requests[req_id] = client
+            
+            def clear_path(path):
+                # transform the iframe path from a proxy path to a normal one
+                root = "http://{}.localhost".format(iframe_id)
+                if root in path:
+                    return path[len(root):]
+                else:
+                    return path
 
             # transmitting: req_id, method, path, (k, v)*, data
             data = [str(req_id),
                     req.request_version,
                     req.command,
-                    req.path]
+                    clear_path(req.path)]
 
             for k in req.headers.keys():
                 data.append(k)
