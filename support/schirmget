@@ -17,10 +17,13 @@ html = """
 <head>
 </head>
 <body>
-    <iframe src="%(url)s" style="border:0px;width:100%%;height:500px;"></iframe>
+  <div>
+  %(content)s
+  </div>
 </body>
 </html>
 """
+#<iframe id="x" src="%(url)s" style="border:0px;width:100%%;height:100%%;"></iframe>
 
 def noscript(html_string):
     soup = BeautifulSoup.BeautifulSoup(html_string)
@@ -40,8 +43,17 @@ def get(url):
     h = httplib2.Http() #".cache"
     return h.request(url, "GET")
 
-def proxy_request(req):
-    res, body = get(req.path)
+def get_document(url):
+    res, body = get(url)
+    return str(noscript(body))
+
+def proxy_request(req, base_url):
+    if req.path.startswith('/'):
+        url = base_url + req.path
+    else:
+        url = req.path
+    schirm.debug('proxy-request:', req.path, base_url, url)
+    res, body = get(url)
     msg = ["HTTP/1.1 200 OK", "Cache-Control: no-cache"]
     allowed_hdrs = set({"content-type",})
     for k,v in res.iteritems():
@@ -71,13 +83,13 @@ def main(args):
     loc = urlparse.urlparse(url)[1]
     try:
         with schirm.frame():
-            print html % {'url':url}
+            print html % {'content':get_document(url)}
             schirm.close()
             while True:
                 req = schirm.read_next()
                 schirm.debug(req.method, req.path)
                 if req.method == "GET":
-                    proxy_request(req)
+                    proxy_request(req, "http://" + loc)
     except KeyboardInterrupt:
         pass
 
