@@ -148,9 +148,21 @@ def handle_keypress(window, event, schirmview, pty, execute):
         schirmview.scroll_page_up()
         return True
     elif name == 'Page_Down' and shift:
-        execute('term.scrollPageDown();')
-    elif key:
-        pty.q_write(key)
+        schirmview.scroll_page_down()
+        return True
+    elif name == 'S' and event.string == '\x13': # gtk weirdness: uppercase S and \x13 to catch a shift-control-s
+        # control-shift-s to search forward
+        schirmview.search(forward=True)
+        return True
+    elif name == 'R' and event.string == '\x12':
+        # control-shift-r to search backward
+        schirmview.search(forward=False)
+        return True
+    elif window.focus_widget.get_name() == 'search-entry' \
+            and name == 'g' and control:
+        # while searching: control-g to hide the searchframe and the searchresult
+        schirmview.hide_searchframe()
+        return True
 
     # handle terminal input
     if window.focus_widget.get_name() == 'term-webview':
@@ -168,33 +180,6 @@ def handle_keypress(window, event, schirmview, pty, execute):
             return True
     else:
         return False
-
-# The "should-change-selected-range" signal
-# 
-# gboolean            user_function                      (WebKitWebView          *webkitwebview,
-#                                                         WebKitDOMRange         *arg1,
-#                                                         WebKitDOMRange         *arg2,
-#                                                         WebKitSelectionAffinity arg3,
-#                                                         gboolean                arg4,
-#                                                         gpointer                user_data)          : Action
-# xxx = None
-def should_change_selected_range_cb(webview, range_1, range_2, selection_affinity, flag, *user):
-    #print "should_change_selected_range_cb!!:", range_1, range_2, selection_affinity, flag
-    global xxx
-    xxx = (range_1, range_2, selection_affinity, flag)
-    # def range_vert_coords(range_obj):
-    #     top = wr.get_absolute_position(range_obj.get_property('start-container'))
-    #     bottom = wr.get_absolute_position(range_obj.get_property('end-container'))
-    #     return top, bottom
-    # 
-    # 
-    # if range_1:
-    #     print "range 1:", range_vert_coords(range_1)
-    #     #print "range 1:", range_1.get_property('start-offset')
-    # 
-    # if range_2:
-    #     print "range 2:", range_vert_coords(range_2)
-    #     #print "range 2:", range_2.get_property('start-offset')
 
 def webkit_event_loop():
 
