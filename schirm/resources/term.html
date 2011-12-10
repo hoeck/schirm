@@ -87,13 +87,14 @@ function getTermSize(preElement) {
 function getIframeResizeHandler(iframe) {
   return function() {
     try {
-      var body = iframe.contentDocument.body;
-      if (body) {
+      var doc = iframe.contentDocument.documentElement;
+      if (doc) {
+        var rect = doc.getBoundingClientRect();
         if (iframe.opts.height == 'auto') {
-          iframe.height = body.scrollHeight;
+          iframe.height = rect.height;
         }
         if (iframe.opts.width == 'auto') {
-          iframe.width = body.scrollWidth;
+          iframe.width = rect.width;
         }
       }
     } catch (e) {
