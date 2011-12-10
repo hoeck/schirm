@@ -21,8 +21,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 <style type="text/css">
 #termdiv {
     position: absolute;
-    top: 0px;
-    bottom: 0px;
+    top: 1px;
+    bottom: 1px;
     left: 0px;
     right: 0px;
 }
@@ -44,9 +44,7 @@ iframe {
 #app {
     display: none;
     width: 100%;
-    height: 100%;
 }
-
 
 body {
     position:absolute;
@@ -65,20 +63,24 @@ body {
 
 <script type="text/javascript">
 
-// Return the size in columns and lines of the given PRE element
-function getPreSize(element) {
+// Return the size of a single character in the given PRE element
+function getCharSize(preElement) {
   var specimen = document.createElement("span");
   specimen.innerHTML = "x";
-
-  element.appendChild(specimen);
-  var cols  = Math.floor(element.clientWidth/specimen.offsetWidth);
-  var lines = Math.floor(element.clientHeight/specimen.offsetHeight);
-  //console.log("resized to [lines, cols]: [" + lines + " ," + cols + "]");
-  element.removeChild(specimen);
-
-  return { lines: lines, cols: cols }
+  preElement.appendChild(specimen);
+  var size = {width: specimen.offsetWidth, height: specimen.offsetHeight};
+  preElement.removeChild(specimen);
+  return size;
 }
 
+// Return the size in lines and columns
+function getTermSize(preElement) {
+  var blockSize = getCharSize(preElement);
+  var cols  = Math.floor(document.body.clientWidth/blockSize.width);
+  var lines = Math.floor(document.body.clientHeight/blockSize.height);
+  //console.log("resized to [lines, cols]: [" + lines + " ," + cols + "]");
+  return { lines: lines, cols: cols };
+}
 
 // return a function which performs a resize of the given iframe
 // honoring iframe.opts
@@ -169,7 +171,7 @@ var Lines = (function(linesElement, term) {
     },
 
     getSize: function() {
-      return getPreSize(linesElement);
+      return getTermSize(linesElement);
     },
 
     // Resize linesElement to display the given number of lines.
@@ -384,7 +386,7 @@ var App = (function(appElement, term) {
 
 
     getSize: function() {
-      return getPreSize(appElement);
+      return getTermSize(appElement);
     },
 
     // Resize the terminal space used to render the screen in
