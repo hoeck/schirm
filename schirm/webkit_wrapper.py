@@ -55,10 +55,6 @@ class Webkit(object):
         # customize the default right-click menu
         self.browser.connect_after("populate-popup", self.populate_popup_cb)
 
-        # when True, automatically scroll to bottom when the WebView
-        # size changes
-        self.autoscroll = True
-
         self.browser.set_name('term-webview')
 
     def exec_js(self, script):
@@ -334,7 +330,7 @@ class GtkThread(object):
 
 
 def init_styles():
-    
+
     # 'hide' horizontal scrollbars in the terminal scrollwindow
     s = """
     style "hide_hscrollbar"
@@ -363,74 +359,116 @@ def init_styles():
 
 # todo: move parts of this into Browser.create
 #       rename browser.browser to browser.webview
-def launch_browser():
-    
-    init_styles()
+class EmbeddedWebView():
+    """
+    Contains the webview in a scrollpane, implements autoscrolling. Creates and
+    wires the searchframe.
+    """
+    def __init__(self):
+        # when True, automatically scroll to bottom when the WebView
+        # size changes
+        self.autoscroll = True
+        self._search_forward = False
 
-    window = gtk.Window()
-    # prepare to receive keyboard and mouse events
-    window.set_events(gtk.gdk.KEY_PRESS_MASK | gtk.gdk.KEY_RELEASE_MASK)
+        init_styles()
 
-    box = gtk.VBox(homogeneous=False, spacing=0)
-    window.add(box)
+        window = gtk.Window()
+        # prepare to receive keyboard and mouse events
+        window.set_events(gtk.gdk.KEY_PRESS_MASK | gtk.gdk.KEY_RELEASE_MASK)
 
-    # scrolling
-    browser = Webkit.create()
-    scrollview = gtk.ScrolledWindow()
-    scrollview.props.vscrollbar_policy = gtk.POLICY_ALWAYS
-    scrollview.props.hscrollbar_policy = gtk.POLICY_NEVER
-    scrollview.set_property('border-width', 0)
-    # gtk.POLICY_NEVER seems to be ignored, hscrollbar renders anyway
-    # using styles to hide it, see init_styles()
-    scrollview.get_hscrollbar().set_name("term_hscrollbar")
-    scrollview.add(browser.browser)
+        box = gtk.VBox(homogeneous=False, spacing=0)
+        window.add(box)
 
-    # enable automatic scrolling when we are at the bottom of the
-    # terminal
-    ignore_adjustment = [False]
-    def value_changed_cb(adjustment, *user_data):
-        if adjustment.value >= (adjustment.get_upper() - adjustment.page_size - 10):
-            browser.autoscroll = True
-        else:
-            browser.autoscroll = False
-    va = scrollview.get_vadjustment()
-    va.connect('value-changed', value_changed_cb)
+        # scrolling
+        browser = Webkit.create()
+        scrollview = gtk.ScrolledWindow()
+        scrollview.props.vscrollbar_policy = gtk.POLICY_ALWAYS
+        scrollview.props.hscrollbar_policy = gtk.POLICY_NEVER
+        scrollview.set_property('border-width', 0)
+        # gtk.POLICY_NEVER seems to be ignored, hscrollbar renders anyway
+        # using styles to hide it, see init_styles()
+        scrollview.get_hscrollbar().set_name("term_hscrollbar")
+        scrollview.add(browser.browser)
 
-    def scroll_to_bottom_cb(widget, req, *user_data):
-        if browser.autoscroll:
-            va = scrollview.get_vadjustment()
-            va.set_value(va.get_upper() - va.page_size)
-    browser.connect('size-request', scroll_to_bottom_cb)
+        # enable automatic scrolling when we are at the bottom of the
+        # terminal
+        ignore_adjustment = [False]
+        def value_changed_cb(adjustment, *user_data):
+            if adjustment.value >= (adjustment.get_upper() - adjustment.page_size - 10):
+                self.autoscroll = True
+            else:
+                self.autoscroll = False
+        va = scrollview.get_vadjustment()
+        va.connect('value-changed', value_changed_cb)
 
-    box.pack_start(scrollview, expand=True, fill=True, padding=0)
+        def scroll_to_bottom_cb(widget, req, *user_data):
+            if self.autoscroll:
+                va = scrollview.get_vadjustment()
+                va.set_value(va.get_upper() - va.page_size)
+        browser.connect('size-request', scroll_to_bottom_cb)
 
-    # search box:
-    searchbox = gtk.HBox(homogeneous=False)
-    searchentry = gtk.Entry() #editable=True, width_chars=80)
-    searchentry.set_property('editable', True)
-    searchentry.set_property('width_chars', 40)
-    searchentry.set_name('searchinput')
-    searchlabel = gtk.Label("Search:")
-    searchbox.pack_start(searchlabel, expand=False, fill=False, padding=5)
-    searchbox.pack_start(searchentry, expand=False, fill=False) #expand=True, fill=False, padding=0)
+        box.pack_start(scrollview, expand=True, fill=True, padding=0)
 
-    searchframe = gtk.Frame()
-    searchframe.set_border_width(0)
-    searchframe.add(searchbox)
+        # search box:
+        searchbox = gtk.HBox(homogeneous=False)
+        searchentry = gtk.Entry() #editable=True, width_chars=80)
+        searchentry.set_property('editable', True)
+        searchentry.set_property('width_chars', 40)
+        searchentry.set_name('search-entry')
+        searchlabel = gtk.Label("Search:")
+        searchbox.pack_start(searchlabel, expand=False, fill=False, padding=5)
+        searchbox.pack_start(searchentry, expand=False, fill=False) #expand=True, fill=False, padding=0)
 
-    def entry_changed_cb(browser, editable, *user_data):
-        browser.unmark()
-        val = editable.get_property('text')
-        browser.search(val, jump_to=False)
-    searchentry.connect('changed', lambda editable, *user_data: entry_changed_cb(browser, editable, *user_data))
+        searchframe = gtk.Frame()
+        searchframe.set_border_width(0)
+        searchframe.add(searchbox)
 
-    box.pack_start(searchframe, expand=False)
+        def entry_changed_cb(browser, editable, *user_data):
+            browser.unmark()
+            val = editable.get_property('text')
+            if val:
+                browser.search(val, jump_to=True, forward=self._search_forward)
+        searchentry.connect('changed', lambda editable, *user_data: entry_changed_cb(browser, editable, *user_data))
 
-    window.props.has_resize_grip = True
-    window.set_default_size(800, 600)
-    window.show_all()
+        box.pack_start(searchframe, expand=False)
 
-    return window, browser, searchbox
+        window.props.has_resize_grip = True
+        window.set_default_size(800, 600)
+        window.show_all()
+        searchframe.hide()
+
+        self.window = window
+        self.webview = browser
+        self.scrollview = scrollview
+        self.searchframe = searchframe
+        self.searchentry = searchentry
+        #return window, browser, searchbox
+
+    def hide_searchframe(self):
+        self.webview.unmark()
+        self.searchentry.set_property('text', '')
+        self.searchframe.hide()
+        self.webview.browser.grab_focus()
+
+    def scroll_page_up(self):
+        va = self.scrollview.get_vadjustment()
+        va.set_value(max(va.get_value() - va.page_increment, va.lower))
+
+    def scroll_page_down(self):
+        va = self.scrollview.get_vadjustment()
+        va.set_value(min(va.get_value() + va.page_increment, va.upper - va.page_size))
+
+    def search(self, forward=None):
+        if forward != None:
+            self._search_forward = bool(forward)
+
+        self.searchframe.show()
+        self.searchentry.grab_focus()
+
+        # searching backwards does not work???
+        val = self.searchentry.get_property('text')
+        if val:
+            self.webview.search(val, jump_to=True, forward=self._search_forward)
 
 def establish_browser_channel(gtkthread, browser):
     """

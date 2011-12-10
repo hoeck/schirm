@@ -33,7 +33,7 @@ import base64
 import pkg_resources
 import types
 
-from webkit_wrapper import GtkThread, launch_browser, establish_browser_channel, install_key_events
+from webkit_wrapper import GtkThread, EmbeddedWebView, establish_browser_channel, install_key_events
 import webkit_wrapper as wr
 from promise import Promise
 import webserver
@@ -124,7 +124,7 @@ def receive_handler(msg, pty):
 def keypress_cb(widget, event):
     print "keypress:",event.time, event.keyval, event.string, event.string and ord(event.string)
 
-def handle_keypress(window, event, pty, execute):
+def handle_keypress(window, event, schirmview, pty, execute):
     """
     Map gtk keyvals/strings to terminal keys.
     
@@ -132,66 +132,98 @@ def handle_keypress(window, event, pty, execute):
     shift + PageUp/Down for scrolling.
     """
     
-    # only handle events for the webview
-    if window.focus_widget.get_name() != 'term-webview':
-        return False
-
     # KEY_PRESS
     # KEY_RELEASE            time
     #                        state
     #                        keyval
     #                        string
     name = gtk.gdk.keyval_name(event.keyval)
-    key = pty.map_key(name)
-    if not key:
-        key = event.string
 
     shift = event.state == gtk.gdk.SHIFT_MASK
+    control = event.state == gtk.gdk.CONTROL_MASK
+    #print name, event.string, event, control, shift
+
+    # handle key commands
     if name == 'Page_Up' and shift:
-        execute('term.scrollPageUp();')
+        schirmview.scroll_page_up()
+        return True
     elif name == 'Page_Down' and shift:
         execute('term.scrollPageDown();')
     elif key:
         pty.q_write(key)
 
-    if pty.screen.iframe_mode:
-        # let the webview see this event too
-        return False
+    # handle terminal input
+    if window.focus_widget.get_name() == 'term-webview':
+        key = pty.map_key(name)
+        if not key:
+            key = event.string
+        if key:
+            pty.q_write(key)
+        if pty.screen.iframe_mode:
+            # let the webview see this event too
+            return False
+        else:
+            # no need for the webview to react on key events when not in
+            # iframe mode
+            return True
     else:
-        # no need for the webview to react on key events when not in
-        # iframe mode
-        return True
+        return False
+
+# The "should-change-selected-range" signal
+# 
+# gboolean            user_function                      (WebKitWebView          *webkitwebview,
+#                                                         WebKitDOMRange         *arg1,
+#                                                         WebKitDOMRange         *arg2,
+#                                                         WebKitSelectionAffinity arg3,
+#                                                         gboolean                arg4,
+#                                                         gpointer                user_data)          : Action
+# xxx = None
+def should_change_selected_range_cb(webview, range_1, range_2, selection_affinity, flag, *user):
+    #print "should_change_selected_range_cb!!:", range_1, range_2, selection_affinity, flag
+    global xxx
+    xxx = (range_1, range_2, selection_affinity, flag)
+    # def range_vert_coords(range_obj):
+    #     top = wr.get_absolute_position(range_obj.get_property('start-container'))
+    #     bottom = wr.get_absolute_position(range_obj.get_property('end-container'))
+    #     return top, bottom
+    # 
+    # 
+    # if range_1:
+    #     print "range 1:", range_vert_coords(range_1)
+    #     #print "range 1:", range_1.get_property('start-offset')
+    # 
+    # if range_2:
+    #     print "range 2:", range_vert_coords(range_2)
+    #     #print "range 2:", range_2.get_property('start-offset')
 
 def webkit_event_loop():
 
     global gtkthread
     gtkthread = GtkThread()
 
-    window, browser, searchbox = gtkthread.invoke_s(launch_browser)
-    receive, execute = establish_browser_channel(gtkthread, browser)
+    schirmview = gtkthread.invoke_s(EmbeddedWebView)
+    receive, execute = establish_browser_channel(gtkthread, schirmview.webview)
 
     # handle links
-    gtkthread.invoke(lambda : browser.connect('destroy', lambda *args, **kwargs: quit()))
-    gtkthread.invoke(lambda : browser.connect('resource-request-starting', resource_requested_handler))
+    gtkthread.invoke(lambda : schirmview.webview.connect('destroy', lambda *args, **kwargs: quit()))
+    gtkthread.invoke(lambda : schirmview.webview.connect('resource-request-starting', resource_requested_handler))
 
     pty = term.Pty([80,24])
-    gtkthread.invoke(lambda : install_key_events(window, lambda widget, event: handle_keypress(widget, event, pty, execute), lambda *_: True))
+    gtkthread.invoke(lambda : install_key_events(schirmview.window, lambda widget, event: handle_keypress(widget, event, schirmview, pty, execute), lambda *_: True))
 
     # A local webserver to write requests to the PTYs stdin and wait
     # for responses because I did not find a way to mock or get a
     # proxy of libsoup.
     server = webserver.Server(pty).start()
     pty.set_webserver(server)
-    browser.set_proxy("http://localhost:{}".format(server.getport()))
+    schirmview.webview.set_proxy("http://localhost:{}".format(server.getport()))
 
     global state # make interactive development and debugging easier
-    state = dict(browser=browser,
+    state = dict(schirmview=schirmview,
                  receive=receive,
                  execute=execute,
                  pty=pty,
-                 server=server,
-                 window=window,
-                 searchbox=searchbox)
+                 server=server)
 
     # setup onetime load finished handler to track load status of the
     # term.html document
@@ -200,36 +232,34 @@ def webkit_event_loop():
     def load_finished_cb(view, frame, user_data=None):
         load_finished.deliver()
         if load_finished_id:
-            browser.disconnect(load_finished_id)
-    load_finished_id = gtkthread.invoke_s(lambda : browser.connect('document-load-finished', load_finished_cb))
+            schirmview.webview.disconnect(load_finished_id)
+    load_finished_id = gtkthread.invoke_s(lambda : schirmview.webview.connect('document-load-finished', load_finished_cb))
 
     # create and load term document
     term_css = pkg_resources.resource_string("schirm.resources", "term.css")
     doc = pkg_resources.resource_string("schirm.resources", "term.html")
     doc = doc.replace("//TERM-CSS-PLACEHOLDER", term_css)
 
-    gtkthread.invoke(lambda : browser.load_string(doc, base_uri="http://termframe.localhost"))
+    gtkthread.invoke(lambda : schirmview.webview.load_string(doc, base_uri="http://termframe.localhost"))
     load_finished.get()
 
     # start a thread to send js expressions to webkit
-    t = threading.Thread(target=lambda : pty_loop(pty, execute, browser))
+    t = threading.Thread(target=lambda : pty_loop(pty, execute, schirmview))
     t.start()
 
-    # read from webkit though console.log messages starting with 'schirm'
-    # and containing json data
+    # read console.log from webkit messages starting with 'schirm'
+    # and decode them with json
     while running():
 
         msg, line, source = receive(block=True, timeout=0.1) or (None, None, None) # timeout to make waiting for events interruptible
         if msg:
             if receive_handler(msg, pty):
                 logging.info("webkit-console IPC: {}".format(msg))
-            elif msg == "show_webkit_inspector": # shows a blank window :/
-                gtkthread.invoke(browser.show_inspector)
             else:
                 logging.info("webkit-console: {}:{} {}".format(source, line, msg))
     quit()
 
-def pty_loop(pty, execute, browser):
+def pty_loop(pty, execute, schirmview):
     execute("termInit();")
     try:
         pty.render_changes() # render initial term state
@@ -240,7 +270,7 @@ def pty_loop(pty, execute, browser):
                 if isinstance(x, basestring):
                     execute(x)
                 elif isinstance(x, types.FunctionType):
-                    x(pty, browser, gtkthread)
+                    x(pty, schirmview, gtkthread)
                 else:
                     logging.warn("unknown render event: {}".format(x[0]))
 
