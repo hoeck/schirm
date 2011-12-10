@@ -111,15 +111,19 @@ def unicode_escape_char(c):
     return "\\u%s" % ("%x" % ord(c)).rjust(4,'0')
 
 def create_span(group):
-    tmpl = '<span class="{0}">{1}</span>'
+    def _span(cl, contents):
+        if cl:
+            return '<span class="{0}">{1}</span>'.format(cl, contents)            
+        else:
+            return '<span>{0}</span>'.format(contents)
     if isinstance(group, list):
         cl = create_class_string(group[0])
-        return tmpl.format(cl, cgi.escape("".join(map(lambda ch: ch.data, group))))
+        return _span(cl, cgi.escape("".join(map(lambda ch: ch.data, group))))
     elif isinstance(group, CursorMarker):
         cl = create_class_string(group.char, ["cursor"])
-        return tmpl.format(cl, cgi.escape(group.char.data))
+        return _span(cl, cgi.escape(group.char.data))
     else:
-        return tmpl.format("", "")
+        return _span("", "")
 
 def renderline(line):
     """
@@ -313,7 +317,7 @@ class Pty(object):
         """
         q = []
         lines = self.screen.linecontainer
-        
+
         if not self.screen.cursor.hidden:
             # make sure the cursor is drawn
             lines.show_cursor(self.screen.cursor.y, self.screen.cursor.x)
