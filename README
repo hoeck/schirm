@@ -46,23 +46,23 @@ See the demos in ``support/``
   
       $ PATH="$PATH:<path-to-schirm>/support"
     
-    or invoke them with ``<path-to-schirm>/support/<schirmXXX>``
+    or invoke them with ``<path-to-schirm>/support/<sXXX>``
 
   - get a webpage (requires BeautifulSoup)::
 
-    $ schirmget news.ycombinator.com
+    $ sget news.ycombinator.com
 
   - preview a reStructuredText document::
 
-    $ rst2html README | schirmview
+    $ rst2html README | sview
 
   - show a circular tree of a directory (uses d3.js, slow/crashing for large directories)::
 
-    $ schirmtree .
+    $ stree .
 
   - view an image::
 
-    $ schirmview schirm-logo.png
+    $ sview schirm-logo.png
 
 Keyboard Controls
 ==================
