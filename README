@@ -14,13 +14,15 @@ fetch the dependencies
   - libsoup2.4-dev
   - GCC to create extension module
 
-in Ubuntu: ``$ sudo apt-get install libwebkitgtk-dev libsoup2.4-dev python-webkit python-setuptools``
+in Ubuntu::
+
+  $ sudo apt-get install libwebkitgtk-dev libsoup2.4-dev python-webkit python-setuptools
 
 fetch the source::
 
   $ hg clone https://bitbucket.org/hoeck/schirm
 
-build and install, see python setup.py --help for more options::
+build and install, see ``python setup.py --help`` for more options::
 
   $ cd schirm
   $ sudo python setup.py install
@@ -46,11 +48,11 @@ See the demos in ``support/``
     
     or invoke them with ``<path-to-schirm>/support/<schirmXXX>``
 
-  - get a webpage::
+  - get a webpage (requires BeautifulSoup)::
 
     $ schirmget news.ycombinator.com
 
-  - preview a reStructuredText document (requires BeautifulSoup)::
+  - preview a reStructuredText document::
 
     $ rst2html README | schirmview
 
