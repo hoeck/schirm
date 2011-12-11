@@ -152,6 +152,12 @@ def handle_keypress(window, event, schirmview, pty, execute):
     elif name == 'Page_Down' and shift:
         schirmview.scroll_page_down()
         return True
+    elif name == 'Home' and shift:
+        schirmview.scroll_to_top()
+        return True
+    elif name == 'End' and shift:
+        schirmview.scroll_to_bottom()
+        return True
     elif name == 'Insert' and shift:
         schirmview.webview.paste_xsel()
         return True

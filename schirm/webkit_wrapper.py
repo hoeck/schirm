@@ -232,11 +232,6 @@ class Webkit(object):
         menu.show_all()
         return False
 
-    def scroll_to_bottom(self):
-        scrollview = self.browser.parent
-        va = scrollview.get_vadjustment()
-        va.set_value(va.get_upper())
-
     def search(self, s, jump_to=True, mark=True, forward=True, case_sensitive=False, wrap=True):
         # gboolean            webkit_web_view_search_text         (WebKitWebView *webView,
         #                                                          const gchar *text,
@@ -490,6 +485,14 @@ class EmbeddedWebView():
     def scroll_page_down(self):
         va = self.scrollview.get_vadjustment()
         va.set_value(min(va.get_value() + va.page_increment, va.upper - va.page_size))
+
+    def scroll_to_top(self):
+        va = self.scrollview.get_vadjustment()
+        va.set_value(va.lower)
+
+    def scroll_to_bottom(self):
+        va = self.scrollview.get_vadjustment()
+        va.set_value(va.upper - va.page_size)
 
     def search(self, forward=None):
         if forward != None:
