@@ -144,12 +144,19 @@ def handle_keypress(window, event, schirmview, pty, execute):
     #print name, event.string, event, control, shift
 
     # handle key commands
+    
+    # common terminal commands
     if name == 'Page_Up' and shift:
         schirmview.scroll_page_up()
         return True
     elif name == 'Page_Down' and shift:
         schirmview.scroll_page_down()
         return True
+    elif name == 'Insert' and shift:
+        schirmview.webview.paste_xsel()
+        return True
+
+    # custom schirm commands
     elif name == 'S' and event.string == '\x13': # gtk weirdness: uppercase S and \x13 to catch a shift-control-s
         # control-shift-s to search forward
         schirmview.search(forward=True)

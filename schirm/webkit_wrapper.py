@@ -192,6 +192,13 @@ class Webkit(object):
         if not (text and self.paste_to_pty(text)):
             web_view.paste_clipboard()
 
+    def paste_xsel(self):
+        """Paste the current X selection."""
+        xclipb = self.browser.get_clipboard(gtk.gdk.SELECTION_PRIMARY)
+        text = xclipb.wait_for_text()
+        if not (text and self.paste_to_pty(text)):
+            self.browser.paste_clipboard()
+
     def populate_popup_cb(self, view, menu):
 
         # remove all items but the 'inspect element' one
