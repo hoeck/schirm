@@ -194,6 +194,7 @@ def webkit_event_loop():
     gtkthread.invoke(lambda : schirmview.webview.connect('resource-request-starting', resource_requested_handler))
 
     pty = term.Pty([80,24])
+    schirmview.webview.paste_to_pty = pty.paste
     gtkthread.invoke(lambda : install_key_events(schirmview.window, lambda widget, event: handle_keypress(widget, event, schirmview, pty, execute), lambda *_: True))
 
     # A local webserver to write requests to the PTYs stdin and wait

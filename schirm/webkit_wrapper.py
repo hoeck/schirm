@@ -57,6 +57,10 @@ class Webkit(object):
 
         self.browser.set_name('term-webview')
 
+        # Placeholder for a function to paste to the pty and return
+        # True or False when in iframe mode.
+        self.paste_to_pty = lambda text: True
+
     def exec_js(self, script):
         if script:
             self.browser.execute_script(script)
@@ -177,6 +181,17 @@ class Webkit(object):
         if not (web_view.get_zoom_level() == 1.0):
             web_view.set_zoom_level(1.0)
 
+    def copy_cb(self, menu_item, web_view):
+        """Copy the current selection."""
+        web_view.copy_clipboard()
+
+    def paste_cb(self, menu_item, web_view):
+        """Paste from clipboard."""
+        clipb = web_view.get_clipboard(gtk.gdk.SELECTION_CLIPBOARD)
+        text = clipb.wait_for_text()
+        if not (text and self.paste_to_pty(text)):
+            web_view.paste_clipboard()
+
     def populate_popup_cb(self, view, menu):
 
         # remove all items but the 'inspect element' one
@@ -195,6 +210,17 @@ class Webkit(object):
         zoom_hundred = gtk.ImageMenuItem(gtk.STOCK_ZOOM_100)
         zoom_hundred.connect('activate', self.zoom_hundred_cb, view)
         menu.prepend(zoom_hundred)
+        
+        sep = gtk.SeparatorMenuItem()
+        menu.prepend(sep)
+        
+        paste = gtk.ImageMenuItem(gtk.STOCK_PASTE)
+        paste.connect('activate', self.paste_cb, view)
+        menu.prepend(paste)
+
+        copy = gtk.ImageMenuItem(gtk.STOCK_COPY)
+        copy.connect('activate', self.copy_cb, view)
+        menu.prepend(copy)
 
         menu.show_all()
         return False

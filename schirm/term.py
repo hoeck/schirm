@@ -367,6 +367,17 @@ class Pty(object):
         self.read_and_feed()
         return self.render_changes()
 
+    def paste(self, data):
+        """Write data into the terminals stdin.
+        
+        When in plain terminal mode, paste data and return True. When
+        in iframe_mode, do nothing and return False.
+        """
+        if self.screen.iframe_mode:
+            return False
+        else:
+            self.q_write(data)
+            return True
 
     # VT100 Key    Standard    Applications     IBM Keypad
     # =====================================================
