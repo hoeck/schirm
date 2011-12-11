@@ -33,7 +33,7 @@ run::
 
 or invoke ``schirm`` with your favorite program launcher
 
-Uses bash as the default startup shell. Runs all your favorite commandline applications, including::
+Runs all your favorite commandline applications, including::
 
   mc, top, htop, vim, grep --color ...
 

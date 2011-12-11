@@ -28,6 +28,7 @@ import Queue
 import threading
 import logging
 import base64
+import pwd
 from itertools import cycle
 from UserList import UserList
 
@@ -218,7 +219,9 @@ class Pty(object):
             os.putenv('COLORTERM', 'Terminal')
             os.putenv('COLUMNS', str(size[0]))
             os.putenv('LINES', str(size[1]))
-            os.execl("/bin/bash", "bash") # todo: use the users default shell
+            shell = pwd.getpwuid(os.getuid()).pw_shell
+            shell_name = os.path.basename(shell)
+            os.execl(shell, shell_name)
         else:
             # parent
             pass
