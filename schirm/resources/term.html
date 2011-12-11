@@ -271,34 +271,9 @@ var Lines = (function(linesElement, term) {
       var iframe = term.currentIframe;
       try {
         iframe.contentDocument.write(content);
-        this.iframeEnsureVisibility();
       } catch (e) {
         iframe.contentDocument.open("text/html");
         iframe.contentDocument.write(content);
-        this.iframeEnsureVisibility();
-      }
-    },
-
-    // make sure we can see at least the bottom of the current iframe
-    iframeEnsureVisibility: function() {
-      var iframe = term.currentIframe;
-      try {
-        var body = iframe.contentDocument.getElementsByTagName("body")[0];
-        // body may be undefined if nothing has been written to the iframe
-        if (body) {
-          // don't show scrollbars on term iframes
-          iframe.height = body.scrollHeight;
-          // ensure the iframe is visible inside the linesElement
-          if (iframe.offsetHeight < linesElement.offsetHeight) {
-            // iframe is smaller than our screen
-            if (iframe.offsetTop > (linesElement.offsetHeight - linesElement.offsetTop)) {
-              linesElement.scrollTop = iframe.offsetTop;
-            }
-          } else {
-            linesElement.scrollTop = iframe.offsetTop + (iframe.offsetHeight - linesElement.offsetHeight);
-          }
-        }
-      } catch (e) {
       }
     },
 
@@ -312,7 +287,6 @@ var Lines = (function(linesElement, term) {
         // DOMSubtreeModified is deprecated, but I haven't found a
         // better way to do this
         iframe.contentDocument.addEventListener('DOMSubtreeModified', getIframeResizeHandler(iframe));
-        this.iframeEnsureVisibility();
       } catch (e) {
       }
     },
@@ -320,7 +294,6 @@ var Lines = (function(linesElement, term) {
     // set the the current iframe document to null
     // so that we know wether were in iframe mode or not
     iframeLeave: function() {
-      this.iframeEnsureVisibility();
       term.currentIframe = null;
     }
 
@@ -536,6 +509,6 @@ function termInit() {
 
 </head>
 <body>
-<div id="termdiv"><pre id="term"></pre><pre id="app"></pre></div>
+<div id="termdiv"><pre id='testpre'></pre><pre id="term"></pre><pre id="app"></pre></div>
 </body>
 </html>

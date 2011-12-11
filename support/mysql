@@ -1,30 +1,34 @@
 #!/usr/bin/env python
 
 import sys
+import os
 import cgi
 import MySQLdb as mysql
 import schirmclient
+import optparse
+import readline
+import atexit
 
-
-def print_table(columns, rows):
+def print_table(columns, rows, max_rows=25):
     head = """
     <html>
       <head>
         <style type="text/css">
           body {{ margin:0px; width:100%; }}
           tr.alt-row {{ background-color: #dddddd; }}
-        </style>'
+        </style>
       </head>
       <body>
         <table>
           <thead>
-            <th>{}</th>
+            {}
           </thead>
           <tbody>
     """
     foot = """
           </tbody>
         </table>
+      <em>{info}</em>
       </body>
     </html>
     """
@@ -35,27 +39,83 @@ def print_table(columns, rows):
         print "</tr>"
     
     with schirmclient.frame():
-        print head.format("".join(map("<td>{}</td>".format, map(cgi.escape, columns))))
+        print head.format("".join(map("<th>{}</th>".format, map(cgi.escape, columns))))
         alt_row = False
-        for r in rows:
+        for r in rows[:max_rows]:
             print_row(r, ['alt-row'] if alt_row else [])
             alt_row = not alt_row
-        print "</table>"
-
-
-def main():
-    conn = mysql.connect(host='localhost', user='root', passwd='root');
-    cur = conn.cursor()
-    
-    while 1:
-        print "mysql> ",
-        stmt = sys.stdin.readline()
-        cur.execute(stmt)
-        rows = cur.fetchall()
-        if rows:
-            print_table([d[0] for d in (cur.description or [])], rows)
+        if len(rows) > max_rows:
+            print foot.format(info='... {} more rows (total: {} rows)'.format(len(rows) - max_rows, len(rows)))
         else:
-            print "empty"
-            
+            print foot.format(info='{} rows'.format(len(rows)))
+
+def print_exc(e):
+    tmpl = """
+    <html><head>
+    <style type="text/css">
+      body {{ margin:0px; width:100%; }}
+      div {{color: #ff0000}}
+    </style>
+    </head>
+    <body>
+    <div>{}</div>
+    </body>
+    </html>"""
+    with schirmclient.frame():
+        if isinstance(e, (mysql.Error, mysql.Warning)):
+            print tmpl.format(e.args[1])
+        else:
+            print tmpl.format(str(e))
+
+def print_info(msg):
+    tmpl = """
+    <html><head>
+    <style type="text/css">
+      body {{ margin:0px; width:100%; }}
+    </style>
+    </head>
+    <body>
+    <em>{}</em>
+    </body>
+    </html>"""
+    with schirmclient.frame():
+        print tmpl.format(msg)
+
+def main(args):
+    conn = mysql.connect(host='localhost', user=args.user, passwd=args.password);
+    cur = conn.cursor()
+
+    histfile = os.path.join(os.path.expanduser("~"), ".pyhist")
+    try:
+        readline.read_history_file(histfile)
+    except IOError:
+        pass
+    atexit.register(readline.write_history_file, histfile)
+
+    while 1:
+        try:
+            stmt = raw_input('smysql> ')
+        except KeyboardInterrupt:
+            print
+            sys.exit(0)
+        try:
+            cur.execute(stmt)
+            rows = cur.fetchall()
+            if rows:
+                print_table([d[0] for d in (cur.description or [])], rows)
+            else:
+                print_info('empty')
+        except Exception, e:
+            print_exc(e)
+
+def parse_args():
+    p = optparse.OptionParser()
+    p.add_option('-u', '--user')
+    p.add_option('-p', '--password')
+    p.add_option('-D', '--database')
+    args, pos = p.parse_args()
+    return args
+
 if __name__ == '__main__':
-    main()
+    main(parse_args())
+
