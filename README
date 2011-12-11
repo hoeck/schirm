@@ -2,28 +2,106 @@ Schirm
 ======
 
 A linux compatible terminal emulator which exposes additional html
-rendering modes to clients.
-
+rendering modes to client programs.
 
 Installing
 ==========
 
-requirements:
-      - python 2.7
-      - pywebkitgtk (libwebkitgtk-1.0-0)
-      - pyte (included)
-      - C compiler to create extension module
+fetch the dependencies
+  - python 2.7
+  - pywebkitgtk
+  - libwebkit-dev
+  - libsoup2.4-dev
+  - GCC to create extension module
+
+in Ubuntu: ``$ sudo apt-get install libwebkitgtk-dev libsoup2.4-dev python-webkit python-setuptools``
 
 fetch the source::
-      hg clone https://bitbucket.org/hoeck/schirm
+
+  $ hg clone https://bitbucket.org/hoeck/schirm
 
 build and install, see python setup.py --help for more options::
-      sudo python setup.py install
+
+  $ cd schirm
+  $ sudo python setup.py install
+
+run::
+
+  $ schirm
+
+or invoke ``schirm`` with your favorite program launcher
+
+Uses bash as the default startup shell. Runs all your favorite commandline applications, including::
+
+  mc, top, htop, vim, grep --color ...
+
+Examples
+========
+
+See the demos in ``support/``
+    
+  - add them to your ``PATH``::
+  
+      $ PATH="$PATH:<path-to-schirm>/support"
+    
+    or invoke them with ``<path-to-schirm>/support/<schirmXXX>``
+
+  - get a webpage::
+
+    $ schirmget news.ycombinator.com
+
+  - preview a reStructuredText document (requires BeautifulSoup)::
+
+    $ rst2html README | schirmview
+
+  - show a circular tree of a directory (uses d3.js, slow/crashing for large directories)::
+
+    $ schirmtree .
+
+  - view an image::
+
+    $ schirmview schirm-logo.png
+
+Keyboard Shortcuts
+==================
+
+- Shift PageUp/Down -- scroll up/down one page
+- Shift Home/End -- scroll to bottom/end
+- Shift-Control-S -- highlight&search, use Control-g in the searchframe to close it
+
+Client API
+==========
+
+Entirely escape-sequence based. Works with every programming language
+which can write bytes to stdout. See ``support/schirmclient.py``.
+
+Missing Features/Defects
+========================
+
+- Application mode (fullscreen ncurses apps use this) is not implemented properly.
+- History is unbounded, you may have to restart schirm to get rid of old output/frames.
+- Slower than any other terminal emulator, becomes slower with each page of terminal output.
+- Expect more bugs than say xterm.
+- Not configurable.
+
+
+Similar Programs
+================
+
+- TermKit_: not an emulator but a completely new terminal, built on WebKit and Node.js
+- shellinabox_: a complete browser terminal emulator with server
+- pyqonsole_: QT python terminal emulator
+- pyte_: beautiful VTXXX compatible terminal emulator library
+
+.. _TermKit: https://github.com/unconed/TermKit
+.. _shellinabox: http://code.google.com/p/shellinabox/
+.. _pyqonsole: http://www.logilab.org/project/pyqonsole
+.. _pyte: https://github.com/selectel/pyte
 
 Licence
 =======
 
-Copyright (C) 2011 Erik Soehnel <eriksoehnel@googlemail.com>
+Copyright (C) 2011 Erik Soehnel <http://bitbucket.org/hoeck>
 
 Licenced under the GPLv3.
 
