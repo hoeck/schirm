@@ -121,16 +121,19 @@ def frame_in_frame_test():
 # <span>test</span><img src=\"x.gif\">
 # </body></html>
 # """
+        print "foo"
         close()
         # execute("""console.log("execute_window: " + window);""")
         # execute("""console.log("execute_document: " + document);""")
         # execute("""value = "value set"; console.log("value: " + value); console.log("window.value: " + window.value);""")
         # execute("""console.log("value again: " + value);""")
-        time.sleep(3)
+        #time.sleep(1)
         execute("""console.log("iframe-exec")""")
         eval("""console.log("iframe-eval")""")
-        eval("""console.log("iframe-eval-2")""")
-        execute("""console.log("iframe-exec-2")""")
+        eval("""1+2""")
+        #time.sleep(1)
+    #x = read_next()
+    #print x
 
 if __name__ == '__main__':
     frame_in_frame_test()

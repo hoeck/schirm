@@ -265,7 +265,7 @@ class Screen(list):
         self.margins = Margins(0, self.lines - 1)
         self.reset_mode(mo.DECOM)
 
-    def set_margins(self, top=None, bottom=None):
+    def set_margins(self, top=None, bottom=None, private=None):
         """Selects top and bottom margins for the scrolling region.
 
         Margins determine which screen lines move during scrolling
@@ -274,6 +274,7 @@ class Screen(list):
 
         :param int top: the smallest line number that is scrolled.
         :param int bottom: the biggest line number that is scrolled.
+        :param bool private: not implemented
         """
         if top is None or bottom is None:
             return
