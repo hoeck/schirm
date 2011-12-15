@@ -9,19 +9,55 @@ import optparse
 import readline
 import atexit
 
+css = """
+body {
+  margin:0px; width:100%;
+}
+
+table {
+    border-spacing: 0px;
+    background: none repeat scroll 0 0 #FFFFFF;
+    border-collapse: collapse;
+    font-family: "Lucida Sans Unicode","Lucida Grande",Sans-Serif;
+    font-size: 12px;
+    margin: 4px;
+    text-align: left;
+}
+table th {
+    border-bottom: 2px solid #6678B1;
+    color: #003399;
+    font-size: 14px;
+    font-weight: normal;
+    padding: 5px 4px;
+}
+table td {
+    color: #666699;
+    padding: 9px 8px 0;
+}
+table tbody tr:hover td {
+    color: #000088;
+    background-color: #c9c9f0;
+}
+
+table tr.alt-row {
+    background-color: #e0e0f0;
+}
+"""
+
 def print_table(columns, rows, max_rows=25):
     head = """
     <html>
       <head>
         <style type="text/css">
-          body {{ margin:0px; width:100%; }}
-          tr.alt-row {{ background-color: #dddddd; }}
+          {css}
         </style>
       </head>
       <body>
         <table>
           <thead>
-            {}
+            <tr>
+              {header}
+            </tr>
           </thead>
           <tbody>
     """
@@ -39,7 +75,8 @@ def print_table(columns, rows, max_rows=25):
         print "</tr>"
     
     with schirmclient.frame():
-        print head.format("".join(map("<th>{}</th>".format, map(cgi.escape, columns))))
+        print head.format(header="".join(map("<th>{}</th>".format, map(cgi.escape, columns))),
+                          css=css)
         alt_row = False
         for r in rows[:max_rows]:
             print_row(r, ['alt-row'] if alt_row else [])
