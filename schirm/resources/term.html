@@ -89,12 +89,22 @@ function getIframeResizeHandler(iframe) {
     try {
       var doc = iframe.contentDocument.documentElement;
       if (doc) {
-        var rect = doc.getBoundingClientRect();
-        if (iframe.opts.height == 'auto') {
-          iframe.height = rect.height;
-        }
         if (iframe.opts.width == 'auto') {
-          iframe.width = rect.width;
+          iframe.width = doc.scrollWidth;
+        }
+        if (iframe.opts.height == 'auto') {
+          iframe.height = doc.scrollHeight;
+
+          // scrollHeight doesn't include the height of the horizontal
+          // scrollbar -> an additional vertical scrollbar appears to
+          // still be able to see the whole content (we only want the
+          // vertical scrollbar).  therefor: compare to the
+          // clientHeight and then adjust the iframe height.
+          var rect = doc.getBoundingClientRect();
+          if (doc.scrollHeight && doc.clientHeight && doc.scrollHeight > doc.clientHeight) {
+            var diff = doc.scrollHeight - doc.clientHeight;
+            iframe.height = doc.scrollHeight + diff;
+          }
         }
       }
     } catch (e) {
@@ -230,7 +240,7 @@ var Lines = (function(linesElement, term) {
         }
       }
 
-      var div = document.createElement('span');
+      var div = document.createElement('div');
       if (term.size.lines <= linenumber) {
         linesElement.appendChild(div);
       } else {
@@ -252,7 +262,6 @@ var Lines = (function(linesElement, term) {
       term.currentIframe = iframe;
 
       iframe.opts = opts
-      iframe.contentDocument.addEventListener('load', getIframeResizeHandler(iframe));
       if (opts.height == 'auto') {
         iframe.height = "1";
       } else if (opts.height == '100%') {
@@ -262,12 +271,14 @@ var Lines = (function(linesElement, term) {
         iframe.style.width = '100%';
       }
 
+      iframe.resizeHandler = getIframeResizeHandler(iframe);
       iframe.contentDocument.open("text/html");
     },
 
     // contentDocument.write content (a string) to the currentIframe and
     // resize it (vertically) if necessary
     iframeWrite: function (content) {
+      console.log('iframe_write');
       var iframe = term.currentIframe;
       try {
         iframe.contentDocument.write(content);
@@ -275,18 +286,16 @@ var Lines = (function(linesElement, term) {
         iframe.contentDocument.open("text/html");
         iframe.contentDocument.write(content);
       }
+      iframe.resizeHandler();
     },
 
     // call .close on the iframe document.
     iframeCloseDocument: function() {
       var iframe = term.currentIframe;
+      iframe.resizeHandler();
       try {
-        iframe.addEventListener('load', getIframeResizeHandler(iframe));
         iframe.contentDocument.close();
-        // Resize the iframe if its contents are modified.
-        // DOMSubtreeModified is deprecated, but I haven't found a
-        // better way to do this
-        iframe.contentDocument.addEventListener('DOMSubtreeModified', getIframeResizeHandler(iframe));
+        iframe.addEventListener('load', iframe.resizeHandler);
       } catch (e) {
       }
     },
@@ -509,6 +518,7 @@ function termInit() {
 
 </head>
 <body>
-<div id="termdiv"><pre id='testpre'></pre><pre id="term"></pre><pre id="app"></pre></div>
+<pre id="term"></pre>
+<pre id="app"></pre>
 </body>
 </html>
