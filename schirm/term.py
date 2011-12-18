@@ -192,7 +192,7 @@ class EventRenderer():
     def iframe_execute(source):
         """Execute and discard the result."""
         def _iframe_execute(pty, browser, gtkthread):
-            gtkthread.invoke(lambda : bool(browser.eval_js_in_last_frame("", source)))
+            gtkthread.invoke(lambda : bool(browser.webview.eval_js_in_last_frame("", source)))
             logging.debug('iframe-execute: {}'.format(source))
         return _iframe_execute
 
@@ -200,7 +200,7 @@ class EventRenderer():
     def iframe_eval(source):
         """Execute and write the result to the pty."""
         def eval_and_write_to_pty(js_str, pty, browser):
-            ret = browser.eval_js_in_last_frame("", js_str)
+            ret = browser.webview.eval_js_in_last_frame("", js_str)
             logging.debug('iframe-eval: {} -> {}'.format(js_str, ret))
             pty.q_write(("\033Rresult\033;", base64.encodestring(ret), "\033Q", "\n"))
 
