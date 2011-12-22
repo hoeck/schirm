@@ -2,17 +2,17 @@
 
 # Schirm - a linux compatible terminal emulator providing html modes.
 # Copyright (C) 2011  Erik Soehnel
-# 
+#
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
@@ -114,7 +114,7 @@ def unicode_escape_char(c):
 def create_span(group):
     def _span(cl, contents):
         if cl:
-            return '<span class="{0}">{1}</span>'.format(cl, contents)            
+            return '<span class="{0}">{1}</span>'.format(cl, contents)
         else:
             return '<span>{0}</span>'.format(contents)
     if isinstance(group, list):
@@ -179,7 +179,7 @@ class EventRenderer():
     @staticmethod
     def iframe(content):
         return 'term.iframeWrite({});'.format(json.dumps(content))
-    
+
     @staticmethod
     def iframe_close():
         return 'term.iframeCloseDocument();'
@@ -210,7 +210,7 @@ class EventRenderer():
         return _iframe_eval
 
 class Pty(object):
-            
+
     def __init__(self, size=(80, 24)):
         pid, master = os.forkpty()
         if pid == 0:
@@ -238,7 +238,7 @@ class Pty(object):
 
         # set up input queue
         self.input_queue = Queue.Queue()
-        
+
         def process_queue_input():
             while 1:
                 self.input_queue.get(block=True)()
@@ -372,7 +372,7 @@ class Pty(object):
 
     def paste(self, data):
         """Write data into the terminals stdin.
-        
+
         When in plain terminal mode, paste data and return True. When
         in iframe_mode, do nothing and return False.
         """
@@ -433,7 +433,7 @@ class Pty(object):
         'Down' : ("\x1b[B", "\x1bOB"),
         'Right': ("\x1b[C", "\x1bOC"),
         'Left' : ("\x1b[D", "\x1bOD"),
-        
+
         'F1'   : "\x1bOP",
         'F2'   : "\x1bOQ",
         'F3'   : "\x1bOR",
@@ -460,18 +460,48 @@ class Pty(object):
         'Tab'       : "\t"
     }
 
-    def map_key(self, keyname):
+    # see: http://rtfm.etla.org/xterm/ctlseq.html, xterm behaviour
+    # append ';' and this id before the final character in the escseq
+    # from _keycodes to encode modifier keys
+    # 2    Shift
+    # 3    Alt
+    # 4    Shift + Alt
+    # 5    Control
+    # 6    Shift + Control
+    # 7    Alt + Control
+    # 8    Shift + Alt + Control
+    _mod_map = {
+        # (shift, alt, control): id
+        (True,  False, False): 2,
+        (False, True,  False): 3,
+        (True,  True,  False): 4,
+        (False, False, True ): 5,
+        (True,  False, True ): 6,
+        (False, True,  True ): 7,
+        (True,  True,  True ): 8,
+    }
+
+    def map_key(self, keyname, modifiers):
         """
         Map gtk keynames to vt100 keysequences.
         Return None if there os no mapping for a given key, meaning
         that the reported string value will work just fine.
+        Modifiers should be a tuple of 3 booleans: (shift, alt,
+        control) denoting the state of the modifier keys.
         """
+        def _add_modifier(esc_seq):
+            if esc_seq and any(modifiers):
+                return "".join((esc_seq[:-1],
+                                ";", str(self._mod_map.get(modifiers)),
+                                esc_seq[-1]))
+            else:
+                return esc_seq
+
         keydef = self._keycodes.get(keyname)
         if isinstance(keydef, tuple):
             if pyte.mo.DECAPP in self.screen.mode:
-                return keydef[1]
+                return _add_modifier(keydef[1])
             else:
-                return keydef[0]
+                return _add_modifier(keydef[0])
         else:
-            return keydef
-
+            return _add_modifier(keydef)

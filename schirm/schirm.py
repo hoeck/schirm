@@ -3,17 +3,17 @@
 
 # Schirm - a linux compatible terminal emulator providing html modes.
 # Copyright (C) 2011  Erik Soehnel
-# 
+#
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
@@ -127,11 +127,11 @@ def keypress_cb(widget, event):
 def handle_keypress(window, event, schirmview, pty, execute):
     """
     Map gtk keyvals/strings to terminal keys.
-    
+
     Intercept some standard terminal key combos, like
     shift + PageUp/Down for scrolling.
     """
-    
+
     # KEY_PRESS
     # KEY_RELEASE            time
     #                        state
@@ -140,11 +140,12 @@ def handle_keypress(window, event, schirmview, pty, execute):
     name = gtk.gdk.keyval_name(event.keyval)
 
     shift = event.state == gtk.gdk.SHIFT_MASK
+    alt = event.state == gtk.gdk.MOD1_MASK
     control = event.state == gtk.gdk.CONTROL_MASK
-    #print name, event.string, event, control, shift
+    #print name, event.string, event, shift, control, alt
 
     # handle key commands
-    
+
     # common terminal commands
     if name == 'Page_Up' and shift:
         schirmview.scroll_page_up()
@@ -179,11 +180,16 @@ def handle_keypress(window, event, schirmview, pty, execute):
 
     # handle terminal input
     if window.focus_widget.get_name() == 'term-webview':
-        key = pty.map_key(name)
+        key = pty.map_key(name, (shift, alt, control))
         if not key:
-            key = event.string
+            if alt:
+                key = "\033%s" % event.string
+            else:
+                key = event.string
+
         if key:
             pty.q_write(key)
+
         if pty.screen.iframe_mode:
             # let the webview see this event too
             return False
