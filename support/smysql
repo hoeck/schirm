@@ -42,9 +42,13 @@ table tbody tr:hover td {
 table tr.alt-row {
     background-color: #e0e0f0;
 }
+
+.left {
+    float:left;
+}
 """
 
-def print_table(columns, rows, max_rows=25):
+def print_table(columns, rows, max_rows=250):
     head = """
     <html>
       <head>
@@ -53,6 +57,7 @@ def print_table(columns, rows, max_rows=25):
         </style>
       </head>
       <body>
+        <div class="left">
         <table>
           <thead>
             <tr>
@@ -65,6 +70,7 @@ def print_table(columns, rows, max_rows=25):
           </tbody>
         </table>
       <em>{info}</em>
+      </div>
       </body>
     </html>
     """

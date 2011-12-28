@@ -13,20 +13,24 @@ html = """
 #editor {
         position: relative;
         width: 100%%;
-        height: 400px;
+        height: 12em;
 }
 </style>
 </head>
 <body>
-    <div id="editor">%(text)s</div>
+<div id="w"><div id="editor">%(text)s</div></div>
     <script src="src/ace.js" type="text/javascript" charset="utf-8"></script>
     <script src="src/theme-clouds.js" type="text/javascript" charset="utf-8"></script>
     <script>
     window.onload = function() {
-        //var editor = ace.edit("editor");
-        //editor.setTheme("ace/theme/clouds");
-        window.location="/"
-        //schirmlog();
+        window.editor = ace.edit("editor");
+        window.editor.setTheme("ace/theme/clouds");
+        window.editor.getSession().on('change', function() {
+            var lines = window.editor.getSession().getValue().split("\\n").length;
+            var lineHeight = window.editor.renderer.lineHeight;
+            console.log('changed', lines); 
+            document.getElementById('editor'); // todo set height!
+        });
     };
     </script>
 </body>
@@ -42,22 +46,36 @@ css = """
 }
 """
 
-def main():
+def ace_edit(s=''):
     with schirm.frame():
         schirm.register_resource(os.path.join(os.path.abspath(os.path.dirname(__file__)),'../misc/ace.js'), 'src/ace.js')
         schirm.register_resource(os.path.join(os.path.abspath(os.path.dirname(__file__)),'../misc/theme-clouds.js'), 'src/theme-clouds.js')
         schirm.register_resource_data(html % {'text':"some text"}, 'editor.html')
-        print html % {'text':"some text"}
+        print html % {'text':str(s)}
         schirm.close()
+        req = None
         req = schirm.read_next()
         if req.type == 'request':
             # fake the googleapi response
             if req.method == 'GET' and req.path.startswith('http://fonts.googleapis.com/css'):
                 schirm.respond(req.id, '\r\n'.join((req.protocol + " 200 OK", "Cache-Control: no-cache", "Content-Type: text/css", "", css)))
-            x = schirm.read_next()
+        x = schirm.read_next()
+
+def edit(filename=None):
+    if filename:
+        with open(filename) as f:
+            s = f.read()
+    try:
+        ace_edit(s)
+    except KeyboardInterrupt:
+        pass
 
     print 'bye'
-    print x
+
+def parse_args():
+    p = ArgumentParser("Using the cloud9 ace javascript editor to edit a file from the commandline")
+    p.add_argument('file', metavar='FILE', help="The file to edit")
+    return p.parse_args()
 
 if __name__ == '__main__':
-    print main()
+    edit(parse_args().file)

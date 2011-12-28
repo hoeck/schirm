@@ -444,6 +444,14 @@ class EmbeddedWebView():
         searchentry.set_property('width_chars', 40)
         searchentry.set_name('search-entry')
         searchlabel = gtk.Label("Search:")
+
+        searchclose = gtk.Button(stock=gtk.STOCK_CLOSE)
+        alignment = searchclose.get_children()[0]
+        hbox = alignment.get_children()[0]
+        image, label = hbox.get_children()
+        label.set_text('')
+
+        searchbox.pack_start(searchclose, expand=False, fill=False)
         searchbox.pack_start(searchlabel, expand=False, fill=False, padding=5)
         searchbox.pack_start(searchentry, expand=False, fill=False) #expand=True, fill=False, padding=0)
 
@@ -457,6 +465,8 @@ class EmbeddedWebView():
             if val:
                 browser.search(val, jump_to=True, forward=self._search_forward)
         searchentry.connect('changed', lambda editable, *user_data: entry_changed_cb(browser, editable, *user_data))
+
+        searchclose.connect('clicked', lambda *_: self.hide_searchframe())
 
         box.pack_start(searchframe, expand=False)
 
