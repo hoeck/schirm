@@ -73,7 +73,7 @@ def edit(filename=None):
     print 'bye'
 
 def parse_args():
-    p = ArgumentParser("Using the cloud9 ace javascript editor to edit a file from the commandline")
+    p = argparse.ArgumentParser("Using the cloud9 ace javascript editor to edit a file from the commandline")
     p.add_argument('file', metavar='FILE', help="The file to edit")
     return p.parse_args()
 
