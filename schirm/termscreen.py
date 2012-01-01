@@ -41,6 +41,8 @@ class Line(UserList):
         # if set to a number, render a cursor block on this line at
         # the given position:
         self.cursorpos = None
+        # the kind of cursor to render, either cursor or 'cursor-inactive'
+        self.cursorclass = 'cursor'
 
     def set_size(self, size):
         """ set the size in columns for this line """
@@ -202,9 +204,10 @@ class LineContainer():
 
     ## cursor show and hide events
 
-    def show_cursor(self, index, column):
+    def show_cursor(self, index, column, cursorclass='cursor'):
         self[index].changed = True
         self[index].cursorpos = column
+        self[index].cursorclass = cursorclass
 
     def hide_cursor(self, index):
         self[index].changed = True

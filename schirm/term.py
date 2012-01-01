@@ -84,8 +84,9 @@ def equal_attrs(chartuple0, chartuple1):
                  == chartuple1._replace(data=""))
 
 class CursorMarker():
-    def __init__(self, ch):
+    def __init__(self, ch, cursorclass):
         self.char = ch
+        self.cursorclass = cursorclass
 
 def group_by_attrs(line):
     """
@@ -94,10 +95,11 @@ def group_by_attrs(line):
     prev_tuple = None
     groups = []
     cursorpos = line.cursorpos
+    cursorclass = line.cursorclass
 
     for i, chartuple in enumerate(line):
         if cursorpos==i:
-            groups.append(CursorMarker(chartuple))
+            groups.append(CursorMarker(chartuple, cursorclass))
             prev_tuple = None
         elif equal_attrs(prev_tuple, chartuple):
             groups[-1].append(chartuple)
@@ -121,7 +123,7 @@ def create_span(group):
         cl = create_class_string(group[0])
         return _span(cl, cgi.escape("".join(map(lambda ch: ch.data, group))))
     elif isinstance(group, CursorMarker):
-        cl = create_class_string(group.char, ["cursor"])
+        cl = create_class_string(group.char, [group.cursorclass])
         return _span(cl, cgi.escape(group.char.data))
     else:
         return _span("", "")
@@ -130,7 +132,7 @@ def renderline(line):
     """
     Given a line of pyte.Chars, create a string of spans with appropriate style.
     """
-    return "".join(map(create_span, group_by_attrs(line)))
+    return "".join(map(lambda x:  create_span(x), group_by_attrs(line)))
 
 def wrap_in_span(s):
     return '<span>{0}</span>'.format(s)
@@ -229,6 +231,8 @@ class Pty(object):
         self._pty = master
         self._server = None # must be set later
 
+        self._focus = True
+
         self.screen = TermScreen(*size)
         self.last_cursor_line = 0
         self.stream = SchirmStream()
@@ -236,7 +240,9 @@ class Pty(object):
 
         self.set_size(*size)
 
-        # set up input queue
+        # set up input (schirm -> pty) queue and a consumer thread that
+        # pops off functions and executes them
+        # used to serialize input (keys, resize events, http responses, ...)
         self.input_queue = Queue.Queue()
 
         def process_queue_input():
@@ -244,6 +250,17 @@ class Pty(object):
                 self.input_queue.get(block=True)()
 
         t = threading.Thread(target=process_queue_input)
+        t.start()
+
+        # set up output (pty -> schirm) queue
+        # and a default producer which os.reads from the pty
+        # to get simple asyncronous/interruptible os.read without
+        # dealing with signals
+        self.output_queue = Queue.Queue()
+        def read_from_pty():
+            while 1:
+                self.output_queue.put(os.read(self._pty, 8192))
+        t = threading.Thread(target=read_from_pty)
         t.start()
 
     def q_write(self, s):
@@ -258,15 +275,21 @@ class Pty(object):
         "Queued version of self.set_size()"
         self.input_queue.put(lambda : self.set_size(h, w))
 
+    def q_resize(self, lines, cols):
+        self.input_queue.put(lambda : self.resize(lines, cols))
+
     def q_echo_on(self):
         self.input_queue.put(lambda : self.echo_on())
 
     def q_echo_off(self):
         self.input_queue.put(lambda : self.echo_off())
 
+    def q_set_focus(self, focus=True):
+        self.input_queue.put(lambda : self.set_focus(focus))
+
     def write(self, s):
         """
-        Writes the given string or each string in the given list/tuple to
+        Writes the given string or each string in the given iterator to
         the pty.
         """
         if isinstance(s, basestring):
@@ -300,19 +323,20 @@ class Pty(object):
     def set_webserver(self, server):
         self._server = server
 
-    def q_resize(self, lines, cols):
-        self.input_queue.put(lambda : self.resize(lines, cols))
-
     def resize(self, lines, cols):
         self.screen.resize(lines, cols)
         self.set_size(lines, cols)
 
-    def read(self):
-        return os.read(self._pty, 8192)
+    def set_focus(self, focus=True):
+        """Setting the focus flag currently changes the way the cursor is rendered."""
+        self._focus = bool(focus)
+
+        # redraw the terminal with the new focus settings
+        self.output_queue.put('')
 
     def read_and_feed(self):
-        response = self.read()
-        self.stream.feed(response)
+        res = self.output_queue.get(block=True)
+        self.stream.feed(res)
 
     def render_changes(self):
         """
@@ -320,10 +344,12 @@ class Pty(object):
         """
         q = []
         lines = self.screen.linecontainer
-
-        if not self.screen.cursor.hidden:
+        
+        if not self.screen.cursor.hidden and not self.screen.iframe_mode:
             # make sure the cursor is drawn
-            lines.show_cursor(self.screen.cursor.y, self.screen.cursor.x)
+            lines.show_cursor(self.screen.cursor.y,
+                              self.screen.cursor.x,
+                              'cursor' if self._focus else 'cursor-inactive')
 
         events = lines.get_and_clear_events()
 
@@ -359,7 +385,7 @@ class Pty(object):
                 line_q.append(set_line_to(i, renderline(line)))
         q.append("\n".join(line_q))
 
-        if not self.screen.cursor.hidden:
+        if not self.screen.cursor.hidden and not self.screen.iframe_mode:
             # make sure our current cursor will be deleted next time
             # we update the screen
             lines.hide_cursor(self.screen.cursor.y)

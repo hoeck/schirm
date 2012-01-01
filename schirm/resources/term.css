@@ -66,3 +66,7 @@
 .cursor {
     background-color: #ff00b0;
 }
+
+.cursor-inactive {
+    border: solid 1px #ff00b0;
+}

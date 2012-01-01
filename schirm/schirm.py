@@ -201,6 +201,14 @@ def handle_keypress(window, event, schirmview, pty, execute):
         return False
 
 def webkit_event_loop():
+    """Setup, initialize and wire the schirm components:
+
+    - the terminal emulator (term, termscreen)
+    - the webkit webview (webkit_wrapper)
+    - the local proxy webserver (webserver)
+    - the thread transporting changes from term -> webkview (pty_loop)
+    - the loop reading the webviews console messages
+    """
 
     global gtkthread
     gtkthread = GtkThread()
@@ -208,9 +216,15 @@ def webkit_event_loop():
     schirmview = gtkthread.invoke_s(EmbeddedWebView)
     receive, execute = establish_browser_channel(gtkthread, schirmview.webview)
 
-    # handle links
+    # exit handler
     gtkthread.invoke(lambda : schirmview.webview.connect('destroy', lambda *args, **kwargs: quit()))
+
+    # rewrite webkit http requests
     gtkthread.invoke(lambda : schirmview.webview.connect('resource-request-starting', resource_requested_handler))
+
+    # terminal focus
+    gtkthread.invoke(lambda : schirmview.webview.connect('focus-in-event', lambda *_: pty.q_set_focus(True)))
+    gtkthread.invoke(lambda : schirmview.webview.connect('focus-out-event', lambda *_: pty.q_set_focus(False)))
 
     pty = term.Pty([80,24])
     schirmview.webview.paste_to_pty = pty.paste
