@@ -280,21 +280,18 @@ def webkit_event_loop():
 
 def pty_loop(pty, execute, schirmview):
     execute("termInit();")
-    try:
-        pty.render_changes() # render initial term state
-        while running():
-            for x in pty.read_and_feed_and_render():
-                # strings are executed in a js context
-                # functions are executed with pty, browser as the arguments
-                if isinstance(x, basestring):
-                    execute(x)
-                elif isinstance(x, types.FunctionType):
-                    x(pty, schirmview, gtkthread)
-                else:
-                    logging.warn("unknown render event: {}".format(x[0]))
-
-    except OSError:
-        stop()
+    pty.render_changes() # render initial term state
+    while running() and pty.running():
+        for x in pty.read_and_feed_and_render():
+            # strings are executed in a js context
+            # functions are executed with pty, browser as the arguments
+            if isinstance(x, basestring):
+                execute(x)
+            elif isinstance(x, types.FunctionType):
+                x(pty, schirmview, gtkthread)
+            else:
+                logging.warn("unknown render event: {}".format(x[0]))
+    stop()
 
 def main():
 

@@ -227,6 +227,7 @@ class Pty(object):
         else:
             # parent
             pass
+        self._running = True
         self._size = [0,0]
         self._pty = master
         self._server = None # must be set later
@@ -250,6 +251,7 @@ class Pty(object):
                 self.input_queue.get(block=True)()
 
         t = threading.Thread(target=process_queue_input)
+        t.daemon = True
         t.start()
 
         # set up output (pty -> schirm) queue
@@ -258,8 +260,15 @@ class Pty(object):
         # dealing with signals
         self.output_queue = Queue.Queue()
         def read_from_pty():
-            while 1:
-                self.output_queue.put(os.read(self._pty, 8192))
+            try:
+                while 1:
+                    self.output_queue.put(os.read(self._pty, 8192))
+            except OSError, e:
+                # self._pty was closed or reading interrupted by a
+                # signal -> application exit
+                self._running = False
+                self.output_queue.put('') # trigger the pty_loop
+
         t = threading.Thread(target=read_from_pty)
         t.start()
 
@@ -307,6 +316,10 @@ class Pty(object):
     def q_fake_input(self, input_string):
         self.input_queue.put(lambda : self.fake_input(input_string))
 
+    def running(self):
+        """Return True if the shell process is still running."""
+        return self._running
+
     def set_size(self, h, w): # h/lines, w/columns
         """
         Use the TIOCSWINSZ ioctl to change the size of _pty if neccessary.
@@ -336,7 +349,8 @@ class Pty(object):
 
     def read_and_feed(self):
         res = self.output_queue.get(block=True)
-        self.stream.feed(res)
+        if res:
+            self.stream.feed(res)
 
     def render_changes(self):
         """
