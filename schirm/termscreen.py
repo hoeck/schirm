@@ -202,6 +202,9 @@ class LineContainer():
     def resize(self):
         pass
 
+    def set_title(self, title):
+        self.events.append(('set_title', title))
+
     ## cursor show and hide events
 
     def show_cursor(self, index, column, cursorclass='cursor'):
@@ -662,6 +665,12 @@ class TermScreen(pyte.Screen):
             top, bottom = self.margins
             for _ in range(i+1):
                 self.linecontainer.insert(bottom+1, self._create_line())
+
+    ## xterm title hack
+                
+    def os_command(self, command_id, data):
+        if command_id == 0:
+            self.linecontainer.set_title(data)
 
     ## iframe extensions
 

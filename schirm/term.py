@@ -211,6 +211,12 @@ class EventRenderer():
 
         return _iframe_eval
 
+    @staticmethod
+    def set_title(title):
+        def _set_title(pty, browser, gtkthread):
+            gtkthread.invoke(lambda : browser.set_title(title))
+        return _set_title
+
 class Pty(object):
 
     def __init__(self, size=(80, 24)):
@@ -387,6 +393,8 @@ class Pty(object):
                 q.append(EventRenderer.iframe_leave())
             elif e[0] == 'iframe_debug':
                 print e[1]
+            elif e[0] == 'set_title':
+                q.append(EventRenderer.set_title(e[1]))
             else:
                 # plain old terminal screen updating
                 q.append(getattr(EventRenderer, e[0])(*e[1:]))

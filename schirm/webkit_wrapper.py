@@ -516,6 +516,10 @@ class EmbeddedWebView():
         if val:
             self.webview.search(val, jump_to=True, forward=self._search_forward)
 
+    def set_title(self, title):
+        self.window.set_title(title)
+
+
 def establish_browser_channel(gtkthread, browser):
     """
     return two functions, receive and execute.
