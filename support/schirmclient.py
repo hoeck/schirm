@@ -176,6 +176,7 @@ def read_list():
         else:
             current.append(ch)
 
+
 _request = namedtuple('Request', ('type', 'id', 'protocol', 'method', 'path', 'header', 'data'))
 class Request(_request):
     """
@@ -188,6 +189,7 @@ class Request(_request):
     """
     pass
 
+
 _message = namedtuple('Message', ('type', 'data'))
 class Message(_message):
     """
@@ -197,6 +199,15 @@ class Message(_message):
     The data slot contains the result as a string.
     """
     pass
+
+
+_keypress = namedtuple('KeyPress', ('type', 'data', 'esc'))
+class KeyPress(_keypress):
+    """
+    Represents single characters read from stdin
+    (type='keypress', data=<char>, esc=<bool>).
+    """
+
 
 def read_next():
     """Read characters off sys.stdin until a full request, a message or result has been read.
@@ -215,6 +226,13 @@ def read_next():
                     return Request('request', args[1], args[2], args[3], args[4], headers, args[-1] if len(args)%2 else None)
                 else:
                     return Message(*args)
+            else:
+                # some keycombo
+                return KeyPress('keypress', ch, True)
+        else:
+            # plain keypress
+            return KeyPress('keypress', ch, False)
+
 
 def respond(requestid, response):
     """Write a response to requestid to the schirm terminal.
