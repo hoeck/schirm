@@ -19,17 +19,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
 <style type="text/css">
-#termdiv {
-    position: absolute;
-    top: 1px;
-    bottom: 1px;
-    left: 0px;
-    right: 0px;
-}
-
 pre {
     margin: 0px;
-    padding: 1px;
+    padding: 1px 1px 4px 1px;
 }
 
 iframe {
@@ -449,7 +441,6 @@ var Term = function() {
     size: { lines: 24, cols: 80 },
   };
 
-  var termdiv = document.getElementById('termdiv');
   var lines = Lines(document.getElementById('term'), state); // one screen to render lines + history
   var app = App(document.getElementById('app'), state); // the other for rendering a char matrix w/o history
 
