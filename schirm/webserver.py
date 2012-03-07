@@ -25,6 +25,7 @@ import base64
 import time
 import logging
 import urlparse
+import pkg_resources
 from BaseHTTPServer import BaseHTTPRequestHandler
 from StringIO import StringIO
 
@@ -66,6 +67,8 @@ class Server(object):
         self.requests = {}
         self._id = 0
         self.resources = {}
+        self.schirm_resources = {'/schirm.js': "schirm.js",
+                                 '/schirm.css': "schirm.css"}
         self.listen_thread = None
         self.not_found = set(["/favicon.ico", "/"])
 
@@ -75,6 +78,7 @@ class Server(object):
 
     def start(self):
         backlog = 5
+        # todo: multithreading (fixed size threadpool (2-3 threads))
         self.socket.bind(('localhost',0))
         self.socket.listen(backlog)
         self.listen_thread = threading.Thread(target=self.listen)
@@ -123,6 +127,14 @@ class Server(object):
             # its a known static resource, serve it!
             logging.debug("serving static resource {} for iframe {}".format(path, iframe_id))
             client.sendall(self.resources[iframe_id][path])
+            client.close()
+
+        elif req.command == 'GET' \
+                and path in self.schirm_resources:
+            # builtin static resource, serve it!
+            logging.debug("serving builtin static resource {}.".format(path))
+            data = pkg_resources.resource_string('schirm.resources', self.schirm_resources[path])
+            client.sendall(self.make_response(self.guess_type(path), data))
             client.close()
 
         elif iframe_id and req.command == 'GET' and path in self.not_found:
@@ -187,26 +199,28 @@ class Server(object):
             client.sendall(data)
             client.close()
 
+    def make_response(self, mimetype, data):
+        """Return a string making up an HTML response."""
+        return "\n".join(["HTTP/1.1 200 OK",
+                          "Cache-Control: " + "no-cache",
+                          "Content-Type: " + mimetype,
+                          "Content-Length: " + str(len(data)),
+                          "",
+                          data])
+
+    def guess_type(self, name):
+        """Given a path to a file, guess its mimetype."""
+        guessed_type, encoding = mimetypes.guess_type(name, strict=False)
+        return guessed_type or "text/plain"
+
     def register_resource(self, frame_id, name, mimetype, data):
         """
         Add a static resource name to be served. Use the resources
         name to guess an appropriate content-type if no mimetype is
         provided.
         """
-        if not mimetype:
-            mimetype, encoding = mimetypes.guess_type(name, strict=False)
-            if not mimetype:
-                guessed_type = "text/plain"
-
-        response = "\n".join(("HTTP/1.1 200 OK",
-                              "Cache-Control: " + "no-cache",
-                              "Content-Type: " + mimetype,
-                              "Content-Length: " + str(len(data)),
-                              "",
-                              data))
-
         if not name.startswith("/"):
             name = "/" + name
         if frame_id not in self.resources:
             self.resources[frame_id] = {}
-        self.resources[frame_id][name] = response
+        self.resources[frame_id][name] = self.make_response(mimetype or self.guess_type(name), data)
