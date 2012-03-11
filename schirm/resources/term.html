@@ -74,35 +74,25 @@ function getTermSize(preElement) {
   return { lines: lines, cols: cols };
 }
 
-// return a function which performs a resize of the given iframe
-// honoring iframe.opts
-function getIframeResizeHandler(iframe) {
-  return function() {
-    try {
-      var doc = iframe.contentDocument.documentElement;
+function resizeIframe(iframe) {
+  try {
+    var doc = iframe.contentDocument.documentElement;
       if (doc) {
-        if (iframe.opts.width == 'auto') {
-          iframe.width = doc.scrollWidth;
-        }
-        if (iframe.opts.height == 'auto') {
-          iframe.height = doc.scrollHeight;
+        iframe.height = doc.scrollHeight;
 
-          // scrollHeight doesn't include the height of the horizontal
-          // scrollbar -> an additional vertical scrollbar appears to
-          // still be able to see the whole content (we only want the
-          // vertical scrollbar).  therefor: compare to the
-          // clientHeight and then adjust the iframe height.
-          var rect = doc.getBoundingClientRect();
-          if (doc.scrollHeight && doc.clientHeight && doc.scrollHeight > doc.clientHeight) {
-            var diff = doc.scrollHeight - doc.clientHeight;
-            iframe.height = doc.scrollHeight + diff;
-          }
+        // scrollHeight doesn't include the height of the horizontal
+        // scrollbar -> an additional vertical scrollbar appears to
+        // still be able to see the whole content (we only want the
+        // vertical scrollbar).  therefor: compare to the
+        // clientHeight and then adjust the iframe height.
+        var rect = doc.getBoundingClientRect();
+        if (doc.scrollHeight && doc.clientHeight && doc.scrollHeight > doc.clientHeight) {
+          var diff = doc.scrollHeight - doc.clientHeight;
+          iframe.height = doc.scrollHeight + diff;
         }
       }
-    } catch (e) {
-    }
-  };
-}
+  } catch (e) { }
+};
 
 // rendering the terminal in normal mode
 // linesElement:
@@ -219,17 +209,14 @@ var Lines = (function(linesElement, term) {
     },
 
     // iframe functions
-    insertIframe: function (linenumber, id, opts) {
+    insertIframe: function (linenumber, id) {
       // insert an iframe 'line' before linenumber
-      // opts are:
-      //  width, height .. one of '100%' or 'auto'
 
       // close the old iframe
       if (term.currentIframe) {
         try {
           term.currentIframe.contentDocument.close();
-        } catch (e) {
-        }
+        } catch (e) { }
       }
 
       var div = document.createElement('div');
@@ -253,17 +240,12 @@ var Lines = (function(linesElement, term) {
 
       term.currentIframe = iframe;
 
-      iframe.opts = opts
-      if (opts.height == 'auto') {
-        iframe.height = "1";
-      } else if (opts.height == '100%') {
-        iframe.style.height = '100%';
-      }
-      if (opts.width == '100%') {
-        iframe.style.width = '100%';
-      }
+      // linemode: iframe grows vertically with content
+      //           iframe is as wide as the terminal window
+      iframe.height = "1";
+      iframe.style.width = '100%';
 
-      iframe.resizeHandler = getIframeResizeHandler(iframe);
+      iframe.resizeHandler = function() { resizeIframe(iframe); };
       iframe.contentDocument.open("text/html");
     },
 
@@ -278,18 +260,17 @@ var Lines = (function(linesElement, term) {
         iframe.contentDocument.open("text/html");
         iframe.contentDocument.write(content);
       }
-      iframe.resizeHandler();
+      resizeIframe(iframe)
     },
 
     // call .close on the iframe document.
     iframeCloseDocument: function() {
       var iframe = term.currentIframe;
-      iframe.resizeHandler();
+      resizeIframe(iframe)
       try {
         iframe.contentDocument.close();
-        iframe.addEventListener('load', iframe.resizeHandler);
-      } catch (e) {
-      }
+        iframe.addEventListener('load', function() { resizeIframe(iframe); });
+      } catch (e) { }
     },
 
     // set the the current iframe document to null
@@ -392,7 +373,7 @@ var App = (function(appElement, term) {
     // TODO
     // insert iframe as large as the whole screen
     // or use a second gtk webview instead - might be safer & more robust
-    insertIframe: function (linenumber, id, opts) {
+    insertIframe: function (linenumber, id) {
       // close the old iframe
       // if (term.currentIframe) {
       //   term.currentIframe.contentDocument.close();
@@ -481,7 +462,7 @@ var Term = function() {
     removeLine: function(linenumber) { fn.getScreen().removeLine(linenumber); },
     removeLastLine: function() { fn.getScreen().removeLastLine(); },
 
-    insertIframe: function (linenumber, id, opts) { fn.getScreen().insertIframe(linenumber, id, opts); },
+    insertIframe: function (linenumber, id) { fn.getScreen().insertIframe(linenumber, id); },
     iframeWrite: function (content) { fn.getScreen().iframeWrite(content); },
     iframeCloseDocument: function() { fn.getScreen().iframeCloseDocument(); },
     iframeLeave: function() { fn.getScreen().iframeLeave(); },

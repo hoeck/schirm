@@ -47,7 +47,7 @@ END   = ESC + "Q"
 SEP   = ESC + ";"
 EXIT  = ESC + "x"
 
-def enter(**kwargs):
+def enter():
     """Enter the frame mode.
 
     Creates an iframe in the schirm terminal on the current line. All
@@ -60,9 +60,7 @@ def enter(**kwargs):
 
     See also the frame() contextmanager.
     """
-    sys.stdout.write("".join((INTRO, 'enter')))
-    sys.stdout.write("".join("".join((SEP, k, SEP, v)) for k,v in kwargs.items()))
-    sys.stdout.write(END)
+    sys.stdout.write("".join((INTRO, 'enter', END)))
     sys.stdout.flush()
 
 def leave():
@@ -85,10 +83,10 @@ def close():
     sys.stdout.flush()
 
 @contextmanager
-def frame(width='100%', height='auto'):
+def frame():
     """Enter frame mode, leaving it on return or exceptions."""
     try:
-        enter(width=width, height=height)
+        enter()
         yield
     finally:
         leave()

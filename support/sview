@@ -44,11 +44,10 @@ def main():
     
     buf = read(args.source)
     mimetype = magicmime(buf)
-    if mimetype.startswith('text'):
-        with schirm.frame(width='100%'):
+    with schirm.frame():
+        if mimetype.startswith('text'):
             render_text(buf)
-    else:
-        with schirm.frame(width='auto'):
+        else:
             render_image(buf, mimetype)
 
 if __name__ == '__main__':
