@@ -275,7 +275,10 @@ def webkit_event_loop():
             if receive_handler(msg, pty):
                 logging.info("webkit-console IPC: {}".format(msg))
             else:
-                logging.info("webkit-console: {}:{} {}".format(source, line, msg))
+                extra = {'webkit_console_message':{'source': source,
+                                                   'line': line,
+                                                   'msg': msg}}
+                logging.info("{}:{} {}".format(source, line, msg), extra=extra)
     quit()
 
 def pty_loop(pty, execute, schirmview):
@@ -293,6 +296,17 @@ def pty_loop(pty, execute, schirmview):
                 logging.warn("unknown render event: {}".format(x[0]))
     stop()
 
+
+class ConsoleLogMessageFilter(logging.Filter):
+
+    def filter(self, record):
+        # import pprint
+        # pprint.pprint(record.__dict__)
+        return record.levelname == 'INFO' \
+            and record.module == 'schirm' \
+            and hasattr(record, 'webkit_console_message')
+
+
 def main():
 
     signal.signal(signal.SIGINT, lambda sig, stackframe: quit())
@@ -300,6 +314,7 @@ def main():
 
     parser = argparse.ArgumentParser(description="A linux compatible terminal emulator providing modes for rendering (interactive) html documents.")
     parser.add_argument("-v", "--verbose", help="be verbose, -v for info, -vv for debug log level", action="count")
+    parser.add_argument("-c", "--console-log", help="write all console.log messages to stdout", action="store_true")
     args = parser.parse_args()
 
     if args.verbose:
@@ -307,6 +322,16 @@ def main():
 
     if not (args.verbose and args.verbose > 1):
         warnings.simplefilter('ignore')
+
+    if args.console_log:
+        logger = logging.getLogger()
+        logger.setLevel(logging.INFO)
+        ch = logging.StreamHandler()
+        ch.setLevel(logging.INFO)
+        formatter = logging.Formatter('%(message)s')
+        ch.setFormatter(formatter)
+        logger.addHandler(ch)
+        logger.addFilter(ConsoleLogMessageFilter())
 
     try:
         __IPYTHON__
