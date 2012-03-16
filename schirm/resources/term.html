@@ -102,12 +102,13 @@ var Lines = (function(linesElement, term) {
 
   var fn = {
 
-    init: function(lines) {
-      linesElement.innerHTML = "";
-      for (var i=0; i<lines; i++) {
-         var span = document.createElement("span");
-         linesElement.appendChild(span);
-      }
+    init: function() {
+      // var lines = 25;
+      // linesElement.innerHTML = "";
+      // for (var i=0; i<lines; i++) {
+      //    var span = document.createElement("span");
+      //    linesElement.appendChild(span);
+      // }
     },
 
     show: function(enable) {
@@ -115,7 +116,11 @@ var Lines = (function(linesElement, term) {
     },
 
     elementIndex: function(lineNumber) {
-      return linesElement.childNodes.length - term.size.lines + lineNumber;
+      if (linesElement.childNodes.length < term.size.lines) {
+        return lineNumber;
+      } else {
+        return linesElement.childNodes.length - term.size.lines + lineNumber;
+      }
     },
 
     scrollToBottom: function() {
@@ -130,11 +135,30 @@ var Lines = (function(linesElement, term) {
       linesElement.scrollTop += linesElement.offsetHeight;
     },
 
+    lazyLinesInit: function(linenumber) {
+      // ensure that all lines up to linenumber exist
+      if (linesElement.childNodes.length < term.size.lines) {
+        var missingLines = 1 + linenumber - linesElement.childNodes.length;
+        console.log("missing lines: " + missingLines);
+        if (missingLines > 0) {
+          for (var i=0; i<missingLines; i++) {
+            var span = document.createElement("span");
+            span.innerHTML = "\n";
+            linesElement.appendChild(span);
+          }
+        }
+      }
+    },
+
     setLine: function(linenumber, content) {
+      this.lazyLinesInit(linenumber);
+      console.log('setLine: ' + linenumber + " (" + this.elementIndex(linenumber) + ")");
       linesElement.childNodes[this.elementIndex(linenumber)].innerHTML = content + "\n";
     },
 
     insertLine: function(linenumber, content) {
+      this.lazyLinesInit(linenumber);
+      console.log('insertLine: ' + linenumber + " (" + this.elementIndex(linenumber) + ")");
       var span = document.createElement('span');
       span.innerHTML = content + "\n";
       if ((term.size.lines-1) <= linenumber) {
@@ -145,22 +169,33 @@ var Lines = (function(linesElement, term) {
     },
 
     appendLine: function(content) {
+      this.lazyLinesInit(term.size.lines);
+      console.log("-- append line:");
+      console.log(content);
+      console.log("--");
       var span = document.createElement("span");
       span.innerHTML = content + "\n";
       linesElement.appendChild(span);
     },
 
     removeLine: function(linenumber) {
-      // lines 'removed' at position 0 move 'automatically' to the history
-      //if (linenumber != 0) {
-      //console.log("removing line number"+linenumber+" realindex:"+this.elementIndex(linenumber));
+      this.lazyLinesInit(linenumber);
       linesElement.removeChild(linesElement.childNodes[this.elementIndex(linenumber)]);
-      //}
     },
 
     removeLastLine: function() {
-      //console.log("removing Last Line: " + linesElement.childNodes.length);
+      this.lazyLinesInit(term.size.lines);
       linesElement.removeChild(linesElement.lastChild);
+    },
+
+    pruneTrailingEmptyLines: function() {
+      while (1) {
+        if ((linesElement.childNodes.length <= term.size.lines)
+            && linesElement.lastChild.textContent.match(/^ *\n/g)) { // todo: check that only the default classes are set (no cursor, no inverted-bg etc)
+          console.log("pruning last child");
+          linesElement.removeChild(linesElement.lastChild);
+        }
+      }
     },
 
     getSize: function() {
@@ -211,7 +246,7 @@ var Lines = (function(linesElement, term) {
     // iframe functions
     insertIframe: function (linenumber, id) {
       // insert an iframe 'line' before linenumber
-
+      console.log("insert iframe line at " + linenumber);
       // close the old iframe
       if (term.currentIframe) {
         try {
@@ -219,10 +254,13 @@ var Lines = (function(linesElement, term) {
         } catch (e) { }
       }
 
+      this.lazyLinesInit(linenumber+1);
       var div = document.createElement('div');
       if (term.size.lines <= linenumber) {
         linesElement.appendChild(div);
       } else {
+        console.log('insert iframe at ' + linenumber);
+        console.log('element index: ' + this.elementIndex(linenumber));
         linesElement.insertBefore(div, linesElement.childNodes[this.elementIndex(linenumber)]);
       }
 
@@ -252,8 +290,9 @@ var Lines = (function(linesElement, term) {
     // contentDocument.write content (a string) to the currentIframe and
     // resize it (vertically) if necessary
     iframeWrite: function (content) {
-      console.log('iframe_write');
       var iframe = term.currentIframe;
+      console.log('iframe_write ' + iframe);
+      console.log('iframe: ' + iframe.contentDocument);
       try {
         iframe.contentDocument.write(content);
       } catch (e) {
@@ -320,6 +359,7 @@ var App = (function(appElement, term) {
     insertLine: function(linenumber, content) {
       var span = document.createElement('span');
       span.innerHTML = content + "\n";
+      
       if (term.size.lines <= linenumber) {
         appElement.appendChild(span);
         appElement.removeChild(appElement.firstChild);
@@ -480,7 +520,7 @@ var term;
 
 function termInit() {
   term = Term();
-  term.init(80);
+  term.init();
   term.resizeHandler();
 
   document.body.onresize = term.resizeHandler;

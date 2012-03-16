@@ -37,7 +37,7 @@ class Line(UserList):
         self.size = size
         self.default_char = default_char
         self.data = [self.default_char] * self.size
-        self.changed = True
+        self.changed = False # empty lines are rendered lazily
         # if set to a number, render a cursor block on this line at
         # the given position:
         self.cursorpos = None
@@ -46,14 +46,26 @@ class Line(UserList):
 
     def set_size(self, size):
         """ set the size in columns for this line """
-        self.changed = True
-        if size > self.size:
-            self.extend([self.default_char] * (size - self.size))
+        #self.changed = True
+        #if size > self.size:
+        #    self.extend([self.default_char] * (size - self.size))
 
         self.size = size
+        
+    def _ensure_size(self, pos=None):
+        """Ensure that this line is filled with at least pos default char characters.
+
+        pos defaults to self.size."""
+        if pos == None:
+            pos = self.size
+
+        missing_chars = 1 + pos - len(self)
+        if missing_chars > 0:
+            self.extend([self.default_char] * missing_chars)
 
     def reverse(self):
         """ swap foreground and background for each character """
+        self._ensure_size()
         self.changed = True
         for char in self:
             char._replace(reverse=True)
@@ -63,12 +75,14 @@ class Line(UserList):
         Inserts count chars at pos.
         (see Screen insert_characters)
         """
+        self._ensure_size(pos + count)
         self.changed = True
         for _ in range(min(self.size - pos, count)):
             self.insert(pos, char)
             self.pop()
 
     def replace_character(self, pos, char):
+        self._ensure_size(pos)
         self.changed = True
         self[pos] = char
 
@@ -77,6 +91,7 @@ class Line(UserList):
         Delete count characters at pos, characters after pos move left.
         Use char to fill holes at the current end of the line.
         """
+        self._ensure_size(pos + count)
         self.changed = True
         for _ in range(min(self.size - pos, count)):
             self.pop(pos)
@@ -84,6 +99,7 @@ class Line(UserList):
 
     def erase_characters(self, pos, count, char):
         """ Replace count characters beginning at pos with char. """
+        self._ensure_size(pos + count)
         self.changed = True
         for p in range(pos, min(pos + count, self.size)):
             self[p] = char
@@ -92,17 +108,19 @@ class Line(UserList):
         """ implements Screen.erase_in_line for a Line. """
         self.changed = True
 
-        interval = (
+        interval, ensure_size = (
             # a) erase from the cursor to the end of line, including
             # the cursor,
-            range(pos, self.size),
+            (range(pos, self.size), lambda: self._ensure_size()),
             # b) erase from the beginning of the line to the cursor,
             # including it,
-            range(0, pos + 1),
+            (range(0, pos + 1), lambda: self._ensure_size(pos+1)),
             # c) erase the entire line.
-            range(0, self.size)
+            (range(0, self.size), lambda: self._ensure_size()),
         )[type_of]
-
+        
+        ensure_size()
+        
         for column in interval:
             self[column] = char
 
@@ -310,11 +328,11 @@ class TermScreen(pyte.Screen):
         self.cursor_position()
 
     def resize(self, lines=None, columns=None):
-        """Resize the screen to the given dimensions.
+        """Resize the screen to the given dimensions keeping the history intact.
 
         If the requested screen size has more lines than the existing
         screen, lines will be added at the bottom. If the requested
-        size has less lines than the existing screen lines will be
+        size has less lines than the existing screen, lines will be
         clipped at the top of the screen. Similarly, if the existing
         screen has less columns than the requested screen, columns will
         be added at the right, and if it has more -- columns will be

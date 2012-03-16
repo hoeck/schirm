@@ -223,4 +223,7 @@ class Server(object):
             name = "/" + name
         if frame_id not in self.resources:
             self.resources[frame_id] = {}
+
+        # todo: cleanup old resources:
+        # need timeout and old iframe to decide whether to delete
         self.resources[frame_id][name] = self.make_response(mimetype or self.guess_type(name), data)

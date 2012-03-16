@@ -167,8 +167,11 @@ class EventRenderer():
 
     @staticmethod
     def append(line):
-        content = renderline(line)
-        return "term.appendLine({});".format(json.dumps(content))
+        if line.changed:
+            content = renderline(line)
+            return "term.appendLine({});".format(json.dumps(content))
+        else:
+            return ""
 
     @staticmethod
     def insert(index, line):
@@ -219,7 +222,7 @@ class EventRenderer():
 
 class Pty(object):
 
-    def __init__(self, size=(80, 24)):
+    def __init__(self, size=(80, 25)):
         pid, master = os.forkpty()
         if pid == 0:
             # child
@@ -366,7 +369,7 @@ class Pty(object):
         lines = self.screen.linecontainer
         
         if not self.screen.cursor.hidden and not self.screen.iframe_mode:
-            # make sure the cursor is drawn
+            # make sure the terminal cursor is drawn
             lines.show_cursor(self.screen.cursor.y,
                               self.screen.cursor.x,
                               'cursor' if self._focus else 'cursor-inactive')
