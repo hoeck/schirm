@@ -256,13 +256,14 @@ var Lines = (function(linesElement, term) {
 
       this.lazyLinesInit(linenumber+1);
       var div = document.createElement('div');
-      if (term.size.lines <= linenumber) {
-        linesElement.appendChild(div);
-      } else {
-        console.log('insert iframe at ' + linenumber);
-        console.log('element index: ' + this.elementIndex(linenumber));
-        linesElement.insertBefore(div, linesElement.childNodes[this.elementIndex(linenumber)]);
-      }
+      // if (term.size.lines <= linenumber) {
+      //   linesElement.appendChild(div);
+      // } else {
+      //   console.log('insert iframe at ' + linenumber);
+      //   console.log('element index: ' + this.elementIndex(linenumber));
+      //   linesElement.insertBefore(div, linesElement.childNodes[this.elementIndex(linenumber)]);
+      // }
+      linesElement.replaceChild(div, linesElement.childNodes[this.elementIndex(linenumber)]);
 
       var iframe = document.createElement('iframe');
       iframe.name = id;

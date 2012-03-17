@@ -213,6 +213,10 @@ class LineContainer():
     def __getitem__(self, index):
         return self.lines[self.realLineIndex(index)]
 
+    def __setitem__(self, index, line):
+        self.lines[self.realLineIndex(index)] = line
+        self.events.append(('set', index, line))
+
     def __iter__(self):
         # do we need an __iter__ method?
         return self.lines[self.realLineIndex(0):].__iter__()
@@ -696,15 +700,19 @@ class TermScreen(pyte.Screen):
         return (self.iframe_id or 0) + 1;
 
     def iframe_enter(self, *args):
-        # insert an iframe line at the current cursor position (like self.index())
+        # replace the current lie with an iframe line at the current
+        # cursor position (like self.index())
         # all following chars are written to that frame via
         # iframe.document.write
+        # TODO: replace document.open/write/close by writing all chars
+        #       to this iframe using an http connection
         # For arguments, see IframeLine
 
         if self.iframe_mode == None:
             self.linecontainer.iframe_enter()
             self.iframe_id = self.get_next_iframe_id()
-            self.linecontainer.insert(self.cursor.y, IframeLine(str(self.iframe_id), args))
+            #self.linecontainer.insert(self.cursor.y, IframeLine(str(self.iframe_id), args))
+            self.linecontainer[self.cursor.y] = IframeLine(str(self.iframe_id), args)
             self.iframe_mode = 'open' # iframe document opened
         elif self.iframe_mode == 'closed':
             self.iframe_mode = 'open'

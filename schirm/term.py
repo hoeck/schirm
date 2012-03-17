@@ -176,10 +176,17 @@ class EventRenderer():
     @staticmethod
     def insert(index, line):
         if isinstance(line, termscreen.IframeLine):
-            return 'term.insertIframe({}, {}, {});'.format(index, json.dumps(line.id), json.dumps(line.args))
+            assert False, "Insert line semantics are only defined for plain lines!"
         else:
             content = renderline(line)
             return "term.insertLine({}, {});".format(index, json.dumps(content))
+
+    @staticmethod
+    def set(index, line):
+        if isinstance(line, termscreen.IframeLine):
+            return 'term.insertIframe({}, {}, {});'.format(index, json.dumps(line.id), json.dumps(line.args))
+        else:
+            assert False, "Set line semantics are only defined for iframes!"
 
     @staticmethod
     def iframe(content):
