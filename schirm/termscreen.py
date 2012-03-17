@@ -41,8 +41,9 @@ class Line(UserList):
         # if set to a number, render a cursor block on this line at
         # the given position:
         self.cursorpos = None
-        # the kind of cursor to render, either cursor or 'cursor-inactive'
-        self.cursorclass = 'cursor'
+        # the kind of cursor to render, either 'cursor' or 'cursor-inactive'
+        # set in self.show_cursor()
+        self.cursorclass = ''
 
     def set_size(self, size):
         """ set the size in columns for this line """
@@ -123,6 +124,18 @@ class Line(UserList):
         
         for column in interval:
             self[column] = char
+    
+    def show_cursor(self, cursorpos, cursorclass):
+        """Show the cursor on this line at cursorpos using cursorclass."""
+        self._ensure_size(cursorpos)
+        self.changed = True
+        self.cursorpos = cursorpos
+        self.cursorclass = cursorclass
+
+    def hide_cursor(self):
+        """Turn off the cursor on this line."""
+        self.changed = True
+        self.cursorpos = None
 
 
 class IframeLine(Line):
@@ -163,6 +176,14 @@ class IframeLine(Line):
         pass
 
     def erase_in_line(self, type_of, pos, char):
+        pass
+
+    def show_cursor(self, cursorpos, cursorclass):
+        # showing the cursor on an iframe line could be rendered
+        # by highlighting the iframe?
+        pass
+
+    def hide_cursor(self):
         pass
 
 
@@ -230,13 +251,10 @@ class LineContainer():
     ## cursor show and hide events
 
     def show_cursor(self, index, column, cursorclass='cursor'):
-        self[index].changed = True
-        self[index].cursorpos = column
-        self[index].cursorclass = cursorclass
+        self[index].show_cursor(column, cursorclass)
 
     def hide_cursor(self, index):
-        self[index].changed = True
-        self[index].cursorpos = None
+        self[index].hide_cursor()
 
     ## iframe events, not directly line-based
 
@@ -468,7 +486,6 @@ class TermScreen(pyte.Screen):
 
         :param unicode char: a character to display.
         """
-
         # Translating a given character.
         if self.charset != 0 and 0: # commented out
             # somehow, the latin 1 encoding done here is wrong,
@@ -485,6 +502,10 @@ class TermScreen(pyte.Screen):
                 self.linefeed()
             else:
                 self.cursor.x -= 1
+
+        # Drawing on an IframeLine reverts it to a plain text Line.
+        if isinstance(self.linecontainer[self.cursor.y], IframeLine):
+            self.linecontainer[self.cursor.y] = self._create_line()
 
         # If Insert mode is set, new characters move old characters to
         # the right, otherwise terminal is in Replace mode and new
@@ -711,7 +732,6 @@ class TermScreen(pyte.Screen):
         if self.iframe_mode == None:
             self.linecontainer.iframe_enter()
             self.iframe_id = self.get_next_iframe_id()
-            #self.linecontainer.insert(self.cursor.y, IframeLine(str(self.iframe_id), args))
             self.linecontainer[self.cursor.y] = IframeLine(str(self.iframe_id), args)
             self.iframe_mode = 'open' # iframe document opened
         elif self.iframe_mode == 'closed':

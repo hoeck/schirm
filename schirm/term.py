@@ -150,6 +150,8 @@ class EventRenderer():
     @staticmethod
     def reset(lines):
         if lines:
+            # todo: lines are rendered lazily: there should be no need to 
+            #       walk through all lines and set them empty!
             return "term.reset({});\n{}" \
                 .format(len(lines),
                         "\n".join([set_line_to(i,renderline(l))
@@ -186,7 +188,8 @@ class EventRenderer():
         if isinstance(line, termscreen.IframeLine):
             return 'term.insertIframe({}, {}, {});'.format(index, json.dumps(line.id), json.dumps(line.args))
         else:
-            assert False, "Set line semantics are only defined for iframes!"
+            content = renderline(line)
+            return set_line_to(index, content)
 
     @staticmethod
     def iframe(content):
