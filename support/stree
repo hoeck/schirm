@@ -139,7 +139,7 @@ def create_tree(root=".", filter_f=lambda x: True):
         return {'name': name}
 
 def show_tree(tree):
-    with schirm.frame(width='100%', height='auto'):
+    with schirm.frame():
         # schirm.register_resource('../misc/jquery-1.6.2.js')
         # schirm.register_resource('../misc/d3.min.js')
         # schirm.register_resource('../misc/d3.layout.min.js')
