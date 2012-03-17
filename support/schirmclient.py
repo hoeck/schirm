@@ -63,14 +63,20 @@ def enter():
     sys.stdout.write("".join((INTRO, 'enter', END)))
     sys.stdout.flush()
 
-def leave():
+def leave(newline=True):
     """Get back to normal terminal emulation mode.
 
     If not already done, invoke close() to close the iframe
     document. All static resources remain available until a new iframe
     is opened again.
+
+    If newline is True, advance the cursor to the next line. If set to
+    False, the cursor is left on the current iframe line and any
+    following output may replace the iframe.
     """
     sys.stdout.write(EXIT)
+    if newline:
+        sys.stdout.write("\n")
     sys.stdout.flush()
 
 def close():
@@ -83,13 +89,13 @@ def close():
     sys.stdout.flush()
 
 @contextmanager
-def frame():
+def frame(newline=True):
     """Enter frame mode, leaving it on return or exceptions."""
     try:
         enter()
         yield
     finally:
-        leave()
+        leave(newline=newline)
 
 def register_resource(path, name=None, mimetype=''):
     """Make the resource name available to the current iframe.
