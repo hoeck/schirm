@@ -228,11 +228,13 @@ var Lines = (function(linesElement, term) {
       // }
     },
 
-    reset: function(lines) {
-      linesElement.innerHtml = "";
-      for (var i; i<lines; i++) {
-        term.appendLine("");
-      }
+    // clear all a lines and the history (
+    reset: function() {
+      console.log("reset")
+      linesElement.innerHTML = "";
+      // for (var i; i<lines; i++) {
+      //   term.appendLine("");
+      // }
       // var lines = lines || term.size.lines;
       // console.log("resetting terminal to "+lines+" lines");
       // linesElement.innerHTML = "";

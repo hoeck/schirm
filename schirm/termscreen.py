@@ -32,12 +32,11 @@ class Line(UserList):
     """
     A line of characters
     """
-
     def __init__(self, size, default_char):
         self.size = size
         self.default_char = default_char
-        self.data = [self.default_char] * self.size
         self.changed = False # empty lines are rendered lazily
+        self.data = [] # UserList data attribute
         # if set to a number, render a cursor block on this line at
         # the given position:
         self.cursorpos = None
@@ -45,12 +44,14 @@ class Line(UserList):
         # set in self.show_cursor()
         self.cursorclass = ''
 
+    def is_empty(self):
+        return (not self) or all(c == self._default_char for c in line)
+
     def set_size(self, size):
         """ set the size in columns for this line """
         #self.changed = True
         #if size > self.size:
         #    self.extend([self.default_char] * (size - self.size))
-
         self.size = size
         
     def _ensure_size(self, pos=None):
@@ -154,7 +155,6 @@ class IframeLine(Line):
         self.args = {'width':'100%', 'height':'auto'}
         self.args.update(dict(args[i:i+2] for i in range(0, len(args), 2)))
         self.id = id
-        self.data = []
         self.changed = False
 
     def set_size(self, size):
@@ -187,58 +187,86 @@ class IframeLine(Line):
         pass
 
 
-class LineContainer():
+class LineContainer(): # lazy
 
-    def __init__(self):
+    def __init__(self, create_line_fn):
+        # the real initialization happens in self.reset()
         self.height = 0
         self.lines  = []
+        # list of events (tuples) sent to the browser
         self.events = []
+        self._create_line_fn = create_line_fn
+
+    def _create_line(self):
+        return self._create_line_fn()
+
+    def _ensure_lines(self, index=None, xxx=None):
+        """Ensure that all lines up to index are present."""       
+        if len(self.lines) < self.height:
+            if index == None:
+                index = self.height
+            missing_lines =  1 + index - len(self.lines)
+            if xxx:
+                print "index:", index
+                print "current lines:", len(self.lines)
+                print "missing lines:", missing_lines
+                print "rli:", self.realLineIndex(index)
+            for i in range(missing_lines):
+                self.lines.append(self._create_line())
 
     def realLineIndex(self, i):
-        return len(self.lines) - self.height + i
+        if len(self.lines) < self.height:
+            return i
+        else:
+            return len(self.lines) - self.height + i
 
     def get_and_clear_events(self):
         ret = self.events
         self.events = []
         return ret
 
-    def reset(self, lines):
-        self.height = len(lines)
-        self.lines = lines # a list of Line objects
-        for l in lines:
-            l.changed = False
-        self.events.append(('reset', lines))
+    def reset(self, height):
+        self.height = height # height of the terminal screen in lines
+        self.lines = [] # a list of Line objects, created lazily
+        self.events.append(('reset',))
 
     def pop(self, index):
+        self._ensure_lines(index)
         ri = self.realLineIndex(index)
         line = self.lines.pop(ri)
         self.events.append(('pop', index, line))
         return line
 
     def pop_bottom(self):
+        self._ensure_lines()
         line = self.lines.pop(len(self.lines)-1)
         self.events.append(('pop_bottom',))
         return line
 
     def append(self, line):
+        self._ensure_lines()
         self.lines.append(line)
         line.changed = False
         self.events.append(('append', line))
 
     def insert(self, index, line):
+        self._ensure_lines(index)
         ri = self.realLineIndex(index)
         self.lines.insert(ri, line)
         line.changed = False
         self.events.append(('insert', index, line))
 
     def __getitem__(self, index):
+        self._ensure_lines(index, 1)
         return self.lines[self.realLineIndex(index)]
 
     def __setitem__(self, index, line):
+        self._ensure_lines(index)
         self.lines[self.realLineIndex(index)] = line
         self.events.append(('set', index, line))
 
     def __iter__(self):
+        self._ensure_lines() # ???
         # do we need an __iter__ method?
         return self.lines[self.realLineIndex(0):].__iter__()
 
@@ -251,9 +279,11 @@ class LineContainer():
     ## cursor show and hide events
 
     def show_cursor(self, index, column, cursorclass='cursor'):
+        self._ensure_lines(index)
         self[index].show_cursor(column, cursorclass)
 
     def hide_cursor(self, index):
+        self._ensure_lines(index)
         self[index].hide_cursor()
 
     ## iframe events, not directly line-based
@@ -291,7 +321,7 @@ class TermScreen(pyte.Screen):
     def __init__(self, columns, lines):
         self.savepoints = []
         self.lines, self.columns = lines, columns
-        self.linecontainer = LineContainer()
+        self.linecontainer = LineContainer(self._create_line)
         self.iframe_mode = None
         self.iframe_id = None
         self.reset()
@@ -307,7 +337,7 @@ class TermScreen(pyte.Screen):
         return Line(self.columns, self._default_char)
 
     def _is_empty_line(self, line):
-        return all(c == self._default_char for c in line)
+        return line.is_empty()
 
     def reset(self):
         """Resets the terminal to its initial state.
@@ -325,8 +355,8 @@ class TermScreen(pyte.Screen):
            and tabstops should be reset as well, thanks to
            :manpage:`xterm` -- we now know that.
         """
-        lines = [self._create_line() for _ in range(self.lines)]
-        self.linecontainer.reset(lines)
+        #lines = [self._create_line() for _ in range(self.lines)]
+        self.linecontainer.reset(self.lines)
 
         if self.iframe_mode:
             self.iframe_leave()

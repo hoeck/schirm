@@ -148,16 +148,17 @@ def set_line_to(i, content):
 class EventRenderer():
 
     @staticmethod
-    def reset(lines):
-        if lines:
-            # todo: lines are rendered lazily: there should be no need to 
-            #       walk through all lines and set them empty!
-            return "term.reset({});\n{}" \
-                .format(len(lines),
-                        "\n".join([set_line_to(i,renderline(l))
-                                   for i,l in enumerate(lines)]))
-        else:
-            return "term.reset();"
+    def reset():
+        # if lines:
+        #     # todo: lines are rendered lazily: there should be no need to 
+        #     #       walk through all lines and set them empty!
+        #     # return "term.reset({});\n{}" \
+        #     #     .format(len(lines),
+        #     #             "\n".join([set_line_to(i,renderline(l))
+        #     #                        for i,l in enumerate(lines)]))
+        #     assert False
+        # else:
+        return "term.reset();"
 
     @staticmethod
     def pop(index, line):
@@ -385,6 +386,12 @@ class Pty(object):
                               'cursor' if self._focus else 'cursor-inactive')
 
         events = lines.get_and_clear_events()
+        for e in events:
+            ev = e[0]
+            if ev == 'insert':
+                print ev
+            else:
+                print ev
 
         triggers = {}
         for e in events:
