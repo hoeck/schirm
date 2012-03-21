@@ -150,6 +150,17 @@ var Lines = (function(linesElement, term) {
       }
     },
 
+    setTrailingSpace: function(visibleLinesStart, visibleLinesEnd) {
+      var filler = document.getElementById("termTrailingSpace");
+      var linesHeight = 0;
+      for (var i=visibleLinesStart; i<=visibleLinesEnd; i++) {
+        linesHeight += linesElement.childNodes[i].height;
+      }
+      var fillHeight = document.body.clientHeight - linesHeight;
+      console.log("linesHeight: " + linesHeight + " fillHeight: " + fillHeight);
+      filler.setAttribute("style", "height:"+fillHeight+"px;");
+    },
+
     setLine: function(linenumber, content) {
       this.lazyLinesInit(linenumber);
       console.log('setLine: ' + linenumber + " (" + this.elementIndex(linenumber) + ")");
@@ -534,6 +545,7 @@ function termInit() {
 </head>
 <body>
 <pre id="term"></pre>
+<div id="termTrailingSpace" style="height=0"/>
 <pre id="app"></pre>
 </body>
 </html>

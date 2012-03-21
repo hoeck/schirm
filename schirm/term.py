@@ -386,13 +386,6 @@ class Pty(object):
                               'cursor' if self._focus else 'cursor-inactive')
 
         events = lines.get_and_clear_events()
-        for e in events:
-            ev = e[0]
-            if ev == 'insert':
-                print ev
-            else:
-                print ev
-
         triggers = {}
         for e in events:
             # iframe events do sometimes more than just updating the
