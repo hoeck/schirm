@@ -45,7 +45,8 @@ class Line(UserList):
         self.cursorclass = ''
 
     def is_empty(self):
-        return (not self) or all(c == self.default_char for c in self.data)
+        return (not self.cursorpos) \
+            and ((not self) or all(c == self.default_char for c in self.data))
 
     def set_size(self, size):
         """ set the size in columns for this line """
@@ -208,28 +209,39 @@ class LineContainer(): # lazy
     def _create_line(self):
         return self._create_line_fn()
 
-    def _ensure_lines(self, index=None, xxx=None):
+    def _ensure_lines(self, _index=None, xxx=None):
         """Ensure that all lines up to index are present."""       
         if (len(self.lines) - self.screen0) < self.height:
-            if index == None:
+            if _index == None:
                 index = self.height
-            # if xxx:
-            #     print "index:", index
-            #     print "current lines:", len(self.lines)
-            #     print "screen0:", len(self.lines)
-            #     print "missing lines:", missing_lines
-            #     print "reallineindex:", self.realLineIndex(index)
+                print "_ensure_lines called without arg"
+                import traceback
+                traceback.print_stack()
+            else:
+                index = _index
 
             missing_lines =  1 + index - (len(self.lines) - self.screen0)
-            for i in range(missing_lines):
-                self.lines.append(self._create_line())
 
-    def realLineIndex(self, i):
+            # print "MISSING LINES == %s" % (missing_lines,)
+            # import traceback
+            # traceback.print_stack()
+
+            if 0:
+                print "ensure_lines(%r)" % (_index , )
+                print "  index:", index
+                print "  height:", self.height
+                print "  len lines:", len(self.lines)
+                print "  screen0:", self.screen0
+                print "  missing lines:", missing_lines
+                print "  reallineindex:", self.real_line_index(index)
+
+            for i in range(missing_lines):
+                # must issue an append event for each appended line
+                print "append-line!"
+                self._append(self._create_line())
+
+    def real_line_index(self, i):
         """Given a linenumber i, return the index into self.lines."""
-        # if len(self.lines) < self.height:
-        #     return i
-        # else:
-        #     return len(self.lines) - self.height + i
         return self.screen0 + i
 
     def get_and_clear_events(self):
@@ -237,15 +249,25 @@ class LineContainer(): # lazy
         self.events = []
         return ret
 
+    def get_changed_lines(self):
+        """Iterator to get a sequence of all changed lines.
+
+        Return a list of (linenumber, Line).
+        """
+        # todo: change term.html so that we can pass index numbers directly
+        #       (should allow for a simpler implementation)
+        # for now, start at terminal line 0
+        return ((i,l) for i, l in enumerate(self.lines[self.screen0:]))
+
     def reset(self, height):
         self.height = height # height of the terminal screen in lines
-        self.screen0 = 0
+        self.set_screen0(0)
         self.lines = [] # a list of Line objects, created lazily
         self.events.append(('reset',))
 
     def pop(self, index):
         self._ensure_lines(index)
-        ri = self.realLineIndex(index)
+        ri = self.real_line_index(index)
         if self.screen0 > 0:
             self.screen0 -= 1
         line = self.lines.pop(ri)
@@ -260,17 +282,22 @@ class LineContainer(): # lazy
         self.events.append(('pop_bottom',))
         return line
 
-    def append(self, line):
-        self._ensure_lines()
+    def _append(self, line):
+        """Append line to self.lines and store an appropriate event."""
         if (len(self.lines) - self.screen0) >= self.height:
             self.screen0 += 1
         self.lines.append(line)
         line.changed = False
         self.events.append(('append', line))
 
+    def append(self, line):
+        self._ensure_lines()
+        self.append()
+
     def insert(self, index, line):
+        print "insert"
         self._ensure_lines(index)
-        ri = self.realLineIndex(index)
+        ri = self.real_line_index(index)
         if (len(self.lines) - self.screen0) >= self.height:
             self.screen0 += 1
         self.lines.insert(ri, line)
@@ -279,20 +306,31 @@ class LineContainer(): # lazy
 
     def __getitem__(self, index):
         self._ensure_lines(index, 1)
-        return self.lines[self.realLineIndex(index)]
+        return self.lines[self.real_line_index(index)]
 
     def __setitem__(self, index, line):
         self._ensure_lines(index)
-        self.lines[self.realLineIndex(index)] = line
+        self.lines[self.real_line_index(index)] = line
         self.events.append(('set', index, line))
 
     def __iter__(self):
         self._ensure_lines() # ???
         # do we need an __iter__ method?
-        return self.lines[self.realLineIndex(0):].__iter__()
+        return self.lines[self.real_line_index(0):].__iter__()
 
-    def resize(self):
-        pass
+    def resize(self, newheight):
+        if self.height <= newheight:
+            # enlarge screen
+            # nothing to do as lines are rendered lazily
+            pass
+        else:
+            # shrink screen
+            # try to remove blank lines from the bottom first
+            self.purge_empty_lines()
+            # adjust screen0 to show no more than newheight lines
+            self.set_screen0(max(screen0, len(self.lines) - height))
+
+        self.height = newheight
 
     def set_title(self, title):
         self.events.append(('set_title', title))
@@ -319,15 +357,26 @@ class LineContainer(): # lazy
                 return self.height - i
         return 0
 
+    def set_screen0(self, screen0):
+        if self.screen0 != screen0:
+            self.screen0 = screen0
+            self.events.append(('set_screen0', self.screen0))
+
+    def erase_in_display(self, cursor_line, cursor_column):
+        """Implements marginless erase_in_display type 2 preserving the history."""
+        self.set_screen0(len(self.lines))
+        print "erase in display:", self.screen0
+        self.show_cursor(cursor_line, cursor_column)
+
     ## cursor show and hide events
 
     def show_cursor(self, index, column, cursorclass='cursor'):
         self._ensure_lines(index)
-        self[index].show_cursor(column, cursorclass)
+        self.lines[self.real_line_index(index)].show_cursor(column, cursorclass)
 
     def hide_cursor(self, index):
         self._ensure_lines(index)
-        self[index].hide_cursor()
+        self.lines[self.real_line_index(index)].hide_cursor()
 
     ## iframe events, not directly line-based
 
@@ -421,7 +470,7 @@ class TermScreen(pyte.Screen):
         self.cursor = Cursor(0, 0)
         self.cursor_position()
 
-    def resize(self, lines=None, columns=None):
+    def _resize(self, lines=None, columns=None):
         """Resize the screen to the given dimensions keeping the history intact.
 
         If the requested screen size has more lines than the existing
@@ -438,6 +487,9 @@ class TermScreen(pyte.Screen):
         :param int lines: number of lines in the new screen.
         :param int columns: number of columns in the new screen.
         """
+
+        # todo: reimplement resizing for a lazy line container
+
         lines = lines or self.lines
         columns = columns or self.columns
 
@@ -474,6 +526,41 @@ class TermScreen(pyte.Screen):
         self.margins = Margins(0, self.lines - 1)
 
         lc.resize()
+
+    # reimplementation of resize taking the lazy linecontainer into account
+    def resize(self, lines=None, columns=None):
+        """Resize the screen to the given dimensions keeping the history intact.
+
+        If the requested screen size has more lines than the existing
+        screen, lines will be added at the bottom. If the requested
+        size has less lines than the existing screen, lines will be
+        clipped at the top of the screen. Similarly, if the existing
+        screen has less columns than the requested screen, columns will
+        be added at the right, and if it has more -- columns will be
+        clipped at the right.
+
+        .. note:: According to `xterm`, we should also reset origin
+                  mode and screen margins, see ``xterm/screen.c:1761``.
+                  -> but we don't do this here
+        :param int lines: number of lines in the new screen.
+        :param int columns: number of columns in the new screen.
+        """
+
+        lines = lines or self.lines
+        columns = columns or self.columns
+
+        self.linecontainer.resize(lines)     
+        
+        # note: cursor line should not change when resizing
+
+        # cursor: make sure that it 'stays' on its current line
+        #newcursory = self.cursor.y + cursordelta
+        #self.cursor.y = min(max(newcursory, 0), lines-1)
+        #self.cursor.x = min(max(self.cursor.x, 0), columns-1)
+
+        self.lines, self.columns = lines, columns
+        self.margins = Margins(0, self.lines - 1)
+
 
     def set_mode(self, *modes, **kwargs):
         """Sets (enables) a given list of modes.
@@ -768,21 +855,21 @@ class TermScreen(pyte.Screen):
             # see what
             # happens to the history)
             top, bottom = self.margins # where to use them?: ans: in linecontainer as an argument to insert, pop and append
-            print "margins:", self.margins
             if top == 0 and bottom == self.lines - 1:
                 #lc = self.linecontainer
                 # find the lowest nonempty line
                 # for i in range(self.lines-1, -1, -1):
                 #     if not self._is_empty_line(lc.lines[i]):
                 #         break
-                i = self.linecontainer.last_nonempty_line()
-                print "last nonempty line:", i
+                # i = self.linecontainer.last_nonempty_line()
+                # print "last nonempty line:", i
 
                 # fill the screen with enough empty lines to push all
                 # other nonempty lines (and an additional newline) to the
                 # history
-                for _ in range(i+1): # i+1
-                    self.linecontainer.insert(bottom, self._create_line())
+                # for _ in range(i+1): # i+1
+                #     self.linecontainer.insert(bottom, self._create_line())
+                self.linecontainer.erase_in_display(self.cursor.y, self.cursor.x)
             else:
                 assert False, "not implemented"
     

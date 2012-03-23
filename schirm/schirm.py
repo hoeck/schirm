@@ -283,7 +283,6 @@ def webkit_event_loop():
 
 def pty_loop(pty, execute, schirmview):
     execute("termInit();")
-    pty.render_changes() # render initial term state
     while running() and pty.running():
         for x in pty.read_and_feed_and_render():
             # strings are executed in a js context

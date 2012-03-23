@@ -21,7 +21,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 <style type="text/css">
 pre {
     margin: 0px;
-    padding: 1px 1px 4px 1px;
+    /*padding: 1px 1px 4px 1px;*/
+    padding: 1px 1px 1px 1px;
 }
 
 iframe {
@@ -137,33 +138,40 @@ var Lines = (function(linesElement, term) {
 
     lazyLinesInit: function(linenumber) {
       // ensure that all lines up to linenumber exist
-      if (linesElement.childNodes.length < term.size.lines) {
-        var missingLines = 1 + linenumber - linesElement.childNodes.length;
-        console.log("missing lines: " + missingLines);
-        if (missingLines > 0) {
-          for (var i=0; i<missingLines; i++) {
-            var span = document.createElement("span");
-            span.innerHTML = "\n";
-            linesElement.appendChild(span);
-          }
-        }
-      }
+      //now implemented on the client !!!
+      //if (linesElement.childNodes.length < term.size.lines) {
+      //  var missingLines = 1 + linenumber - linesElement.childNodes.length;
+      //  console.log("missing lines: " + missingLines);
+      //  if (missingLines > 0) {
+      //    for (var i=0; i<missingLines; i++) {
+      //      var span = document.createElement("span");
+      //      span.innerHTML = "\n";
+      //      linesElement.appendChild(span);
+      //    }
+      //  }
+      //}
     },
 
-    setTrailingSpace: function(visibleLinesStart, visibleLinesEnd) {
-      var filler = document.getElementById("termTrailingSpace");
+    // set the height of the termTrailingSpace div so that all lines
+    // beginning with visibleLinesStart from pre#term are visible.
+    setTrailingSpace: function(visibleLinesStart) {
+      //var filler = document.getElementById("termTrailingSpace");
       var linesHeight = 0;
-      for (var i=visibleLinesStart; i<=visibleLinesEnd; i++) {
+      for (var i=visibleLinesStart; i<=linesElement.childNodes.length; i++) {
         linesHeight += linesElement.childNodes[i].height;
       }
       var fillHeight = document.body.clientHeight - linesHeight;
       console.log("linesHeight: " + linesHeight + " fillHeight: " + fillHeight);
-      filler.setAttribute("style", "height:"+fillHeight+"px;");
+      linesElement.style.setProperty("margin-bottom", fillHeight+"px");
+    },
+
+    setScreen0: function(screen0) {
+      setTrailingSpace(screen0);
     },
 
     setLine: function(linenumber, content) {
       this.lazyLinesInit(linenumber);
-      console.log('setLine: ' + linenumber + " (" + this.elementIndex(linenumber) + ")");
+      console.log('setLine: ' + linenumber + " (" + this.elementIndex(linenumber) + ")  " + "currentlines: " + linesElement.childNodes.length);
       linesElement.childNodes[this.elementIndex(linenumber)].innerHTML = content + "\n";
     },
 
@@ -182,8 +190,6 @@ var Lines = (function(linesElement, term) {
     appendLine: function(content) {
       this.lazyLinesInit(term.size.lines);
       console.log("-- append line:");
-      console.log(content);
-      console.log("--");
       var span = document.createElement("span");
       span.innerHTML = content + "\n";
       linesElement.appendChild(span);
@@ -510,6 +516,8 @@ var Term = function() {
     scrollPageUp: function() { fn.getScreen().scrollPageUp(); },
     scrollPageDown: function() { fn.getScreen().scrollPageDown(); },
 
+    setScreen0: function(linenumber) { fn.getScreen().setScreen0(linenumber); },
+
     setLine: function(linenumber, content) { fn.getScreen().setLine(linenumber, content); },
     insertLine: function(linenumber, content) { fn.getScreen().insertLine(linenumber, content); },
     appendLine: function(content) { fn.getScreen().appendLine(content); },
@@ -545,7 +553,6 @@ function termInit() {
 </head>
 <body>
 <pre id="term"></pre>
-<div id="termTrailingSpace" style="height=0"/>
 <pre id="app"></pre>
 </body>
 </html>

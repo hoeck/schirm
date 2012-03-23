@@ -161,6 +161,10 @@ class EventRenderer():
         return "term.reset();"
 
     @staticmethod
+    def set_screen0(screen0):
+        return "term.setScreen0({})".format(screen0)
+
+    @staticmethod
     def pop(index, line):
         return "term.removeLine({});".format(index)
 
@@ -170,11 +174,8 @@ class EventRenderer():
 
     @staticmethod
     def append(line):
-        if line.changed:
-            content = renderline(line)
-            return "term.appendLine({});".format(json.dumps(content))
-        else:
-            return ""
+        content = renderline(line)
+        return "term.appendLine({});".format(json.dumps(content))
 
     @staticmethod
     def insert(index, line):
@@ -381,6 +382,7 @@ class Pty(object):
         
         if not self.screen.cursor.hidden and not self.screen.iframe_mode:
             # make sure the terminal cursor is drawn
+            #print "cursor is", self.screen.cursor.y, self.screen.cursor.x
             lines.show_cursor(self.screen.cursor.y,
                               self.screen.cursor.x,
                               'cursor' if self._focus else 'cursor-inactive')
@@ -388,6 +390,7 @@ class Pty(object):
         events = lines.get_and_clear_events()
         triggers = {}
         for e in events:
+            print "event:", e[0]
             # iframe events do sometimes more than just updating the
             # screen
             if e[0] == 'iframe_register_resource':
@@ -414,10 +417,10 @@ class Pty(object):
 
         # line changes
         line_q = []
-        for i,line in enumerate(lines):
-            if line.changed:
-                line.changed = False
-                line_q.append(set_line_to(i, renderline(line)))
+        for i,line in lines.get_changed_lines():
+            line.changed = False
+            line_q.append(set_line_to(i, renderline(line)))
+
         q.append("\n".join(line_q))
 
         if not self.screen.cursor.hidden and not self.screen.iframe_mode:
@@ -425,6 +428,7 @@ class Pty(object):
             # we update the screen
             lines.hide_cursor(self.screen.cursor.y)
 
+        # todo: append a cursor undraw event for the next render invocation
         return q
 
     def read_and_feed_and_render(self):
