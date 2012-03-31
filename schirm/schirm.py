@@ -200,7 +200,7 @@ def handle_keypress(window, event, schirmview, pty, execute):
     else:
         return False
 
-def webkit_event_loop():
+def webkit_event_loop(console_log=None):
     """Setup, initialize and wire the schirm components:
 
     - the terminal emulator (term, termscreen)
@@ -208,6 +208,11 @@ def webkit_event_loop():
     - the local proxy webserver (webserver)
     - the thread transporting changes from term -> webkview (pty_loop)
     - the loop reading the webviews console messages
+
+    console_log .. write console.log messages to stdout
+      None: don't write them
+         1: write the message
+         2: write document-URL:line message
     """
 
     global gtkthread
@@ -274,11 +279,10 @@ def webkit_event_loop():
         if msg:
             if receive_handler(msg, pty):
                 logging.info("webkit-console IPC: {}".format(msg))
-            else:
-                extra = {'webkit_console_message':{'source': source,
-                                                   'line': line,
-                                                   'msg': msg}}
-                logging.info("{}:{} {}".format(source, line, msg), extra=extra)
+            elif console_log == 1:
+                print msg
+            elif console_log == 2:
+                print "{}:{} {}".format(source, line, msg)
     quit()
 
 def pty_loop(pty, execute, schirmview):
@@ -295,17 +299,6 @@ def pty_loop(pty, execute, schirmview):
                 logging.warn("unknown render event: {}".format(x[0]))
     stop()
 
-
-class ConsoleLogMessageFilter(logging.Filter):
-
-    def filter(self, record):
-        # import pprint
-        # pprint.pprint(record.__dict__)
-        return record.levelname == 'INFO' \
-            and record.module == 'schirm' \
-            and hasattr(record, 'webkit_console_message')
-
-
 def main():
 
     signal.signal(signal.SIGINT, lambda sig, stackframe: quit())
@@ -313,7 +306,7 @@ def main():
 
     parser = argparse.ArgumentParser(description="A linux compatible terminal emulator providing modes for rendering (interactive) html documents.")
     parser.add_argument("-v", "--verbose", help="be verbose, -v for info, -vv for debug log level", action="count")
-    parser.add_argument("-c", "--console-log", help="write all console.log messages to stdout", action="store_true")
+    parser.add_argument("-c", "--console-log", help="write all console.log messages to stdout (use -cc to include document URL and linenumber)", action="count")
     args = parser.parse_args()
 
     if args.verbose:
@@ -322,23 +315,13 @@ def main():
     if not (args.verbose and args.verbose > 1):
         warnings.simplefilter('ignore')
 
-    if args.console_log:
-        logger = logging.getLogger()
-        logger.setLevel(logging.INFO)
-        ch = logging.StreamHandler()
-        ch.setLevel(logging.INFO)
-        formatter = logging.Formatter('%(message)s')
-        ch.setFormatter(formatter)
-        logger.addHandler(ch)
-        logger.addFilter(ConsoleLogMessageFilter())
-
     try:
         __IPYTHON__
         print "IPython detected, starting webkit loop in its own thread"
-        t = threading.Thread(target=webkit_event_loop)
+        t = threading.Thread(target=webkit_event_loop, args=(args.console_log,))
         t.start()
     except:
-        webkit_event_loop()
+        webkit_event_loop(args.console_log)
 
 
 if __name__ == '__main__':
