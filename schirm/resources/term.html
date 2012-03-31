@@ -19,14 +19,35 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
 <style type="text/css">
-pre {
+
+/* DEBUG */
+/*
+#term span {
+  border: solid 1px #ccc;
+}
+*/
+
+div#termscreen {
+    height:100%;
+    position: absolute;
+    top:0px;
+    bottom:0px;
+    left:0px;
+    right:0px;
+}
+
+pre#term {
+    position:relative;
     margin: 0px;
-    /*padding: 1px 1px 4px 1px;*/
-    padding: 1px 1px 1px 1px;
+    padding-top: 1px;
+    padding-left: 1px;
+    padding-right: 1px;
+    padding-bottom: 1px;
 }
 
 iframe {
     border: None;
+    /*-webkit-transition: all 0.05s;*/
 }
 
 #term {
@@ -71,7 +92,6 @@ function getTermSize(preElement) {
   var blockSize = getCharSize(preElement);
   var cols  = Math.floor(document.body.clientWidth/blockSize.width);
   var lines = Math.floor(document.body.clientHeight/blockSize.height);
-  //console.log("resized to [lines, cols]: [" + lines + " ," + cols + "]");
   return { lines: lines, cols: cols };
 }
 
@@ -103,25 +123,17 @@ var Lines = (function(linesElement, term) {
 
   var fn = {
 
-    init: function() {
-      // var lines = 25;
-      // linesElement.innerHTML = "";
-      // for (var i=0; i<lines; i++) {
-      //    var span = document.createElement("span");
-      //    linesElement.appendChild(span);
-      // }
-    },
+    // pointer to the first terminal line
+    screen0: 0,
+
+    init: function() { },
 
     show: function(enable) {
       linesElement.style.display = enable ? "block" : "none";
     },
 
     elementIndex: function(lineNumber) {
-      if (linesElement.childNodes.length < term.size.lines) {
-        return lineNumber;
-      } else {
-        return linesElement.childNodes.length - term.size.lines + lineNumber;
-      }
+      return this.screen0 + lineNumber;
     },
 
     scrollToBottom: function() {
@@ -136,48 +148,27 @@ var Lines = (function(linesElement, term) {
       linesElement.scrollTop += linesElement.offsetHeight;
     },
 
-    lazyLinesInit: function(linenumber) {
-      // ensure that all lines up to linenumber exist
-      //now implemented on the client !!!
-      //if (linesElement.childNodes.length < term.size.lines) {
-      //  var missingLines = 1 + linenumber - linesElement.childNodes.length;
-      //  console.log("missing lines: " + missingLines);
-      //  if (missingLines > 0) {
-      //    for (var i=0; i<missingLines; i++) {
-      //      var span = document.createElement("span");
-      //      span.innerHTML = "\n";
-      //      linesElement.appendChild(span);
-      //    }
-      //  }
-      //}
-    },
-
-    // set the height of the termTrailingSpace div so that all lines
-    // beginning with visibleLinesStart from pre#term are visible.
-    setTrailingSpace: function(visibleLinesStart) {
-      //var filler = document.getElementById("termTrailingSpace");
-      var linesHeight = 0;
-      for (var i=visibleLinesStart; i<=linesElement.childNodes.length; i++) {
-        linesHeight += linesElement.childNodes[i].height;
+    adjustTrailingSpace: function(visibleLinesStart) {
+      if ((linesElement.childNodes.length - this.screen0) < term.size.lines) {
+        var start = (visibleLinesStart == undefined) ? this.screen0 : visibleLinesStart;
+        historyHeight = linesElement.childNodes[start].offsetTop;
+        // position the <pre> so that anything above the screen0 line is outside the termscreen client area
+        linesElement.style.setProperty("top", -historyHeight);
+        // set the termscreen div margin-top so that it covers all history lines (lines before line[screen0])
+        linesElement.parentElement.style.setProperty("margin-top", historyHeight);
       }
-      var fillHeight = document.body.clientHeight - linesHeight;
-      console.log("linesHeight: " + linesHeight + " fillHeight: " + fillHeight);
-      linesElement.style.setProperty("margin-bottom", fillHeight+"px");
     },
 
     setScreen0: function(screen0) {
-      setTrailingSpace(screen0);
+      this.screen0 = screen0;
+      this.adjustTrailingSpace(screen0);
     },
 
     setLine: function(linenumber, content) {
-      this.lazyLinesInit(linenumber);
-      console.log('setLine: ' + linenumber + " (" + this.elementIndex(linenumber) + ")  " + "currentlines: " + linesElement.childNodes.length);
       linesElement.childNodes[this.elementIndex(linenumber)].innerHTML = content + "\n";
     },
 
     insertLine: function(linenumber, content) {
-      this.lazyLinesInit(linenumber);
-      console.log('insertLine: ' + linenumber + " (" + this.elementIndex(linenumber) + ")");
       var span = document.createElement('span');
       span.innerHTML = content + "\n";
       if ((term.size.lines-1) <= linenumber) {
@@ -185,87 +176,41 @@ var Lines = (function(linesElement, term) {
       } else {
         linesElement.insertBefore(span, linesElement.childNodes[this.elementIndex(linenumber)]);
       }
+      this.adjustTrailingSpace();
     },
 
     appendLine: function(content) {
-      this.lazyLinesInit(term.size.lines);
-      console.log("-- append line:");
       var span = document.createElement("span");
       span.innerHTML = content + "\n";
       linesElement.appendChild(span);
+      this.adjustTrailingSpace();
     },
 
     removeLine: function(linenumber) {
-      this.lazyLinesInit(linenumber);
       linesElement.removeChild(linesElement.childNodes[this.elementIndex(linenumber)]);
+      this.adjustTrailingSpace();
     },
 
     removeLastLine: function() {
-      this.lazyLinesInit(term.size.lines);
       linesElement.removeChild(linesElement.lastChild);
-    },
-
-    pruneTrailingEmptyLines: function() {
-      while (1) {
-        if ((linesElement.childNodes.length <= term.size.lines)
-            && linesElement.lastChild.textContent.match(/^ *\n/g)) { // todo: check that only the default classes are set (no cursor, no inverted-bg etc)
-          console.log("pruning last child");
-          linesElement.removeChild(linesElement.lastChild);
-        }
-      }
+      this.adjustTrailingSpace();
     },
 
     getSize: function() {
       return getTermSize(linesElement);
     },
 
-    // Resize linesElement to display the given number of lines.
-    // Reuse existing history to fill new lines when getting larger.
-    // Like the scrolling employed by contemporary terminal emulators like
-    // gnome-terminal
     resize: function(oldLines, newLines) {
-      // curLines = linesElement.childNodes.length;
-
-      // var is_empty_line = function(element) {
-      //   return element && (element.tagName == 'span') && (element.innerHTML == '');
-      // };
-
-      // if (curLines < newLines) {
-      //   // insert blank lines at the bottom
-      //   for (var i=0; i<(newLines-curLines); i++) {
-      //     linesElement.appendChild(document.createElement('span'));
-      //   }
-      // } else {
-      //   // try to remove blank lines from the bottom
-      //   linesToRemove = oldLines - newLines;
-      //   while (is_empty_line(linesElement.lastChild) && (linesToRemove > 0)) {
-      //     linesElement.removeChild(linesElement.lastChild);
-      //     linesToRemove--;
-      //   }
-      // }
     },
 
     // clear all a lines and the history (
     reset: function() {
-      console.log("reset")
       linesElement.innerHTML = "";
-      // for (var i; i<lines; i++) {
-      //   term.appendLine("");
-      // }
-      // var lines = lines || term.size.lines;
-      // console.log("resetting terminal to "+lines+" lines");
-      // linesElement.innerHTML = "";
-      // for (var i=0; i<lines; i++) {
-      //   var span = document.createElement("span");
-      //   linesElement.appendChild(span);
-      // }
-      // term.size.lines = lines;
     },
 
     // iframe functions
     insertIframe: function (linenumber, id) {
       // insert an iframe 'line' before linenumber
-      console.log("insert iframe line at " + linenumber);
       // close the old iframe
       if (term.currentIframe) {
         try {
@@ -273,15 +218,7 @@ var Lines = (function(linesElement, term) {
         } catch (e) { }
       }
 
-      this.lazyLinesInit(linenumber+1);
       var div = document.createElement('div');
-      // if (term.size.lines <= linenumber) {
-      //   linesElement.appendChild(div);
-      // } else {
-      //   console.log('insert iframe at ' + linenumber);
-      //   console.log('element index: ' + this.elementIndex(linenumber));
-      //   linesElement.insertBefore(div, linesElement.childNodes[this.elementIndex(linenumber)]);
-      // }
       linesElement.replaceChild(div, linesElement.childNodes[this.elementIndex(linenumber)]);
 
       var iframe = document.createElement('iframe');
@@ -305,27 +242,28 @@ var Lines = (function(linesElement, term) {
 
       iframe.resizeHandler = function() { resizeIframe(iframe); };
       iframe.contentDocument.open("text/html");
+      this.adjustTrailingSpace();
     },
 
     // contentDocument.write content (a string) to the currentIframe and
     // resize it (vertically) if necessary
     iframeWrite: function (content) {
       var iframe = term.currentIframe;
-      console.log('iframe_write ' + iframe);
-      console.log('iframe: ' + iframe.contentDocument);
       try {
         iframe.contentDocument.write(content);
       } catch (e) {
         iframe.contentDocument.open("text/html");
         iframe.contentDocument.write(content);
       }
-      resizeIframe(iframe)
+      resizeIframe(iframe);
+      this.adjustTrailingSpace();
     },
 
     // call .close on the iframe document.
     iframeCloseDocument: function() {
       var iframe = term.currentIframe;
-      resizeIframe(iframe)
+      resizeIframe(iframe);
+      this.adjustTrailingSpace();
       try {
         iframe.contentDocument.close();
         iframe.addEventListener('load', function() { resizeIframe(iframe); });
@@ -389,7 +327,7 @@ var App = (function(appElement, term) {
       }
     },
 
-    appendLine: function(content) {
+    appendLine: function(content) {      
       appElement.removeChild(appElement.firstChild)
       var span = document.createElement("span");
       span.innerHTML = content + "\n";
@@ -479,7 +417,7 @@ var Term = function() {
   var state = {
     currentIframe: undefined,
     appmode: false,
-    size: { lines: 24, cols: 80 },
+    size: { lines: 24, cols: 80 } // initial size should be 0,0? or undefined?
   };
 
   var lines = Lines(document.getElementById('term'), state); // one screen to render lines + history
@@ -552,7 +490,9 @@ function termInit() {
 
 </head>
 <body>
-<pre id="term"></pre>
-<pre id="app"></pre>
+    <div id="termscreen">
+      <pre id="term"></pre>
+    </div>
+    <pre id="app"></pre>
 </body>
 </html>
