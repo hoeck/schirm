@@ -80,8 +80,7 @@ def equal_attrs(chartuple0, chartuple1):
     return \
         chartuple0 \
         and chartuple1 \
-        and (chartuple0._replace(data="") \
-                 == chartuple1._replace(data=""))
+        and (chartuple0[1:] == chartuple1[1:])
 
 class CursorMarker():
     def __init__(self, ch, cursorclass):
@@ -149,15 +148,6 @@ class EventRenderer():
 
     @staticmethod
     def reset():
-        # if lines:
-        #     # todo: lines are rendered lazily: there should be no need to 
-        #     #       walk through all lines and set them empty!
-        #     # return "term.reset({});\n{}" \
-        #     #     .format(len(lines),
-        #     #             "\n".join([set_line_to(i,renderline(l))
-        #     #                        for i,l in enumerate(lines)]))
-        #     assert False
-        # else:
         return "term.reset();"
 
     @staticmethod
@@ -390,7 +380,6 @@ class Pty(object):
         events = lines.get_and_clear_events()
         triggers = {}
         for e in events:
-            print "event:", e[0]
             # iframe events do sometimes more than just updating the
             # screen
             if e[0] == 'iframe_register_resource':
