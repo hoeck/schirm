@@ -70,10 +70,29 @@ var Lines = (function(linesElement, term) {
       linesElement.scrollTop += linesElement.offsetHeight;
     },
 
+    checkHistorySize: function() {
+      // generate an remove history event if necessary
+
+      var maxHistoryHeight = 10000; // in pixels
+      var start = this.screen0;
+      var historyHeight = linesElement.childNodes[start].offsetTop;
+
+      if (historyHeight > maxHistoryHeight) {
+        for (var i=0; i<start; i++) {
+          if ((historyHeight - linesElement.childNodes[i].offsetTop) < maxHistoryHeight) {
+            console.log('removehistory' + i);
+            return
+          }
+        }
+      }
+    },
+
     adjustTrailingSpace: function(visibleLinesStart) {
+      var start = (visibleLinesStart == undefined) ? this.screen0 : visibleLinesStart;
+      var historyHeight = linesElement.childNodes[start].offsetTop;
+
+      // adjust layout to 'render' empty lines at the bottom
       if (linesElement.childNodes.length && ((linesElement.childNodes.length - this.screen0) < term.size.lines)) {
-        var start = (visibleLinesStart == undefined) ? this.screen0 : visibleLinesStart;
-        historyHeight = linesElement.childNodes[start].offsetTop;
         // position the <pre> so that anything above the screen0 line is outside the termscreen client area
         linesElement.style.setProperty("top", -historyHeight);
         // set the termscreen div margin-top so that it covers all history lines (lines before line[screen0])
@@ -116,6 +135,13 @@ var Lines = (function(linesElement, term) {
     removeLastLine: function() {
       linesElement.removeChild(linesElement.lastChild);
       this.adjustTrailingSpace();
+    },
+
+    // remove all history lines from 0..n
+    removeHistoryLines: function(n) {
+      for (var i=0; i<n; i++) {
+        linesElement.removeChild(linesElement.firstChild);
+      }
     },
 
     getSize: function() {
@@ -383,6 +409,9 @@ var Term = function() {
     appendLine: function(content) { fn.getScreen().appendLine(content); },
     removeLine: function(linenumber) { fn.getScreen().removeLine(linenumber); },
     removeLastLine: function() { fn.getScreen().removeLastLine(); },
+
+    removeHistoryLines: function(n) { fn.getScreen().removeHistoryLines(n); },
+    checkHistorySize: function() { fn.getScreen().checkHistorySize(); },
 
     insertIframe: function (linenumber, id) { fn.getScreen().insertIframe(linenumber, id); },
     iframeWrite: function (content) { fn.getScreen().iframeWrite(content); },

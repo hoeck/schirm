@@ -29,6 +29,7 @@ import threading
 import logging
 import base64
 import pwd
+import types
 from itertools import cycle
 from UserList import UserList
 
@@ -222,6 +223,15 @@ class EventRenderer():
             gtkthread.invoke(lambda : browser.set_title(title))
         return _set_title
 
+    @staticmethod
+    def remove_history_lines(n):
+        return "term.removeHistoryLines(%s);" % n
+
+    @staticmethod
+    def check_history_size():
+        return "term.checkHistorySize();"
+
+
 class Pty(object):
 
     def __init__(self, size=(80, 25)):
@@ -307,6 +317,10 @@ class Pty(object):
     def q_set_focus(self, focus=True):
         self.input_queue.put(lambda : self.set_focus(focus))
 
+    def q_removehistory(self, lines_to_remove):
+        # the render thread works off the output_queue
+        self.output_queue.put(lambda: self.screen.remove_history(lines_to_remove))
+
     def write(self, s):
         """
         Writes the given string or each string in the given iterator to
@@ -348,8 +362,9 @@ class Pty(object):
         self._server = server
 
     def resize(self, lines, cols):
-        self.screen.resize(lines, cols)
-        self.set_size(lines, cols)
+        # this is only eventual consistent :/
+        self.output_queue.put(lambda: self.screen.resize(lines, cols)) # put resize on the render thread
+        self.set_size(lines, cols) # -> issues sigwinch
 
     def set_focus(self, focus=True):
         """Setting the focus flag currently changes the way the cursor is rendered."""
@@ -360,7 +375,9 @@ class Pty(object):
 
     def read_and_feed(self):
         res = self.output_queue.get(block=True)
-        if res:
+        if isinstance(res, types.FunctionType):
+            res()
+        elif res:
             self.stream.feed(res)
 
     def render_changes(self):
@@ -409,6 +426,9 @@ class Pty(object):
         for i,line in lines.get_changed_lines():
             line.changed = False
             line_q.append(set_line_to(i, renderline(line)))
+
+        # garbagecollect history?
+        q.append(EventRenderer.check_history_size())
 
         q.append("\n".join(line_q))
 

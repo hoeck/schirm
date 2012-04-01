@@ -109,7 +109,7 @@ def receive_handler(msg, pty):
         h = d.get('height')
 
         if w and h:
-            pty.resize(int(h), int(w))
+            pty.q_resize(int(h), int(w))
 
         return True
     elif msg.startswith("frame"):
@@ -118,6 +118,10 @@ def receive_handler(msg, pty):
         if frame_id == str(pty.screen.iframe_id):
             pty.q_write(["\033Rmessage\033;", base64.encodestring(msg[msg.find(" ")+1:]), "\033Q", "\n"])
             return True
+    elif msg.startswith("removehistory"):
+        n = int(msg[13:])
+        pty.q_removehistory(n)
+        return True
     else:
         return False # not handled
 

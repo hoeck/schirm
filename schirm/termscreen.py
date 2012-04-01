@@ -371,6 +371,17 @@ class LineContainer(): # lazy
         self.set_screen0(len(self.lines))
         self.show_cursor(cursor_line, cursor_column)
 
+    def remove_history(self, lines_to_remove=None):
+        """Remove the first n lines_to_remove from the history."""
+        if lines_to_remove == None:
+            n = self.screen0
+        else:
+            n = min(self.screen0, lines_to_remove)
+
+        self.lines = self.lines[n:]
+        self.events.append(('remove_history_lines', n))
+        self.set_screen0(self.screen0 - n)
+
     ## cursor show and hide events
 
     def show_cursor(self, index, column, cursorclass='cursor'):
@@ -924,6 +935,10 @@ class TermScreen(pyte.Screen):
     def iframe_eval(self, b64_source):
         source = base64.b64decode(b64_source)
         self.linecontainer.iframe_eval(source)
+
+    def remove_history(self, lines):
+        """Remove the first n lines from the history."""
+        self.linecontainer.remove_history(lines)
 
 
 class SchirmStream(pyte.Stream):
