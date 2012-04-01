@@ -24,7 +24,7 @@ import logging
 
 import pyte
 from pyte.screens import Char, Margins, Cursor
-from pyte import modes as mo, graphics as g, charsets as cs
+from pyte import modes as mo, graphics as g, charsets as cs, control as ctrl
 
 # create an explicit interface to Lines and the seq of Lines to be
 # able to create better js dom-update instructions
@@ -85,9 +85,16 @@ class Line(UserList):
             self.pop()
 
     def replace_character(self, pos, char):
+        """Set character at pos to char."""
         self._ensure_size(pos)
         self.changed = True
         self[pos] = char
+
+    def replace_characters(self, pos, chars):
+        """Set characters at pos..pos+len(chars) to chars."""
+        self._ensure_size(pos)
+        self.changed = True
+        self[pos:pos+len(chars)] = chars
 
     def delete_characters(self, pos, count, char):
         """
@@ -171,6 +178,9 @@ class IframeLine(Line):
         pass
 
     def replace_character(self, pos, char):
+        pass
+
+    def replace_characters(self, pos, chars):
         pass
 
     def delete_characters(self, pos, count, char):
@@ -294,7 +304,7 @@ class LineContainer(): # lazy
         self.events.append(('insert', index, line))
 
     def __getitem__(self, index):
-        self._ensure_lines(index, xxx=0)
+        self._ensure_lines(index)
         ri = self.real_line_index(index)
         return self.lines[self.real_line_index(index)]
 
@@ -612,6 +622,48 @@ class TermScreen(pyte.Screen):
         #           way, we'll never know when to linefeed.
         self.cursor.x += 1
 
+    def draw_string(self, string):
+        """Like draw, but for a whole string at once."""
+
+        cur_attrs = self.cursor.attrs[1:]
+        def _write_string(s):
+            self.linecontainer[self.cursor.y] \
+                .replace_characters(self.cursor.x,
+                                    #[self.cursor.attrs._replace(data=ch) for ch in s])
+                                    [Char(ch, *cur_attrs) for ch in s])
+
+        if mo.IRM in self.mode:
+            # move existing chars to the right before inserting string
+            # (no wrapping)
+            self.insert_characters(len(string))
+            _write_string(reverse(charl[-(self.columns - self.cursor.x):]))
+        elif mo.DECAWM in self.mode:
+            # Auto Wrap Mode
+            # all chars up to the end of the current line
+            line_end = self.columns-self.cursor.x
+            s = string[:line_end]
+            _write_string(s)
+            self.cursor.x += len(s)
+            # remaining chars will be written on subsequent lines
+            i = 0
+            while len(string) > (line_end+(i*self.columns)):
+                self.linefeed()
+                s = string[line_end+(i*self.columns):line_end+((i+1)*self.columns)]
+                _write_string(s)
+                self.cursor.x += len(s)
+                i += 1
+
+        else:
+            # no overwrap, just replace the last old char if string
+            # will draw over the end of the current line
+            line_end = self.columns-self.cursor.x
+            if len(string) > line_end:
+                s = string[:line_end-1] + string[-1]
+            else:
+                s = string
+            _write_string(s)
+            self.cursor.x += len(s)
+
     def index(self):
         """Move the cursor down one line in the same column. If the
         cursor is at the last line, create a new line at the bottom.
@@ -881,6 +933,7 @@ class SchirmStream(pyte.Stream):
                 'iframe_esc': self._iframe_esc,
                 'escape': self._escape,
                 })
+        self._draw_buffer = []
 
     def feed(self, bytes):
         """
@@ -928,7 +981,8 @@ class SchirmStream(pyte.Stream):
                     self.consume(char)
                     i += 1
                 else:
-                    return
+                    break
+        self._flush_draw()
 
     def consume(self, char):
         # same as super(SchirmStream, self).consume(char) bit without
@@ -965,6 +1019,32 @@ class SchirmStream(pyte.Stream):
         else:
             logging.warn("no listener set")
 
+
+    # State transformers.
+    # ...................
+
+    def _flush_draw(self):
+        if self._draw_buffer:
+            self.dispatch('draw_string', "".join(self._draw_buffer))
+            self._draw_buffer = []
+
+    def _buf_draw(self, char):
+        self._draw_buffer.append(char)
+
+    def _stream(self, char):
+        """Process a character when in the default ``"stream"`` state."""
+        if char in self.basic:
+            self._flush_draw()
+            self.dispatch(self.basic[char])
+        elif char == ctrl.ESC:
+            self._flush_draw()
+            self.state = "escape"
+        elif char == ctrl.CSI:
+            self._flush_draw()
+            self.state = "arguments"
+        elif char not in [ctrl.NUL, ctrl.DEL]:
+            #self.dispatch("draw", char)
+            self._buf_draw(char)
 
     # - ESC x leave iframe mode, interpreted at any time, ignored when
     #   not in iframe mode
