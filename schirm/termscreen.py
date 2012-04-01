@@ -292,7 +292,7 @@ class LineContainer(): # lazy
             # if there are already height lines visible, move the
             # topmost visible line pointer
             self.set_screen0(self.screen0 + 1)
-        self.append(line)
+        self._append(line)
 
     def insert(self, index, line):
         self._ensure_lines(index)
@@ -343,7 +343,7 @@ class LineContainer(): # lazy
     def purge_empty_lines(self):
         """Remove all consecutive unchanged empty lines from the bottom."""
         i = len(self.lines)
-        while True:
+        while True and i>0:
             l = self.lines[-1]
             if (not l.changed) \
                     and l.is_empty() \
@@ -637,6 +637,7 @@ class TermScreen(pyte.Screen):
             # (no wrapping)
             self.insert_characters(len(string))
             _write_string(reverse(charl[-(self.columns - self.cursor.x):]))
+
         elif mo.DECAWM in self.mode:
             # Auto Wrap Mode
             # all chars up to the end of the current line
@@ -674,7 +675,10 @@ class TermScreen(pyte.Screen):
         top, bottom = self.margins
 
         if self.cursor.y == bottom:
-            self.linecontainer.insert(bottom+1, self._create_line())
+            if bottom == self.lines-1:
+                self.linecontainer.append(self._create_line())
+            else:
+                self.linecontainer.insert(bottom+1, self._create_line())
         else:
             self.cursor_down()
 
