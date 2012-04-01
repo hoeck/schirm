@@ -1,72 +1,47 @@
-/* color attribute styles
- * taken from shellinabox styles.css
- */
 
-/* normal */
-.f-default           {                            }
-.f-default-reversed  { color:            #ffffff; }
-.f-red               { color:            #cd0000; }
-.f-green             { color:            #00cd00; }
-.f-brown             { color:            #cdcd00; }
-.f-blue              { color:            #0000ee; }
-.f-magenta           { color:            #cd00cd; }
-.f-cyan              { color:            #00cdcd; }
-.f-white             { color:            #e5e5e5; }
+/* DEBUG */
+/*
+#term span {
+  border: solid 1px #ccc;
+}
+*/
 
-/* bold/bright */
-.f-bold-default      { color:            #7f7f7f; }
-.f-bold-red          { color:            #ff0000; }
-.f-bold-green        { color:            #00ff00; }
-.f-bold-brown        { color:            #e8e800; }
-.f-bold-blue         { color:            #5c5cff; }
-.f-bold-magenta      { color:            #ff00ff; }
-.f-bold-cyan         { color:            #00ffff; }
-.f-bold-white        { color:            #ffffff; }
-
-/* normal */
-.b-default           {                            }
-.b-default-reversed  { background-color: #000000; }
-.b-black             { background-color: #000000; }
-.b-red               { background-color: #cd0000; }
-.b-green             { background-color: #00cd00; }
-.b-brown             { background-color: #cdcd00; }
-.b-blue              { background-color: #0000aa; }
-.b-magenta           { background-color: #cd00cd; }
-.b-cyan              { background-color: #00cdcd; }
-.b-white             { background-color: #e5e5e5; }
-
-/* bg bold for reverse? */
-/* .b9             { background-color: #ff0000; } */
-/* .ba             { background-color: #00ff00; } */
-/* .bb             { background-color: #e8e800; } */
-/* .bc             { background-color: #5c5cff; } */
-/* .bd             { background-color: #ff00ff; } */
-/* .be             { background-color: #00ffff; } */
-/* .bf             {                            } */
-
-
-/* other attrs */
-
-.bold {
-    font-weight: 700;
+div#termscreen {
+    height:100%;
+    position: absolute;
+    top:0px;
+    bottom:0px;
+    left:0px;
+    right:0px;
 }
 
-.italics {
-    font-style: italic;
+pre#term {
+    position:relative;
+    margin: 0px;
 }
 
-.underscore {
-    text-decoration: underline;
+iframe {
+    border: None;
+    /* -webkit-transition: all 5s; */
 }
 
-.strikethrough {
-    text-decoration: line-through;
+#term {
+    overflow-x:hidden;
+    width: 100%;
 }
 
-.cursor {
-    background-color: #ff00b0;
+#app {
+    display: none;
+    width: 100%;
 }
 
-.cursor-inactive {
-    border: solid 1px #ff00b0;
+body {
+    position:absolute;
+    margin:0px;
+    border:0px;
+    padding:0px;
+    top:1px;
+    bottom:1px;
+    left:1px;
+    right:1px;
 }

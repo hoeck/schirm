@@ -61,14 +61,25 @@ class Server(object):
     delivered.
     """
 
-    def __init__(self, pty):
+    def __init__(self, pty, user_css='user.css'):
         self.pty = pty
         self.socket = socket.socket()
         self.requests = {}
         self._id = 0
         self.resources = {}
-        self.schirm_resources = {'/schirm.js': "schirm.js",
-                                 '/schirm.css': "schirm.css"}
+
+        # default static resources:
+        # - relative paths are looked up in schirm.resources module
+        #   using pkg_resources.
+        # - absolute paths are loaded from the filesystem
+        self.schirm_resources = {'/schirm.js': "schirm.js",   # schirm client lib
+                                 '/schirm.css': "schirm.css", # schirm iframe mode styles
+                                 # terminal emulator files
+                                 '/term.js': 'term.js',
+                                 '/term.css': 'term.css',
+                                 '/user.css': user_css,
+                                 }
+
         self.listen_thread = None
         self.not_found = set(["/favicon.ico", "/"])
 
@@ -132,9 +143,23 @@ class Server(object):
         elif req.command == 'GET' \
                 and path in self.schirm_resources:
             # builtin static resource, serve it!
-            logging.debug("serving builtin static resource {}.".format(path))
-            data = pkg_resources.resource_string('schirm.resources', self.schirm_resources[path])
-            client.sendall(self.make_response(self.guess_type(path), data))
+            res = self.schirm_resources[path]
+            if os.path.isabs(res):
+                # external resource (e.g. user.css file in ~/.schirm/)
+                f = None
+                try:
+                    with open(res, 'r') as f:
+                        data = f.read()
+                    client.sendall(self.make_response(self.guess_type(path), data))
+                except:
+                    logging.error("failed to load static resource {} from path {}.".format(path, res))
+                    client.sendall("HTTP/1.1 404 Not Found")
+            else:
+                # internal resource
+                logging.debug("serving builtin static resource {}.".format(path))
+                data = pkg_resources.resource_string('schirm.resources', res)
+                client.sendall(self.make_response(self.guess_type(path), data))
+
             client.close()
 
         elif iframe_id and req.command == 'GET' and path in self.not_found:

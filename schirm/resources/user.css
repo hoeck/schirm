@@ -1,0 +1,69 @@
+/* color attribute styles
+ * taken from shellinabox styles.css
+ */
+
+/* normal */
+.f-default           {                            }
+.f-default-reversed  { color:            #ffffff; }
+.f-red               { color:            #cd0000; }
+.f-green             { color:            #00cd00; }
+.f-brown             { color:            #cdcd00; }
+.f-blue              { color:            #0000ee; }
+.f-magenta           { color:            #cd00cd; }
+.f-cyan              { color:            #00cdcd; }
+.f-white             { color:            #e5e5e5; }
+
+/* bold/bright */
+.f-bold-default      { color:            #7f7f7f; }
+.f-bold-red          { color:            #ff0000; }
+.f-bold-green        { color:            #00ff00; }
+.f-bold-brown        { color:            #e8e800; }
+.f-bold-blue         { color:            #5c5cff; }
+.f-bold-magenta      { color:            #ff00ff; }
+.f-bold-cyan         { color:            #00ffff; }
+.f-bold-white        { color:            #ffffff; }
+
+/* normal */
+.b-default           {                            }
+.b-default-reversed  { background-color: #000000; }
+.b-black             { background-color: #000000; }
+.b-red               { background-color: #cd0000; }
+.b-green             { background-color: #00cd00; }
+.b-brown             { background-color: #cdcd00; }
+.b-blue              { background-color: #0000aa; }
+.b-magenta           { background-color: #cd00cd; }
+.b-cyan              { background-color: #00cdcd; }
+.b-white             { background-color: #e5e5e5; }
+
+/* other attrs */
+
+.bold {
+    font-weight: 700;
+}
+
+.italics {
+    font-style: italic;
+}
+
+.underscore {
+    text-decoration: underline;
+}
+
+.strikethrough {
+    text-decoration: line-through;
+}
+
+.cursor {
+    background-color: #ff00b0;
+}
+
+.cursor-inactive {
+    border: solid 1px #ff00b0;
+}
+
+/* terminal appearance */
+
+.screen {
+    padding: 1px;
+}
+

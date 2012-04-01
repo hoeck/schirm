@@ -200,7 +200,29 @@ def handle_keypress(window, event, schirmview, pty, execute):
     else:
         return False
 
-def webkit_event_loop(console_log=None):
+def check_prepare_path(path):
+    """Expand users, absolutify and return path if exists else None."""
+    path = os.path.abspath(os.path.expanduser(path))
+    if os.path.exists(path):
+        return path
+    else:
+        return None
+
+def init_dotschirm():
+    """Create ~/.schirm/ and or missing files in it."""
+    if not os.path.exists(os.path.expanduser('~')):
+        return
+
+    dotschirm = os.path.expanduser('~/.schirm/')
+    if not os.path.exists(dotschirm):
+        os.mkdir(dotschirm)
+
+    user_css = os.path.join(dotschirm, 'user.css')
+    if not os.path.exists(user_css):
+        with open(user_css, 'w') as f:
+            f.write(pkg_resources.resource_string("schirm.resources", "user.css"))
+
+def webkit_event_loop(console_log=None, user_css='~/.schirm/.user.css'):
     """Setup, initialize and wire the schirm components:
 
     - the terminal emulator (term, termscreen)
@@ -213,7 +235,10 @@ def webkit_event_loop(console_log=None):
       None: don't write them
          1: write the message
          2: write document-URL:line message
+
+    user_css .. path to the user.css file
     """
+    init_dotschirm()
 
     global gtkthread
     gtkthread = GtkThread()
@@ -238,7 +263,7 @@ def webkit_event_loop(console_log=None):
     # A local webserver to write requests to the PTYs stdin and wait
     # for responses because I did not find a way to mock or get a
     # proxy of libsoup.
-    server = webserver.Server(pty).start()
+    server = webserver.Server(pty, user_css=check_prepare_path(user_css) or 'user.css').start()
     pty.set_webserver(server)
     schirmview.webview.set_proxy("http://localhost:{}".format(server.getport()))
 
@@ -259,10 +284,8 @@ def webkit_event_loop(console_log=None):
             schirmview.webview.disconnect(load_finished_id)
     load_finished_id = gtkthread.invoke_s(lambda : schirmview.webview.connect('document-load-finished', load_finished_cb))
 
-    # create and load term document
-    term_css = pkg_resources.resource_string("schirm.resources", "term.css")
+    # create and load the term document
     doc = pkg_resources.resource_string("schirm.resources", "term.html")
-    doc = doc.replace("//TERM-CSS-PLACEHOLDER", term_css)
 
     gtkthread.invoke(lambda : schirmview.webview.load_string(doc, base_uri="http://termframe.localhost"))
     load_finished.get()
