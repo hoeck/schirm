@@ -647,7 +647,7 @@ class TermScreen(pyte.Screen):
             # move existing chars to the right before inserting string
             # (no wrapping)
             self.insert_characters(len(string))
-            _write_string(reverse(charl[-(self.columns - self.cursor.x):]))
+            _write_string(reversed(string[-(self.columns - self.cursor.x):]))
 
         elif mo.DECAWM in self.mode:
             # Auto Wrap Mode
