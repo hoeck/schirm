@@ -226,7 +226,7 @@ def init_dotschirm():
         with open(user_css, 'w') as f:
             f.write(pkg_resources.resource_string("schirm.resources", "user.css"))
 
-def webkit_event_loop(console_log=None, user_css='~/.schirm/.user.css'):
+def webkit_event_loop(console_log=None, user_css='~/.schirm/user.css'):
     """Setup, initialize and wire the schirm components:
 
     - the terminal emulator (term, termscreen)
