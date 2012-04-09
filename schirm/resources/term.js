@@ -17,22 +17,57 @@ function getTermSize(preElement) {
   return { lines: lines, cols: cols };
 }
 
+// Determine and cache the height of a vertical scrollbar
+var __vscrollbarheight;
+function getVScrollbarHeight() {
+  var compute = function() {
+    var div = document.createElement("div");
+    div.classList.add("foo");
+    div.style.width = 100;
+    div.style.height = 100;
+    div.style.overflowX = "scroll";
+    div.style.overflowY = "scroll";
+
+    var content = document.createElement("div");
+    content.style.width = 200;
+    content.style.height = 200;
+
+    div.appendChild(content);
+    document.body.appendChild(div);
+
+    var height = 100 - div.clientHeight;
+    
+    document.body.removeChild(div);
+
+    if (height > 0) {
+      return height;
+    } else {
+      return 0;
+    }
+  };
+  
+  if (__vscrollbarheight === undefined) {
+    __vscrollbarheight = compute();
+  }
+  return __vscrollbarheight;
+}
+
+// return true if el will render with a vertical scrollbar
+function vScrollbarRequired(el) {
+  return el.scrollWidth > el.clientWidth;
+}
+
 function resizeIframe(iframe) {
   try {
     var doc = iframe.contentDocument.documentElement;
       if (doc) {
-        iframe.height = doc.scrollHeight;
-
-        // scrollHeight doesn't include the height of the horizontal
-        // scrollbar -> an additional vertical scrollbar appears to
-        // still be able to see the whole content (we only want the
-        // vertical scrollbar).  therefor: compare to the
-        // clientHeight and then adjust the iframe height.
-        var rect = doc.getBoundingClientRect();
-        if (doc.scrollHeight && doc.clientHeight && doc.scrollHeight > doc.clientHeight) {
-          var diff = doc.scrollHeight - doc.clientHeight;
-          iframe.height = doc.scrollHeight + diff;
+        var newHeight;
+        if (vScrollbarRequired(doc)) {
+          newHeight = doc.scrollHeight + getVScrollbarHeight();
+        } else {
+          newHeight = doc.scrollHeight;
         }
+        iframe.style.height = newHeight;
       }
   } catch (e) { }
 };
@@ -185,8 +220,12 @@ var Lines = (function(linesElement, term) {
 
       // linemode: iframe grows vertically with content
       //           iframe is as wide as the terminal window
-      iframe.height = "1";
       iframe.style.width = '100%';
+
+      // the iframe must have at least the height of a vertical
+      // scrollbar otherwise, artifacts show up when animating the
+      // inital resize of an iframe with vertically scrolled content
+      iframe.style.minHeight = getVScrollbarHeight();
 
       iframe.resizeHandler = function() { resizeIframe(iframe); };
       iframe.contentDocument.open("text/html");
