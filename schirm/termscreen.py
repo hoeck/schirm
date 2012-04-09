@@ -421,6 +421,9 @@ class LineContainer(): # lazy
     def iframe_eval(self, source):
         self.events.append(('iframe_eval', source))
 
+    def iframe_resize(self, iframe_id, height):
+        self.events.append(('iframe_resize', iframe_id, height))
+
 
 class TermScreen(pyte.Screen):
 

@@ -112,16 +112,31 @@ def receive_handler(msg, pty):
             pty.q_resize(int(h), int(w))
 
         return True
+
     elif msg.startswith("frame"):
         frame_id = msg[5:msg.find(" ")]
         logging.debug("Log message for iframe {}".format(frame_id))
         if frame_id == str(pty.screen.iframe_id):
             pty.q_write(["\033Rmessage\033;", base64.encodestring(msg[msg.find(" ")+1:]), "\033Q", "\n"])
             return True
+
+    elif msg.startswith("iframeresize"):
+        try:
+            height = int(msg[len("iframeresize"):])
+        except:
+            height = None
+        if height != None:
+            logging.debug("Iframe resize request to {}".format(height))
+            pty.q_iframe_resize(height)
+            return True
+        else:
+            return False
+
     elif msg.startswith("removehistory"):
         n = int(msg[13:])
         pty.q_removehistory(n)
         return True
+
     else:
         return False # not handled
 

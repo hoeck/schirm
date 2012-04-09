@@ -231,6 +231,10 @@ class EventRenderer():
     def check_history_size():
         return "term.checkHistorySize();"
 
+    @staticmethod
+    def iframe_resize(iframe_id, height):
+        return "term.iframeResize(\"%s\", %s);" % (iframe_id, int(height))
+
 
 class Pty(object):
 
@@ -320,6 +324,10 @@ class Pty(object):
     def q_removehistory(self, lines_to_remove):
         # the render thread works off the output_queue
         self.output_queue.put(lambda: self.screen.remove_history(lines_to_remove))
+
+    def q_iframe_resize(self, height):
+        iframe_id = self.screen.iframe_id
+        self.output_queue.put(lambda: self.screen.linecontainer.iframe_resize(iframe_id, height))
 
     def write(self, s):
         """

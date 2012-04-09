@@ -219,11 +219,15 @@ var Lines = (function(linesElement, term) {
     },
 
     // set the the current iframe document to null
-    // so that we know wether were in iframe mode or not
+    // so that we know whether we're in iframe mode or not
     iframeLeave: function() {
       term.currentIframe = null;
+    },
+    
+    iframeResize: function(frameId, height) {
+      iframe = document.getElementById(frameId);
+      iframe.style.height = height;
     }
-
   };
 
   return fn;
@@ -417,6 +421,7 @@ var Term = function() {
     iframeWrite: function (content) { fn.getScreen().iframeWrite(content); },
     iframeCloseDocument: function() { fn.getScreen().iframeCloseDocument(); },
     iframeLeave: function() { fn.getScreen().iframeLeave(); },
+    iframeResize: function(frameId, height) { fn.getScreen().iframeResize(frameId, height); },
 
     getSize: function() { return fn.getScreen().getSize(); },
     resize: function(oldLines, newLines) { fn.getScreen().resize(oldLines, newLines); },
