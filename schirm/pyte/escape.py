@@ -152,3 +152,9 @@ HPA = "'"
 #: ST (0x5c) or BEL (0x07)
 ST  = "\x5c"
 BEL = "\x07"
+
+#: Soft Terminal Reset
+#: CSI ! p
+#: see: http://invisible-island.net/xterm/ctlseqs/ctlseqs.html
+#: and: http://vt100.net/docs/vt220-rm/chapter4.html#S4.18.1
+DECSTR = "p"

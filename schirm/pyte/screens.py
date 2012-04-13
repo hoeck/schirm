@@ -215,6 +215,14 @@ class Screen(list):
         self.cursor = Cursor(0, 0)
         self.cursor_position()
 
+    def soft_reset(self, *args, **kwargs):
+        """Perform a Soft Terminal Reset.
+
+        Not available for VT100, implemented for vt220, vt510.
+        Should set all terminal values to their power-up defaults.
+        """
+        pass
+
     def resize(self, lines=None, columns=None):
         """Resize the screen to the given dimensions.
 

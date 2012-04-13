@@ -109,7 +109,8 @@ class Stream(object):
         esc.DECSTBM: "set_margins",
         esc.HPA: "cursor_to_column",
         esc.ST: "os_command",
-        esc.BEL: "os_command"
+        esc.BEL: "os_command",
+        esc.DECSTR: "soft_reset",
     }
 
     def __init__(self):
@@ -279,7 +280,7 @@ class Stream(object):
            `VT220 Programmer Reference <http://http://vt100.net/docs/vt220-rm/>`_
                For details on the characters valid for use as arguments.
         """
-        if char == "?":
+        if char in ("?", "!"):
             self.flags["private"] = True
         elif char in [ctrl.BEL, ctrl.BS, ctrl.HT, ctrl.LF, ctrl.VT,
                       ctrl.FF, ctrl.CR]:
