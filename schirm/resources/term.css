@@ -16,6 +16,8 @@ div#termscreen {
 pre#term {
     position:relative;
     margin: 0px;
+    overflow: visible;
+    padding-bottom: 1px;
 }
 
 iframe {
