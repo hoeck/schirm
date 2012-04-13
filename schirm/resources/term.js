@@ -22,7 +22,6 @@ var __vscrollbarheight;
 function getVScrollbarHeight() {
   var compute = function() {
     var div = document.createElement("div");
-    div.classList.add("foo");
     div.style.width = 100;
     div.style.height = 100;
     div.style.overflowX = "scroll";
@@ -123,11 +122,9 @@ var Lines = (function(linesElement, term) {
     },
 
     adjustTrailingSpace: function(visibleLinesStart) {
-      var start = (visibleLinesStart == undefined) ? this.screen0 : visibleLinesStart;
-      var historyHeight = linesElement.childNodes[start].offsetTop;
-
       // adjust layout to 'render' empty lines at the bottom
       if (linesElement.childNodes.length && ((linesElement.childNodes.length - this.screen0) < term.size.lines)) {
+        var historyHeight = linesElement.childNodes[this.screen0].offsetTop;
         // position the <pre> so that anything above the screen0 line is outside the termscreen client area
         linesElement.style.setProperty("top", -historyHeight);
         // set the termscreen div margin-top so that it covers all history lines (lines before line[screen0])

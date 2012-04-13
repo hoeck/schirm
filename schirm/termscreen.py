@@ -2,17 +2,17 @@
 
 # Schirm - a linux compatible terminal emulator providing html modes.
 # Copyright (C) 2011  Erik Soehnel
-# 
+#
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
@@ -54,7 +54,7 @@ class Line(UserList):
         #if size > self.size:
         #    self.extend([self.default_char] * (size - self.size))
         self.size = size
-        
+
     def _ensure_size(self, pos=None):
         """Ensure that this line is filled with at least pos default char characters.
 
@@ -128,12 +128,12 @@ class Line(UserList):
             # c) erase the entire line.
             (range(0, self.size), lambda: self._ensure_size()),
         )[type_of]
-        
+
         ensure_size()
-        
+
         for column in interval:
             self[column] = char
-    
+
     def show_cursor(self, cursorpos, cursorclass):
         """Show the cursor on this line at cursorpos using cursorclass."""
         self._ensure_size(cursorpos)
@@ -220,7 +220,7 @@ class LineContainer(): # lazy
         return self._create_line_fn()
 
     def _ensure_lines(self, _index=None):
-        """Ensure that all lines up to index are present."""       
+        """Ensure that all lines up to index are present."""
         if _index == None:
             index = self.height
         else:
@@ -319,23 +319,31 @@ class LineContainer(): # lazy
         return self.lines[self.real_line_index(0):].__iter__()
 
     def resize(self, newheight, newwidth):
-        if self.height <= newheight:
-            # enlarge screen
-            # emit a set_screen0 event to force a recomputation of the trailing space
-            self.set_screen0(self.screen0)
-        else:
-            # shrink screen
-            # try to remove blank lines from the bottom first
-            self.purge_empty_lines()
-            # adjust screen0 to show no more than newheight lines
-            self.set_screen0(max(self.screen0, len(self.lines) - newheight))
+        """Resize this container to newheight and all lines to newwidth.
 
+        Return the cursor line change.
+        """
+        # if true, keep lines at the bottom when resizing, otherwise
+        # stick them at the top of the terminal window
+        grow = bool((len(self.lines) - self.screen0) == self.height)
+
+        if (len(self.lines) > newheight) and grow:
+            screen_delta = len(self.lines) - newheight - self.screen0
+        else:
+            screen_delta = 0
+
+        self.purge_empty_lines()
+
+        # emit a set_screen0 event to force a recomputation of the trailing space
+        self.set_screen0(self.screen0 + screen_delta)
         self.height = newheight
 
         # set width for all lines
         # (they could become visible by resizing the terminal again)
         for l in self.lines:
             l.set_size(newwidth)
+
+        return screen_delta * -1
 
     def set_title(self, title):
         self.events.append(('set_title', title))
@@ -368,6 +376,7 @@ class LineContainer(): # lazy
 
     def erase_in_display(self, cursor_line, cursor_column):
         """Implements marginless erase_in_display type 2 preserving the history."""
+        # push the current terminal contents to the history
         self.set_screen0(len(self.lines))
         self.show_cursor(cursor_line, cursor_column)
 
@@ -504,17 +513,17 @@ class TermScreen(pyte.Screen):
         :param int lines: number of lines in the new screen.
         :param int columns: number of columns in the new screen.
         """
-        self.lines = lines or self.lines
-        self.columns = columns or self.columns
+        delta_lines   = (lines   or self.lines)   - self.lines
+        delta_columns = (columns or self.columns) - self.columns
 
-        self.linecontainer.resize(self.lines, self.columns)
+        self.lines   += delta_lines
+        self.columns += delta_columns
 
-        # note: cursor line should not change when resizing
+        cursor_delta = self.linecontainer.resize(self.lines, self.columns)
 
         # cursor: make sure that it 'stays' on its current line
-        #newcursory = self.cursor.y + cursordelta
-        #self.cursor.y = min(max(newcursory, 0), lines-1)
-        #self.cursor.x = min(max(self.cursor.x, 0), columns-1)
+        self.cursor.y = min(max(self.cursor.y + cursor_delta, 0), self.lines-1)
+        self.cursor.x = min(max(self.cursor.x, 0), self.columns-1)
 
         self.margins = Margins(0, self.lines - 1)
 
@@ -530,6 +539,7 @@ class TermScreen(pyte.Screen):
             modes = [mode << 5 for mode in modes]
 
         self.mode.update(modes)
+
         if mo.DECAPP in modes:
             # application mode set
             # todo: implement event so that we can switch to/from appmode
@@ -550,6 +560,7 @@ class TermScreen(pyte.Screen):
 
         # Mark all displayed characters as reverse.
         if mo.DECSCNM in modes:
+            # todo: check that iter(self.linecontainer) lazily creates and returns all lines
             for line in self.linecontainer:
                 line.reverse()
             self.select_graphic_rendition(g._SGR["+reverse"])
@@ -858,11 +869,11 @@ class TermScreen(pyte.Screen):
                 self.linecontainer.erase_in_display(self.cursor.y, self.cursor.x)
             else:
                 assert False, "erase_in_display not implemented for margins"
-    
+
         self.linecontainer.purge_empty_lines()
 
     ## xterm title hack
-                
+
     def os_command(self, command_id, data):
         if command_id == 0:
             self.linecontainer.set_title(data)
