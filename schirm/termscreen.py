@@ -219,14 +219,14 @@ class LineContainer(): # lazy
     def _create_line(self):
         return self._create_line_fn()
 
-    def _ensure_lines(self, _index=None):
-        """Ensure that all lines up to index are present."""
-        if _index == None:
-            index = self.height
+    def _ensure_lines(self, _linenumber=None):
+        """Ensure that all lines up to linenumber are present."""
+        if _linenumber == None:
+            linenumber = self.height-1
         else:
-            index = _index
+            linenumber = _linenumber
 
-        missing_lines =  1 + index - (len(self.lines) - self.screen0)
+        missing_lines =  1 + linenumber - (len(self.lines) - self.screen0)
 
         for i in range(missing_lines):
             # must issue an append event for each appended line
@@ -246,10 +246,7 @@ class LineContainer(): # lazy
 
         Return a list of (linenumber, Line).
         """
-        # todo: change term.html so that we can pass index numbers directly
-        #       (should allow for a simpler implementation)
-        # for now, start at terminal line 0
-        return ((i,l) for i, l in enumerate(self.lines[self.screen0:]) if l.changed)
+        return ((i,l) for i, l in enumerate(self.lines[self.screen0:], self.screen0) if l.changed)
 
     def reset(self, height):
         self.height = height # height of the terminal screen in lines
@@ -381,7 +378,7 @@ class LineContainer(): # lazy
         self.show_cursor(cursor_line, cursor_column)
 
     def remove_history(self, lines_to_remove=None):
-        """Remove the first n lines_to_remove from the history."""
+        """Remove all or the first n lines_to_remove from the history."""
         if lines_to_remove == None:
             n = self.screen0
         else:
@@ -393,13 +390,19 @@ class LineContainer(): # lazy
 
     ## cursor show and hide events
 
-    def show_cursor(self, index, column, cursorclass='cursor'):
-        self._ensure_lines(index)
-        self.lines[self.real_line_index(index)].show_cursor(column, cursorclass)
+    def show_cursor(self, linenumber, column, cursorclass='cursor'):
+        self._ensure_lines(linenumber)
+        index = self.real_line_index(linenumber)
+        line = self.lines[index]
+        line.show_cursor(column, cursorclass)
+        self.events.append(('set', index, line))
 
-    def hide_cursor(self, index):
-        self._ensure_lines(index)
-        self.lines[self.real_line_index(index)].hide_cursor()
+    def hide_cursor(self, linenumber):
+        self._ensure_lines(linenumber)
+        index = self.real_line_index(linenumber)
+        line = self.lines[index]
+        line.hide_cursor()
+        self.events.append(('set', index, line))
 
     ## iframe events, not directly line-based
 
@@ -698,7 +701,6 @@ class TermScreen(pyte.Screen):
             return
 
         top, bottom = self.margins
-
         if self.cursor.y == bottom:
             if bottom == self.lines-1:
                 self.linecontainer.append(self._create_line())

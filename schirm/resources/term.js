@@ -92,18 +92,6 @@ var Lines = (function(linesElement, term) {
       return this.screen0 + lineNumber;
     },
 
-    scrollToBottom: function() {
-      linesElement.scrollTop = linesElement.scrollHeight;
-    },
-
-    scrollPageUp: function() {
-      linesElement.scrollTop -= linesElement.offsetHeight;
-    },
-
-    scrollPageDown: function() {
-      linesElement.scrollTop += linesElement.offsetHeight;
-    },
-
     checkHistorySize: function() {
       // generate an remove history event if necessary
 
@@ -121,7 +109,7 @@ var Lines = (function(linesElement, term) {
       }
     },
 
-    adjustTrailingSpace: function(visibleLinesStart) {
+    adjustTrailingSpace: function() {
       // adjust layout to 'render' empty lines at the bottom
       if (linesElement.childNodes.length && ((linesElement.childNodes.length - this.screen0) < term.size.lines)) {
         var historyHeight = linesElement.childNodes[this.screen0].offsetTop;
@@ -134,20 +122,20 @@ var Lines = (function(linesElement, term) {
 
     setScreen0: function(screen0) {
       this.screen0 = screen0;
-      this.adjustTrailingSpace(screen0);
+      this.adjustTrailingSpace();
     },
 
-    setLine: function(linenumber, content) {
-      linesElement.childNodes[this.elementIndex(linenumber)].innerHTML = content + "\n";
+    setLine: function(index, content) {
+      linesElement.childNodes[index].innerHTML = content + "\n";
     },
 
-    insertLine: function(linenumber, content) {
+    insertLine: function(index, content) {
       var span = document.createElement('span');
       span.innerHTML = content + "\n";
-      if ((term.size.lines-1) <= linenumber) {
+      if ((linesElement.children.length) <= index) {
         linesElement.appendChild(span);
       } else {
-        linesElement.insertBefore(span, linesElement.childNodes[this.elementIndex(linenumber)]);
+        linesElement.insertBefore(span, linesElement.childNodes[index]);
       }
       this.adjustTrailingSpace();
     },
@@ -159,8 +147,8 @@ var Lines = (function(linesElement, term) {
       this.adjustTrailingSpace();
     },
 
-    removeLine: function(linenumber) {
-      linesElement.removeChild(linesElement.childNodes[this.elementIndex(linenumber)]);
+    removeLine: function(index) {
+      linesElement.removeChild(linesElement.childNodes[index]);
       this.adjustTrailingSpace();
     },
 
@@ -189,7 +177,7 @@ var Lines = (function(linesElement, term) {
     },
 
     // iframe functions
-    insertIframe: function (linenumber, id) {
+    insertIframe: function (index, id) {
       // insert an iframe 'line' before linenumber
       // close the old iframe
       if (term.currentIframe) {
@@ -199,7 +187,7 @@ var Lines = (function(linesElement, term) {
       }
 
       var div = document.createElement('div');
-      linesElement.replaceChild(div, linesElement.childNodes[this.elementIndex(linenumber)]);
+      linesElement.replaceChild(div, linesElement.childNodes[index]);
 
       var iframe = document.createElement('iframe');
       iframe.name = id;
@@ -298,34 +286,33 @@ var App = (function(appElement, term) {
 
     scrollPageDown: function() { },
 
-    setLine: function(linenumber, content) {
-      appElement.childNodes[this.elementIndex(linenumber)].innerHTML = content + "\n";
+    setLine: function(index, content) {
+      appElement.childNodes[index].innerHTML = content + "\n";
     },
 
-    insertLine: function(linenumber, content) {
+    insertLine: function(index, content) {
       var span = document.createElement('span');
       span.innerHTML = content + "\n";
       
-      if (term.size.lines <= linenumber) {
+      if (term.size.lines <= index) {
         appElement.appendChild(span);
         appElement.removeChild(appElement.firstChild);
       } else {
-        appElement.insertBefore(span, appElement.childNodes[this.elementIndex(linenumber)]);
+        appElement.insertBefore(span, appElement.childNodes[index]);
         appElement.removeChild(appElement.lastChild); // ?????
       }
     },
 
-    appendLine: function(content) {      
+    appendLine: function(content) {
       appElement.removeChild(appElement.firstChild)
       var span = document.createElement("span");
       span.innerHTML = content + "\n";
       appElement.appendChild(span);
     },
 
-    removeLine: function(linenumber) {
-      appElement.removeChild(appElement.childNodes[this.elementIndex(linenumber)]);
+    removeLine: function(index) {
+      appElement.removeChild(appElement.childNodes[index]);
     },
-
 
     getSize: function() {
       return getTermSize(appElement);
@@ -334,25 +321,9 @@ var App = (function(appElement, term) {
     // Resize the terminal space used to render the screen in
     // application mode
     resize: function(oldLines, newLines) {
-      // var curLines = appElement.childNodes.length;
-      // if (curLines < newLines) {
-      //   for (var i=0; i<(newLines-curLines); i++) {
-      //     appElement.appendChild(document.createElement('span'));
-      //   }
-      // } else {
-      //   for (var i=0; i<(curLines-newLines); i++) {
-      //     appElement.removeChild(appElement.firstChild);
-      //   }
-      // }
     },
 
     reset: function() { // todo: should take lines, cols param
-      // appElement.innerHTML = "";
-
-      // for (var i=0; i<term.size.lines; i++) {
-      //   var span = document.createElement("span");
-      //   appElement.appendChild(span);
-      // }
     },
 
     // iframe
@@ -442,18 +413,18 @@ var Term = function() {
     scrollPageUp: function() { fn.getScreen().scrollPageUp(); },
     scrollPageDown: function() { fn.getScreen().scrollPageDown(); },
 
-    setScreen0: function(linenumber) { fn.getScreen().setScreen0(linenumber); },
+    setScreen0: function(index) { fn.getScreen().setScreen0(index); },
 
-    setLine: function(linenumber, content) { fn.getScreen().setLine(linenumber, content); },
-    insertLine: function(linenumber, content) { fn.getScreen().insertLine(linenumber, content); },
+    setLine: function(index, content) { fn.getScreen().setLine(index, content); },
+    insertLine: function(index, content) { fn.getScreen().insertLine(index, content); },
     appendLine: function(content) { fn.getScreen().appendLine(content); },
-    removeLine: function(linenumber) { fn.getScreen().removeLine(linenumber); },
+    removeLine: function(index) { fn.getScreen().removeLine(index); },
     removeLastLine: function() { fn.getScreen().removeLastLine(); },
 
     removeHistoryLines: function(n) { fn.getScreen().removeHistoryLines(n); },
     checkHistorySize: function() { fn.getScreen().checkHistorySize(); },
 
-    insertIframe: function (linenumber, id) { fn.getScreen().insertIframe(linenumber, id); },
+    insertIframe: function (index, id) { fn.getScreen().insertIframe(index, id); },
     iframeWrite: function (content) { fn.getScreen().iframeWrite(content); },
     iframeCloseDocument: function() { fn.getScreen().iframeCloseDocument(); },
     iframeLeave: function() { fn.getScreen().iframeLeave(); },
