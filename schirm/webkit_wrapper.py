@@ -359,6 +359,16 @@ class GtkThread(object):
 
 def init_styles():
 
+    # change the overlay scrollbar color:
+    # style "overlay_scrollbar"
+    # {
+    #     bg[SELECTED]    = { 1.0, 1.0, 1.0 }
+    #     bg[INSENSITIVE] = { 1.0, 1.0, 1.0 }
+    #     bg[ACTIVE]      = { 1.0, 1.0, 1.0 }
+    # }
+    # to hide overlay scrollbars, start schirm with
+    # LIBOVERLAY_SCROLLBAR env var set to 0
+
     # 'hide' horizontal scrollbars in the terminal scrollwindow
     s = """
     style "hide_hscrollbar"
@@ -410,6 +420,7 @@ class EmbeddedWebView():
         # scrolling
         browser = Webkit.create()
         scrollview = gtk.ScrolledWindow()
+        scrollview.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_NEVER)
         scrollview.props.vscrollbar_policy = gtk.POLICY_ALWAYS
         scrollview.props.hscrollbar_policy = gtk.POLICY_NEVER
         scrollview.set_property('border-width', 0)
@@ -470,7 +481,6 @@ class EmbeddedWebView():
 
         box.pack_start(searchframe, expand=False)
 
-        window.props.has_resize_grip = True
         window.set_default_size(800, 600)
         window.show_all()
         searchframe.hide()
