@@ -17,7 +17,8 @@ pre#term {
     position:relative;
     margin: 0px;
     overflow: visible;
-    padding-bottom: 1px;
+    /* two pixels to fit an inactive cursor on the last line */
+    padding-bottom: 2px;
 }
 
 iframe {
@@ -36,14 +37,10 @@ iframe {
 }
 
 body {
-    position:absolute;
+    position: absolute;
     margin:0px;
     border:0px;
     padding:0px;
-    top:1px;
-    bottom:1px;
-    left:1px;
-    right:1px;
 }
 
 iframe {
