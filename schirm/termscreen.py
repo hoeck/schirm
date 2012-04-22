@@ -298,7 +298,7 @@ class LineContainer(): # lazy
             self.set_screen0(self.screen0 + 1)
         self.lines.insert(ri, line)
         line.changed = False
-        self.events.append(('insert', index, line))
+        self.events.append(('insert', ri, line))
 
     def __getitem__(self, index):
         self._ensure_lines(index)
@@ -307,8 +307,9 @@ class LineContainer(): # lazy
 
     def __setitem__(self, index, line):
         self._ensure_lines(index)
-        self.lines[self.real_line_index(index)] = line
-        self.events.append(('set', index, line))
+        ri = self.real_line_index(index)
+        self.lines[ri] = line
+        self.events.append(('set', ri, line))
 
     def __iter__(self):
         self._ensure_lines() # ???
@@ -886,7 +887,7 @@ class TermScreen(pyte.Screen):
         return (self.iframe_id or 0) + 1;
 
     def iframe_enter(self, *args):
-        # replace the current lie with an iframe line at the current
+        # replace the current line with an iframe line at the current
         # cursor position (like self.index())
         # all following chars are written to that frame via
         # iframe.document.write
