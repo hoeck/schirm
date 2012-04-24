@@ -41,6 +41,10 @@ body {
     margin:0px;
     border:0px;
     padding:0px;
+    top:0px;
+    bottom:2px;
+    left:0px;
+    right:2px;
 }
 
 iframe {

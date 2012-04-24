@@ -13,7 +13,13 @@ function getCharSize(preElement) {
 function getTermSize(preElement) {
   var blockSize = getCharSize(preElement);
   var cols  = Math.floor(document.body.clientWidth/blockSize.width);
-  var lines = Math.floor(document.body.clientHeight/blockSize.height);
+  // No idea why but the size reported by using offsetHeight in
+  // getCharSize needs to be decremented by one to get the *real* size
+  // of a char block in a pre element. Without this, the line
+  // calculation will be inaccurate for large windows and will lead to
+  // a few lines of trailing whitespace.
+  var lines = Math.floor(document.body.clientHeight/(blockSize.height - 1));
+
   return { lines: lines, cols: cols };
 }
 
@@ -81,6 +87,7 @@ var Lines = (function(linesElement, term) {
 
     // pointer to the first terminal line
     screen0: 0,
+    pendingRemoveHistory: false,
 
     init: function() { },
 
@@ -93,17 +100,22 @@ var Lines = (function(linesElement, term) {
     },
 
     checkHistorySize: function() {
-      // generate an remove history event if necessary
+      // generate an remove_history event if necessary
 
-      var maxHistoryHeight = 10000; // in pixels
-      var start = this.screen0;
-      var historyHeight = linesElement.childNodes[start].offsetTop;
+      // only check and generate the remove_history event if there is
+      // no event waiting to be processed
+      if (!this.pendingRemoveHistory) {
+        var maxHistoryHeight = 10000; // in pixels
+        var start = this.screen0;
+        var historyHeight = linesElement.childNodes[start].offsetTop;
 
-      if (historyHeight > maxHistoryHeight) {
-        for (var i=0; i<start; i++) {
-          if ((historyHeight - linesElement.childNodes[i].offsetTop) < maxHistoryHeight) {
-            console.log('removehistory' + i);
-            return
+        if (historyHeight > maxHistoryHeight) {
+          for (var i=0; i<start; i++) {
+            if ((historyHeight - linesElement.childNodes[i].offsetTop) < maxHistoryHeight) {
+              console.log('removehistory' + i);
+              this.pendingRemoveHistory = true; // change state: wait for the removeHistory response
+              return
+            }
           }
         }
       }
@@ -111,7 +123,7 @@ var Lines = (function(linesElement, term) {
 
     adjustTrailingSpace: function() {
       // adjust layout to 'render' empty lines at the bottom
-      if (linesElement.childNodes.length && ((linesElement.childNodes.length - this.screen0) < term.size.lines)) {
+      if (linesElement.childNodes.length && ((linesElement.childNodes.length - this.screen0) <= term.size.lines)) {
         var historyHeight = linesElement.childNodes[this.screen0].offsetTop;
         // position the <pre> so that anything above the screen0 line is outside the termscreen client area
         linesElement.style.setProperty("top", -historyHeight);
@@ -162,6 +174,7 @@ var Lines = (function(linesElement, term) {
       for (var i=0; i<n; i++) {
         linesElement.removeChild(linesElement.firstChild);
       }
+      this.pendingRemoveHistory = false;
     },
 
     getSize: function() {
