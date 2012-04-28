@@ -403,8 +403,8 @@ class EmbeddedWebView():
     wires the searchframe.
     """
     def __init__(self):
-        # when True, automatically scroll to bottom when the WebView
-        # size changes
+        # when True, automatically scroll to the bottom when the
+        # WebView size changes
         self.autoscroll = True
         self._search_forward = False
 
@@ -431,20 +431,32 @@ class EmbeddedWebView():
 
         # enable automatic scrolling when we are at the bottom of the
         # terminal
-        ignore_adjustment = [False]
+        last_adjustment = [0]
+        last_upper = [0]
         def value_changed_cb(adjustment, *user_data):
-            if adjustment.value >= (adjustment.get_upper() - adjustment.page_size - 10):
-                self.autoscroll = True
-            else:
-                self.autoscroll = False
-        va = scrollview.get_vadjustment()
-        va.connect('value-changed', value_changed_cb)
+            d_value = adjustment.value - last_adjustment[0]
+            d_upper = adjustment.get_upper() - last_upper[0]
 
-        def scroll_to_bottom_cb(widget, req, *user_data):
-            if self.autoscroll:
-                va = scrollview.get_vadjustment()
-                va.set_value(va.get_upper() - va.page_size)
-        browser.connect('size-request', scroll_to_bottom_cb)
+            last_adjustment[0] = adjustment.value
+            last_upper[0] = adjustment.get_upper()
+
+            if d_upper == 0.0:
+                if d_value > 0:
+                    if adjustment.value >= (adjustment.get_upper() - adjustment.page_size - 5):
+                        # scrolled to (within 5px of) bottom
+                        self.autoscroll = True
+                elif d_value < 0:
+                    # scrolled up
+                    self.autoscroll = False
+            elif d_upper > 0:
+                # webview grows bigger
+                if self.autoscroll:
+                    adjustment.set_value(adjustment.get_upper() - adjustment.page_size)
+
+        va = scrollview.get_vadjustment()
+        # use both events to track upper-bound and value changes
+        va.connect('value-changed', value_changed_cb)
+        va.connect('changed', value_changed_cb)
 
         box.pack_start(scrollview, expand=True, fill=True, padding=0)
 
