@@ -5,11 +5,177 @@ import magic
 import argparse
 import schirmclient as schirm
 
+style = """
+<style type="text/css">
+body {
+  overflow-y:hidden;
+  overflow-x:auto;
+}
 
-def render_image(data, mimetype=''):
+#content-img {
+  -webkit-transition-property: all;
+  -webkit-transition-duration: 0.1s;
+  -webkit-transition-timing-function: ease-out;
+}
+
+.buttonbar {
+  display: none;
+  margin-top:1em;
+}
+
+.buttonbar input {
+  background-color: #fff;
+  border: 1px black solid;
+  border-radius: 1ex;
+  box-shadow: 0px 0px 0.5em 0px #aaaaaa;
+
+  height: 1.8em;
+
+  margin: 0.5ex;
+}
+
+.buttonbar input:hover {
+  background-color: #bbf;
+}
+
+.buttonbar input[type="range"] {
+    -webkit-appearance: none;
+    background-color: #88c;
+    height: 2px;
+}
+
+.buttonbar input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    position: relative;
+    top: -1px;
+    z-index: 1;
+    width: 11px;
+    height: 11px;
+
+    -webkit-border-radius: 40px;
+    -moz-border-radius: 40px;
+    border-radius: 40px;
+    background-image: -webkit-gradient(linear, left top, left bottom, color-stop(0%,#ccf), color-stop(50%,#aaf), color-stop(51%,#99f), color-stop(100%,#66f));
+}
+
+.buttonbar input[type=range] {
+  width:50%;
+}
+</style>
+"""
+
+buttonbar = """
+<div class="buttonbar">
+<input type="button" onclick="setZoom(100, true);" value="original">
+<input type="button" onclick="setZoom('fit', true);" value="fit">
+<input id="zoom-slider" type="range" min="0" max="200" onchange="setZoom(Number(this.value));"/>
+</div>
+"""
+
+js_options = """
+<script type="text/javascript">
+var interactive = %(interactive)s;
+</script>
+"""
+
+js = """
+<script type="text/javascript">
+var S = function(selector) { return document.querySelector(selector); };
+var image;
+var maxZoom = 4;
+
+function setWidth(val) {
+  image.style.setProperty("width", val);
+}
+
+function rf(height) { // todo: move to schirm.js
+  var bodyStyle = getComputedStyle(document.body);
+  var bodyMargin = parseInt(bodyStyle.marginTop) + parseInt(bodyStyle.marginBottom);
+  var newHeight = height + bodyMargin;
+
+  console.log("resizing to " + newHeight);
+  console.log("iframeresize" + newHeight);
+}
+
+function setZoom(zoom, setSlider) {
+  // 0-99 .. % image-width values
+  // 100  .. natural-width
+  // 101-200 .. up to maxZoom * natural-width
+  // 'fit' .. fit-to-page
+  var sliderValue;
+  if (zoom === 'fit') {
+    image.style.setProperty("width", "100%");
+    if (setSlider) {
+       var currentZoom = image.clientWidth / image.naturalWidth;
+       sliderValue = 100 + Math.min(100, 100*currentZoom/maxZoom);
+    }
+  } else if (zoom <= 100) {
+    image.style.setProperty("width", image.naturalWidth * (zoom/100));
+    if (setSlider) {
+      sliderValue = zoom;
+    }
+  } else if (zoom > 100) {
+    image.style.setProperty("width", image.naturalWidth * ((zoom/100) * maxZoom));
+    if (setSlider) {
+      sliderValue = zoom;
+    }
+  }
+
+  if (sliderValue) {
+    S("#zoom-slider").setAttribute("value", sliderValue);
+  }
+}
+
+function init_interactive() {
+  image = S("#content-img");
+  image.addEventListener("webkitTransitionEnd", function() { rf(S("#container").clientHeight); }, true);
+
+  S(".buttonbar").style.display = "block";
+  image.style.display = "block";
+  rf(S("#container").clientHeight);
+}
+
+function init() {
+  image = S("#content-img");
+  if (S("body").clientWidth < image.naturalWidth) {
+    // resize image to fit into the page
+    image.style.width = "100%";
+    image.style.display = "block";
+  } else {
+    image.style.display = "block";
+  }
+  rf(S("#container").clientHeight);
+}
+
+function quit() {
+  S(".buttonbar").style.display = "None";
+  rf(S("#container").clientHeight);
+}
+
+document.onreadystatechange = function() {
+  if (document.readyState == "complete") {
+    if (interactive) {
+      init_interactive();
+    } else {
+      init();
+    }
+  }
+}
+</script>
+"""
+
+content_body = """
+<div id="container">
+%(content)s
+</div>
+"""
+
+def render_image(data, mimetype='', interactive=False):
     schirm.register_resource_data(data, 'x', mimetype)
-    print '<div style="width:100%;"> <img src="x"></div>'
-#style="overflow:visible"
+    print style
+    print content_body % {'content': '<img id="content-img" src="x" style="display: none;">' + buttonbar}
+    print js_options % {'interactive': 'true' if interactive else 'false'}
+    print js
 
 def render_text(text):
     print text
@@ -36,19 +202,30 @@ def read(source):
         with open(source, "r") as f:
             return readall(f)
 
+def wait_for_quit():
+    try:
+        x = schirm.read_next()
+    except KeyboardInterrupt:
+        return None
 
 def main():
-    parser = argparse.ArgumentParser(description="View html documents or images in the browser")
+    parser = argparse.ArgumentParser(description="View html documents, svg documents or images in the browser")
+    parser.add_argument("-i", "--interactive", help="Allow to zoom an pan the displayed document using the mouse or keyboard.", action="store_true")
     parser.add_argument("source", metavar="FILE", default="-", nargs="?")
     args = parser.parse_args()
-    
+
     buf = read(args.source)
     mimetype = magicmime(buf)
+
     with schirm.frame():
-        if mimetype.startswith('text'):
-            render_text(buf)
+        if mimetype.startswith('image'):
+            render_image(buf, mimetype, interactive=args.interactive)
+            schirm.close()
+            if args.interactive:
+                wait_for_quit()
+                schirm.execute("quit()");
         else:
-            render_image(buf, mimetype)
+            render_text(buf)
 
 if __name__ == '__main__':
     main()
