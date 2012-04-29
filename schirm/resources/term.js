@@ -228,6 +228,7 @@ var Lines = (function(linesElement, term) {
       iframe.resizeHandler = function() { resizeIframe(iframe); };
       iframe.contentDocument.open("text/html");
       this.adjustTrailingSpace();
+      window.iframe = iframe; // keep the current iframe around for debugging
     },
 
     // contentDocument.write content (a string) to the currentIframe and
@@ -262,7 +263,7 @@ var Lines = (function(linesElement, term) {
     },
     
     iframeResize: function(frameId, height) {
-      iframe = document.getElementById(frameId);
+      var iframe = document.getElementById(frameId);
       iframe.style.height = height;
     }
   };
@@ -384,6 +385,7 @@ var App = (function(appElement, term) {
 
 });
 
+var iframe; // keep the current iframe around for debugging
 var Term = function() {
 
   var state = {
