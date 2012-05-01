@@ -442,16 +442,19 @@ class EmbeddedWebView():
 
             if d_upper == 0.0:
                 if d_value > 0:
-                    if adjustment.value >= (adjustment.get_upper() - adjustment.page_size - 5):
-                        # scrolled to (within 5px of) bottom
+                    if adjustment.value >= (adjustment.get_upper() - adjustment.page_size - 20):
+                        # scrolled to (within 20px of) bottom
                         self.autoscroll = True
                 elif d_value < 0:
                     # scrolled up
                     self.autoscroll = False
             elif d_upper > 0:
-                # webview grows bigger
+                # webview gets bigger
                 if self.autoscroll:
-                    adjustment.set_value(adjustment.get_upper() - adjustment.page_size)
+                    # Queue up the required set_value call in the main gtk thread,
+                    # otherwise, it won't work (e.g. the set_value call will be
+                    # irgnored or set back to its original value immediately).
+                    gobject.idle_add(lambda : adjustment.set_value(adjustment.get_upper() - adjustment.page_size))
 
         va = scrollview.get_vadjustment()
         # use both events to track upper-bound and value changes
