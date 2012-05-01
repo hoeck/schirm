@@ -4,7 +4,21 @@ function getCharSize(preElement) {
   var specimen = document.createElement("span");
   specimen.innerHTML = "x";
   preElement.appendChild(specimen);
-  var size = {width: specimen.offsetWidth, height: specimen.offsetHeight};
+
+  var marginBorderHeight = 
+      (window.getComputedStyle(specimen, 'margin-top').value || 0) +
+      (window.getComputedStyle(specimen, 'border-top').value || 0) +
+      (window.getComputedStyle(specimen, 'border-bottom').value || 0) +
+      (window.getComputedStyle(specimen, 'margin-bottom').value || 0);
+
+  var marginBorderWidth = 
+      (window.getComputedStyle(specimen, 'margin-left').value || 0) +
+      (window.getComputedStyle(specimen, 'border-left').value || 0) +
+      (window.getComputedStyle(specimen, 'border-right').value || 0) +
+      (window.getComputedStyle(specimen, 'margin-right').value || 0);
+
+  var size = {width: specimen.offsetWidth + marginBorderWidth,
+              height: specimen.offsetHeight + marginBorderHeight};
   preElement.removeChild(specimen);
   return size;
 }
