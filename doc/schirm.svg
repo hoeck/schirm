@@ -1,0 +1,221 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   width="3297.4849"
+   height="2226.095"
+   id="svg2"
+   version="1.1"
+   inkscape:version="0.48.3.1 r9886"
+   sodipodi:docname="schirm.svg"
+   inkscape:export-filename="/home/timmy/py/schirm/schirm-tiny.png"
+   inkscape:export-xdpi="1.7467859"
+   inkscape:export-ydpi="1.7467859">
+  <defs
+     id="defs4">
+    <linearGradient
+       id="linearGradient4617">
+      <stop
+         id="stop4619"
+         offset="0"
+         style="stop-color:#e0e73e;stop-opacity:0.66666669;" />
+      <stop
+         style="stop-color:#f3f786;stop-opacity:0;"
+         offset="1"
+         id="stop4621" />
+    </linearGradient>
+    <linearGradient
+       id="linearGradient3826">
+      <stop
+         style="stop-color:#ffffd6;stop-opacity:1;"
+         offset="0"
+         id="stop3828" />
+      <stop
+         style="stop-color:#f1f320;stop-opacity:1;"
+         offset="1"
+         id="stop3830" />
+    </linearGradient>
+    <linearGradient
+       id="linearGradient3816">
+      <stop
+         style="stop-color:#e2f9cb;stop-opacity:1;"
+         offset="0"
+         id="stop3818" />
+      <stop
+         id="stop3824"
+         offset="0.13301522"
+         style="stop-color:#c3f395;stop-opacity:1;" />
+      <stop
+         style="stop-color:#75d418;stop-opacity:1;"
+         offset="1"
+         id="stop3820" />
+    </linearGradient>
+    <linearGradient
+       id="linearGradient3804">
+      <stop
+         style="stop-color:#ffffff;stop-opacity:1;"
+         offset="0"
+         id="stop3806" />
+      <stop
+         id="stop3812"
+         offset="0.05063291"
+         style="stop-color:#3a743a;stop-opacity:0.49803922;" />
+      <stop
+         style="stop-color:#008000;stop-opacity:0;"
+         offset="1"
+         id="stop3808" />
+    </linearGradient>
+    <inkscape:path-effect
+       effect="spiro"
+       id="path-effect2995"
+       is_visible="true" />
+    <radialGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient3816"
+       id="radialGradient3822"
+       cx="1067.8855"
+       cy="76.623672"
+       fx="1067.8855"
+       fy="76.623672"
+       r="686.27722"
+       gradientTransform="matrix(1.1630492,1.0636113,-0.92079079,1.0068819,-25.561084,-921.54499)"
+       gradientUnits="userSpaceOnUse" />
+    <radialGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient4617"
+       id="radialGradient4615"
+       cx="1527.2825"
+       cy="704.37018"
+       fx="1527.2825"
+       fy="704.37018"
+       r="1919.1692"
+       gradientTransform="matrix(-0.99544046,-1.049519,1.2738118,-1.2081649,2150.3667,3171.8277)"
+       gradientUnits="userSpaceOnUse" />
+    <radialGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient3826"
+       id="radialGradient3805"
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="matrix(1.0602649,1.4418154,-0.81692886,0.60074718,188.23528,-581.21325)"
+       cx="198.47775"
+       cy="238.86707"
+       fx="198.47775"
+       fy="238.86707"
+       r="438.92548" />
+  </defs>
+  <sodipodi:namedview
+     id="base"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:pageopacity="0.0"
+     inkscape:pageshadow="2"
+     inkscape:zoom="0.089701775"
+     inkscape:cx="-476.8907"
+     inkscape:cy="282.75788"
+     inkscape:document-units="px"
+     inkscape:current-layer="layer1"
+     showgrid="false"
+     inkscape:window-width="1254"
+     inkscape:window-height="783"
+     inkscape:window-x="26"
+     inkscape:window-y="17"
+     inkscape:window-maximized="0"
+     fit-margin-left="-20"
+     fit-margin-top="50"
+     fit-margin-right="40"
+     fit-margin-bottom="50">
+    <inkscape:grid
+       type="xygrid"
+       id="grid4470"
+       empspacing="5"
+       visible="true"
+       enabled="true"
+       snapvisiblegridlinesonly="true"
+       originx="206.88822px"
+       originy="795.55393px" />
+  </sodipodi:namedview>
+  <metadata
+     id="metadata7">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:format>image/svg+xml</dc:format>
+        <dc:type
+           rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
+        <dc:title></dc:title>
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+  <g
+     inkscape:label="Ebene 1"
+     inkscape:groupmode="layer"
+     id="layer1"
+     transform="translate(206.88822,378.17894)">
+    <path
+       style="fill:url(#radialGradient3805);fill-opacity:1;stroke:#000000;stroke-width:48;stroke-linecap:butt;stroke-linejoin:round;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none"
+       d="M 275.5295,-263.62317 C 146.54221,-271.10138 -94.667412,-391.07529 1.2706662,-178.92409 97.208754,33.227094 269.04087,-277.61889 352.22953,-93.333017 438.54864,97.887655 -56.568512,-97.164893 45.621523,97.496802 131.73839,261.54074 354.59998,-17.486989 377.91906,167.09294 413.00746,444.83173 52.489714,87.309066 62.376,296.89616 71.005351,479.83651 224.62602,460.77449 396.25206,477.89673 615.95211,499.81508 857.96297,470.69295 844.59303,403.484 820.77873,283.77253 511.86311,485.72801 540.14085,181.46477 546.99994,107.66213 603.83464,-2.2890977 552.06069,-147.33757 502.56542,-286.00215 404.51677,-256.14495 275.5295,-263.62317 z"
+       id="path2997"
+       inkscape:connector-curvature="0"
+       sodipodi:nodetypes="zsssssssssz"
+       inkscape:export-filename="/home/timmy/py/schirm/schirm-small.png"
+       inkscape:export-xdpi="1.8663863"
+       inkscape:export-ydpi="1.8663863" />
+    <use
+       x="0"
+       y="0"
+       xlink:href="#path2997"
+       id="use3814"
+       transform="matrix(-0.9827061,-0.1851721,-0.1851721,0.9827061,2947.5313,256.87147)"
+       width="744.09448"
+       height="1052.3622"
+       inkscape:export-filename="/home/timmy/py/schirm/schirm-small.png"
+       inkscape:export-xdpi="1.8663863"
+       inkscape:export-ydpi="1.8663863" />
+    <path
+       style="fill:url(#radialGradient3822);fill-opacity:1;stroke:#000000;stroke-width:48;stroke-linecap:butt;stroke-linejoin:round;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none"
+       d="M 848.58416,106.43221 C 785.21634,180.04841 722.24851,836.51249 815.95752,947.27257 921.34054,1071.8308 1892.637,1183.0222 1986.8918,1084.7932 2081.1465,986.56417 2186.2769,361.82764 2092.0222,208.59039 1997.7673,55.353124 911.95197,32.816025 848.58416,106.43221 z"
+       id="path3013"
+       inkscape:connector-curvature="0"
+       sodipodi:nodetypes="zsssz"
+       inkscape:export-filename="/home/timmy/py/schirm/schirm-small.png"
+       inkscape:export-xdpi="1.8663863"
+       inkscape:export-ydpi="1.8663863" />
+    <path
+       style="fill:none;stroke:none"
+       d="m -226.88822,1157.1481 c 0,0 315.912907,472.5809 1372.91012,616.6262 1056.9971,144.0454 1904.5748,-558.4515 1904.5748,-558.4515"
+       id="path4600"
+       inkscape:connector-curvature="0"
+       sodipodi:nodetypes="czc"
+       inkscape:export-filename="/home/timmy-turner/py/schirm/schirm-large.png"
+       inkscape:export-xdpi="7.0282068"
+       inkscape:export-ydpi="7.0282068" />
+    <text
+       xml:space="preserve"
+       style="font-size:763.37921143px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:125%;letter-spacing:0px;word-spacing:0px;text-anchor:start;fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:0;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none;font-family:FreeMono;-inkscape-font-specification:FreeMono"
+       id="text4602"
+       sodipodi:linespacing="125%"
+       transform="translate(89.184439,5.0494766e-5)"
+       x="238.35905"
+       y="0"
+       inkscape:export-filename="/home/timmy-turner/py/schirm/schirm-large.png"
+       inkscape:export-xdpi="7.0282068"
+       inkscape:export-ydpi="7.0282068"><textPath
+         xlink:href="#path4600"
+         id="textPath4608"
+         style="font-size:763.37921143px;font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;text-align:start;letter-spacing:100px;text-anchor:start;stroke:#000000;stroke-width:0;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none;font-family:FreeMono;-inkscape-font-specification:FreeMono Bold"><tspan
+   id="tspan4606"
+   style="font-size:763.37921143px;font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;text-align:start;letter-spacing:100px;text-anchor:start;stroke:#000000;stroke-width:0;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none;font-family:FreeMono;-inkscape-font-specification:FreeMono Bold"
+   y="-611.85315"
+   x="339.93234"
+   dx="0">schirm</tspan></textPath></text>
+  </g>
+</svg>
