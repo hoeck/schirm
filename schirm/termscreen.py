@@ -396,14 +396,17 @@ class LineContainer(): # lazy
         index = self.real_line_index(linenumber)
         line = self.lines[index]
         line.show_cursor(column, cursorclass)
-        self.events.append(('set', index, line))
 
     def hide_cursor(self, linenumber):
         self._ensure_lines(linenumber)
         index = self.real_line_index(linenumber)
         line = self.lines[index]
         line.hide_cursor()
-        self.events.append(('set', index, line))
+        if not isinstance(line, IframeLine):
+            # update this line explicitly, as it may have been moved
+            # into the scrollback (above line 0) which is not included
+            # in the get_changed_lines result
+            self.events.append(('set', index, line))
 
     ## iframe events, not directly line-based
 
