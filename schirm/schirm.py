@@ -197,22 +197,31 @@ def handle_keypress(window, event, schirmview, pty, execute):
         schirmview.hide_searchframe()
         return True
 
+    # compute the terminal key
+    key = pty.map_key(name, (shift, alt, control))
+    if not key:
+        if alt:
+            key = "\033%s" % event.string
+        else:
+            key = event.string
+
     # handle terminal input
     if window.focus_widget.get_name() == 'term-webview':
-        key = pty.map_key(name, (shift, alt, control))
-        if not key:
-            if alt:
-                key = "\033%s" % event.string
-            else:
-                key = event.string
-
-        if key:
-            pty.q_write(key)
 
         if pty.screen.iframe_mode:
-            # let the webview see this event too
+            # in iframe mode, only write some ctrl-* events to the
+            # terminal process
+            if key and \
+                    control and \
+                    name in "dcz":
+                pty.q_write(key)
+
+            # let the webview handle this event
             return False
         else:
+            if key:
+                pty.q_write(key)
+
             # no need for the webview to react on key events when not in
             # iframe mode
             return True
