@@ -81,20 +81,20 @@ Missing Features/Defects
 ========================
 
 - Application mode (fullscreen ncurses apps use this) is not implemented properly.
-- History is unbounded, you may have to restart schirm to get rid of old output/frames.
 - Slower than any other terminal emulator, becomes slower with each page of terminal output.
+- UTF-8 only
 - Expect more bugs than say xterm.
-- Not configurable.
-
 
 Similar Programs
 ================
 
+- Terminus_: terminal emulator allowing inline HTML and javascript
 - TermKit_: not an emulator but a completely new terminal, built on WebKit and Node.js
 - shellinabox_: a complete browser terminal emulator with server
 - pyqonsole_: QT python terminal emulator
 - pyte_: beautiful VTXXX compatible terminal emulator library
 
+.. _Terminus: https://github.com/breuleux/terminus
 .. _TermKit: https://github.com/unconed/TermKit
 .. _shellinabox: http://code.google.com/p/shellinabox/
 .. _pyqonsole: http://www.logilab.org/project/pyqonsole
