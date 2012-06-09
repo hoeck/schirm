@@ -87,7 +87,7 @@ def resource_requested_handler(view, frame, resource, request, response):
         uri = request.get_uri().replace("http://termframe.localhost", "http://{}.localhost".format(mode_frame.get_name()))
         request.set_uri(uri)
 
-    logging.info("{} requested uri: {}".format(mode_frame.get_name(), request.get_uri()))
+    logging.info("{} requested uri: {}".format(mode_frame.get_name() or 'termframe', request.get_uri()))
     return 0
 
 def sample_console_message_handler(view, msg, line, source_id, user_data):
@@ -315,7 +315,7 @@ def webkit_event_loop(console_log=None, user_css='~/.schirm/user.css'):
     # create and load the term document
     doc = pkg_resources.resource_string("schirm.resources", "term.html")
 
-    gtkthread.invoke(lambda : schirmview.webview.load_string(doc, base_uri="http://termframe.localhost"))
+    gtkthread.invoke(lambda : schirmview.webview.load_uri("http://termframe.localhost/term.html"))
     load_finished.get()
 
     # start a thread to send js expressions to webkit

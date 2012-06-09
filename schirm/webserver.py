@@ -84,6 +84,7 @@ class Server(object):
         self.schirm_resources = {'/schirm.js': "schirm.js",   # schirm client lib
                                  '/schirm.css': "schirm.css", # schirm iframe mode styles
                                  # terminal emulator files
+                                 '/term.html': 'term.html',
                                  '/term.js': 'term.js',
                                  '/term.css': 'term.css',
                                  '/user.css': user_css,
