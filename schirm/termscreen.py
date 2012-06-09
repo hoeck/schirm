@@ -447,6 +447,11 @@ class TermScreen(pyte.Screen):
         self.savepoints = []
         self.lines, self.columns = lines, columns
         self.linecontainer = LineContainer(self._create_line)
+        # current iframe_mode,
+        # one of None, 'open' or 'closed'
+        # None     .. no active iframe
+        # 'open'   .. active iframe which is still being sent data to
+        # 'closed' .. active iframe where the initial data has already been sent
         self.iframe_mode = None
         self.iframe_id = None
         self.reset()
