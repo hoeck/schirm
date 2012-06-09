@@ -422,7 +422,7 @@ var Term = function() {
     },
 
     // Determine the new size of the currently active screen and return
-    // it by writing JSON to console.log
+    // it by writing JSON encoded mapping of the size to console.log
     resizeHandler: function(event) {
       oldLines = state.size.lines;
       state.size = fn.getScreen().getSize();
