@@ -22,6 +22,9 @@
 # * custom button - w/o margins/padding to make tabs thin
 #
 
+import thread
+import threading
+
 from gettext import gettext as _
 
 import gobject
@@ -451,5 +454,17 @@ def view_source_mode_requested_cb(widget, is_active, content_pane):
     childView.reload()
 
 if __name__ == "__main__":
+    # this works, but halts when clicking on any of the network
+    # related tabs in the inspector!
+    #def start():
+    #    print "GTK"
+    #    gtk.gdk.threads_init()
+    #    webbrowser = WebBrowser()
+    #    gtk.main()
+    #
+    #th = threading.Thread(target=start)
+    #th.start()
+
+    # this works:
     webbrowser = WebBrowser()
     gtk.main()
