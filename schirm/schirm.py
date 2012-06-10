@@ -336,18 +336,30 @@ def webkit_event_loop(console_log=None, user_css='~/.schirm/user.css'):
                 print "{}:{} {}".format(source, line, msg)
     quit()
 
+import cProfile as profile
 def pty_loop(pty, execute, schirmview):
     execute("termInit();")
+    # p = profile.Profile()
+    # p.enable()
     while running() and pty.running():
         for x in pty.read_and_feed_and_render():
             # strings are executed in a js context
             # functions are executed with pty, browser as the arguments
             if isinstance(x, basestring):
-                execute(x)
+                if 'exxitexxitexxitexxit' in x:
+                    print "endegelände"
+                    # p.disable()
+                    # p.dump_stats("schirmprof.pstats")
+                    stop()
+                execute(x) # TODO: synchronize!!!
+                #print "execute: %r" % x[:40]
             elif isinstance(x, types.FunctionType):
                 x(pty, schirmview, gtkthread)
             else:
                 logging.warn("unknown render event: {}".format(x[0]))
+
+    # p.disable()
+    # p.dump_stats("schirmprof.pstats")
     stop()
 
 def main():
