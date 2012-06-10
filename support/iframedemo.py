@@ -114,7 +114,7 @@ def frame_in_frame_test():
 # <html><head>
 # <script type="text/javascript" src="jquery.js">
 # <script>
-# 
+#
 # </script>
 # </head><body>
 # <h3>empty</h3>
@@ -159,6 +159,7 @@ div.tablecontainer {
 }
 
 table {
+    display:none;
     border-spacing: 0px;
     border-collapse: collapse;
     font-family: "Lucida Sans Unicode","Lucida Grande",Sans-Serif;
@@ -208,7 +209,17 @@ def table(cols, header, rows):
             {rows}
           </tbody>
         </table>
-        </div>
+<button onclick="show();">show</button>
+</div>
+<script type="text/javascript" src="/schirm.js"></script>
+<script type="text/javascript">
+function show() {{
+  document.querySelector("table").style.display = 'block';
+
+
+  schirm.resize(document.querySelector(".tablecontainer").getBoundingClientRect().height);
+}}
+</script>
       </body>
     </html>
     """
@@ -231,13 +242,13 @@ def table_test():
     rows = [{'column 1': 'X'*20,
              'column 2': 'Y'*20,
              'column 3': 'Z'*20,
-             'column 4': 'A'*20}] * 100
+             'column 4': 'A'*20}] * 3
     header = {'column 1': 'C1',
               'column 2': 'C2',
               'column 3': 'C3',
               'column 4': 'C4'}
     cols = ['column 1','column 2','column 3','column 4']
-    with frame(height='auto', width='100%'):
+    with frame():
         print table(cols, header, rows)
 
 if __name__ == '__main__':
