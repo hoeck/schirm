@@ -33,6 +33,8 @@ import base64
 import pkg_resources
 import types
 
+import gui
+
 from webkit_wrapper import GtkThread, EmbeddedWebView, establish_browser_channel, install_key_events
 import webkit_wrapper as wr
 from promise import Promise
@@ -362,30 +364,36 @@ def pty_loop(pty, execute, schirmview):
     # p.dump_stats("schirmprof.pstats")
     stop()
 
+# def main():
+#
+#     signal.signal(signal.SIGINT, lambda sig, stackframe: quit())
+#     signal.siginterrupt(signal.SIGINT, True)
+#
+#     parser = argparse.ArgumentParser(description="A linux compatible terminal emulator providing modes for rendering (interactive) html documents.")
+#     parser.add_argument("-v", "--verbose", help="be verbose, -v for info, -vv for debug log level", action="count")
+#     parser.add_argument("-c", "--console-log", help="write all console.log messages to stdout (use -cc to include document URL and linenumber)", action="count")
+#     args = parser.parse_args()
+#
+#     if args.verbose:
+#         logging.basicConfig(level=[None, logging.INFO, logging.DEBUG][args.verbose])
+#
+#     if not (args.verbose and args.verbose > 1):
+#         warnings.simplefilter('ignore')
+#
+#     try:
+#         __IPYTHON__
+#         print "IPython detected, starting webkit loop in its own thread"
+#         t = threading.Thread(target=webkit_event_loop, args=(args.console_log,))
+#         t.start()
+#     except:
+#         webkit_event_loop(args.console_log)
+
 def main():
+    def foo(browser_page):
+        print "browser term started"
+        browser_page.load_uri("http://www.heise.de")
 
-    signal.signal(signal.SIGINT, lambda sig, stackframe: quit())
-    signal.siginterrupt(signal.SIGINT, True)
-
-    parser = argparse.ArgumentParser(description="A linux compatible terminal emulator providing modes for rendering (interactive) html documents.")
-    parser.add_argument("-v", "--verbose", help="be verbose, -v for info, -vv for debug log level", action="count")
-    parser.add_argument("-c", "--console-log", help="write all console.log messages to stdout (use -cc to include document URL and linenumber)", action="count")
-    args = parser.parse_args()
-
-    if args.verbose:
-        logging.basicConfig(level=[None, logging.INFO, logging.DEBUG][args.verbose])
-
-    if not (args.verbose and args.verbose > 1):
-        warnings.simplefilter('ignore')
-
-    try:
-        __IPYTHON__
-        print "IPython detected, starting webkit loop in its own thread"
-        t = threading.Thread(target=webkit_event_loop, args=(args.console_log,))
-        t.start()
-    except:
-        webkit_event_loop(args.console_log)
-
+    gui.start_gui(foo)
 
 if __name__ == '__main__':
     main()
