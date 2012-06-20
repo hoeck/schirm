@@ -102,7 +102,7 @@ class ContentPane (gtk.Notebook):
         #     menu.show_all()
         pass
 
-    def _close_tab (self, label, child):
+    def _close_tab(self, label, child):
         page_num = self.page_num(child)
         if page_num != -1:
             view = child.get_child()
@@ -110,14 +110,14 @@ class ContentPane (gtk.Notebook):
             self.remove_page(page_num)
         self.set_show_tabs(self.get_n_pages() > 1)
 
-    def _switch_page (self, notebook, page, page_num):
+    def _switch_page(self, notebook, page, page_num):
         child = self.get_nth_page(page_num)
         view = child.get_child()
         frame = view.get_main_frame()
         #self.emit("focus-view-title-changed", frame, frame.props.title)
 
     # set the tabs label
-    def _title_changed_cb (self, view, frame, title):
+    def _title_changed_cb(self, view, frame, title):
         child = self.get_nth_page(self.get_current_page())
         label = self.get_tab_label(child)
         label.set_label(title)
@@ -145,6 +145,13 @@ class TabbedWindow(gtk.Window):
 
     def new_tab(self, content):
         self.content_tabs.new_tab(content)
+
+    def get_current_page_component(self):
+        n = self.content_tabs.get_current_page()
+        if n <= -1:
+            return None
+        else:
+            return self.content_tabs.get_nth_page(n)
 
 def destroy_cb(window, content_pane):
     """destroy window resources"""

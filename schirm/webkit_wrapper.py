@@ -321,7 +321,6 @@ class Inspector (gtk.Window):
         self.destroy()
         return False
 
-
 class GtkThread(object):
 
     def __init__(self):
@@ -496,7 +495,7 @@ class EmbeddedWebView():
         searchentry.connect('changed', lambda editable, *user_data: entry_changed_cb(browser, editable, *user_data))
 
         searchclose.connect('clicked', lambda *_: self.hide_searchframe())
-
+ 
         box.pack_start(searchframe, expand=False)
 
         window.set_default_size(800, 600)
@@ -547,45 +546,44 @@ class EmbeddedWebView():
     def set_title(self, title):
         self.window.set_title(title)
 
-
-def establish_browser_channel(gtkthread, browser):
-    """
-    return two functions, receive and execute.
-
-    Receive pops a string of a message queue filled up with
-    javascript console messages.
-
-    Execute executes the given javascript string in the browser.
-    """
-    message_queue = Queue.Queue()
-
-    def title_changed(title):
-        if title != 'null': message_queue.put(title)
-
-    def console_message(view, msg, line, source_id, *user_data):
-        # source_id .. uri string of the document the console.log occured in
-        message_queue.put((msg, line, source_id))
-
-        # 1 .. do not invoke the default console message handler
-        # 0 .. invoke other handlers
-        return 1
-
-    browser.connect('console-message', console_message)
-
-    def receive(block=True, timeout=None):
-        """
-        Like Queue.get but return None if nothing is available
-        (instead of raising Empty).
-        """
-        try:
-            return message_queue.get(block=block, timeout=timeout)
-        except Queue.Empty:
-            return None
-
-    def execute(msg):
-        gtkthread.invoke(browser.exec_js, msg)
-
-    return receive, execute
+# def establish_browser_channel(gtkthread, browser):
+#     """
+#     return two functions, receive and execute.
+# 
+#     Receive pops a string of a message queue filled up with
+#     javascript console messages.
+# 
+#     Execute executes the given javascript string in the browser.
+#     """
+#     message_queue = Queue.Queue()
+# 
+#     def title_changed(title):
+#         if title != 'null': message_queue.put(title)
+# 
+#     def console_message(view, msg, line, source_id, *user_data):
+#         # source_id .. uri string of the document the console.log occured in
+#         message_queue.put((msg, line, source_id))
+# 
+#         # 1 .. do not invoke the default console message handler
+#         # 0 .. invoke other handlers
+#         return 1
+# 
+#     browser.connect('console-message', console_message)
+# 
+#     def receive(block=True, timeout=None):
+#         """
+#         Like Queue.get but return None if nothing is available
+#         (instead of raising Empty).
+#         """
+#         try:
+#             return message_queue.get(block=block, timeout=timeout)
+#         except Queue.Empty:
+#             return None
+# 
+#     def execute(msg):
+#         gtkthread.invoke(browser.exec_js, msg)
+# 
+#     return receive, execute
 
 def install_key_events(window, press_cb=None, release_cb=None):
     """

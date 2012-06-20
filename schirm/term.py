@@ -199,28 +199,24 @@ class EventRenderer():
     @staticmethod
     def iframe_execute(source):
         """Execute and discard the result."""
-        def _iframe_execute(pty, browser, gtkthread):
-            gtkthread.invoke(lambda : bool(browser.webview.eval_js_in_last_frame("", source)))
+        def _iframe_execute(schirm):
             logging.debug('iframe-execute: {}'.format(source))
+            schirm.uiproxy.execute_script_frame(None, source, discard_result=True)
         return _iframe_execute
 
     @staticmethod
     def iframe_eval(source):
         """Execute and write the result to the pty."""
-        def eval_and_write_to_pty(js_str, pty, browser):
-            ret = browser.webview.eval_js_in_last_frame("", js_str)
-            logging.debug('iframe-eval: {} -> {}'.format(js_str, ret))
-            pty.q_write(("\033Rresult\033;", base64.encodestring(ret), "\033Q", "\n"))
-
-        def _iframe_eval(pty, browser, gtkthread):
-            gtkthread.invoke(eval_and_write_to_pty, source, pty, browser)
+        def _iframe_eval(schirm):
+            # TODO: implement this in schirm.Schirm: pty.q_write(("\033Rresult\033;", base64.encodestring(ret), "\033Q", "\n"))
+            schirm.uiproxy.execute_script_frame(None, source, discard_result=False)
 
         return _iframe_eval
 
     @staticmethod
     def set_title(title):
-        def _set_title(pty, browser, gtkthread):
-            gtkthread.invoke(lambda : browser.set_title(title))
+        def _set_title(schirm):
+            schirm.uiproxy.set_title(title)
         return _set_title
 
     @staticmethod
