@@ -17,6 +17,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import os
+import sys
 import simplejson
 import fcntl
 import termios
@@ -30,6 +31,7 @@ import logging
 import base64
 import pwd
 import types
+import time
 from itertools import cycle
 from UserList import UserList
 
@@ -37,6 +39,17 @@ import pyte
 
 import termscreen
 from termscreen import TermScreen, SchirmStream
+
+def put_nowait_sleep(queue, data):
+    times = 0
+    wait_f = lambda x: 0.01 * (2 ** x) if x < 9 else 1.28
+    while True:
+        try:
+            queue.put_nowait(data)
+            return
+        except Queue.Full:
+            time.sleep(wait_f(times))
+            times += 1
 
 def json_escape_all_u(src):
     dst = ""
@@ -179,21 +192,41 @@ class EventRenderer():
     @staticmethod
     def set(index, line):
         if isinstance(line, termscreen.IframeLine):
+            # TODO: close leave the current iframe (if any)
             return 'term.insertIframe({}, {}, {});'.format(index, json.dumps(line.id), json.dumps(line.args))
         else:
             content = renderline(line)
             return set_line_to(index, content)
 
     @staticmethod
+    def set_title(title):
+        def _set_title(schirm):
+            schirm.uiproxy.set_title(title)
+        return _set_title
+
+    @staticmethod
+    def remove_history_lines(n):
+        return "term.removeHistoryLines(%s);" % n
+
+    @staticmethod
+    def check_history_size():
+        return "term.checkHistorySize();"
+
+    # iframe
+
+    @staticmethod
     def iframe(content):
+        # TODO: iframe-http: instead of document.write, use an open HTTP connection.
         return 'term.iframeWrite({});'.format(json.dumps(content))
 
     @staticmethod
     def iframe_close():
+        # TODO: iframe-http: this should only close the http connection
         return 'term.iframeCloseDocument();'
 
     @staticmethod
     def iframe_leave():
+        # TODO: iframe-http: this should also close the http connection
         return 'term.iframeLeave();'
 
     @staticmethod
@@ -210,27 +243,28 @@ class EventRenderer():
         def _iframe_eval(schirm):
             # TODO: implement this in schirm.Schirm: pty.q_write(("\033Rresult\033;", base64.encodestring(ret), "\033Q", "\n"))
             schirm.uiproxy.execute_script_frame(None, source, discard_result=False)
-
         return _iframe_eval
 
     @staticmethod
-    def set_title(title):
-        def _set_title(schirm):
-            schirm.uiproxy.set_title(title)
-        return _set_title
+    def iframe_register_resource(frame_id, name, mimetype, data):
+        def _iframe_register_resource(schirm):
+            schirm.register_resource(frame_id, name, mimetype, data)
+        return _iframe_register_resource
 
     @staticmethod
-    def remove_history_lines(n):
-        return "term.removeHistoryLines(%s);" % n
+    def iframe_respond(req_id, data):
+        def _iframe_respond(schirm):
+            schirm.uiproxy.respond(req_id, data)
+        return _iframe_respond
 
     @staticmethod
-    def check_history_size():
-        return "term.checkHistorySize();"
+    def iframe_debug(message):
+        print message
+        return lambda schirm: None
 
     @staticmethod
     def iframe_resize(iframe_id, height):
         return "term.iframeResize(\"%s\", %s);" % (iframe_id, int(height))
-
 
 class Pty(object):
 
@@ -262,35 +296,28 @@ class Pty(object):
 
         self.set_size(*size)
 
-        # set up input (schirm -> pty) queue and a consumer thread that
-        # pops off functions and executes them
-        # used to serialize input (keys, resize events, http responses, ...)
-        self.input_queue = Queue.Queue()
-
-        def process_queue_input():
-            while 1:
-                self.input_queue.get(block=True)()
-
-        t = threading.Thread(target=process_queue_input)
-        t.daemon = True
-        t.start()
-
-        # set up output (pty -> schirm) queue
+        # set up input (pty -> schirm) queue
         # and a default producer which os.reads from the pty
         # to get simple asyncronous/interruptible os.read without
         # dealing with signals
-        self.output_queue = Queue.Queue()
+        self.input_queue = Queue.Queue(4)
         def read_from_pty():
             try:
-                while 1:
-                    self.output_queue.put(os.read(self._pty, 8192))
+                while True:
+                    # de-priorize input data to not block the UI
+                    # test: cat a huge file, ctrl-c should work instantly
+                    input_data = os.read(self._pty, 8192)
+                    put_nowait_sleep(self.input_queue, ('pty_data', input_data))
+                    #self.input_queue.put(('pty_data', input_data))
+
             except OSError, e:
                 # self._pty was closed or reading interrupted by a
                 # signal -> application exit
                 self._running = False
-                self.output_queue.put('') # trigger the pty_loop
+                self.input_queue.put(('pty_read_error', None))
 
         t = threading.Thread(target=read_from_pty)
+        t.setDaemon(True)
         t.start()
 
     def q_write(self, s):
@@ -318,12 +345,11 @@ class Pty(object):
         self.input_queue.put(lambda : self.set_focus(focus))
 
     def q_removehistory(self, lines_to_remove):
-        # the render thread works off the output_queue
-        self.output_queue.put(lambda: self.screen.remove_history(lines_to_remove))
+        self.input_queue.put(lambda: self.screen.remove_history(lines_to_remove))
 
     def q_iframe_resize(self, height):
         iframe_id = self.screen.iframe_id
-        self.output_queue.put(lambda: self.screen.linecontainer.iframe_resize(iframe_id, height))
+        self.input_queue.put(lambda: self.screen.linecontainer.iframe_resize(iframe_id, height))
 
     def write(self, s):
         """
@@ -362,12 +388,9 @@ class Pty(object):
             fcntl.ioctl(self._pty, termios.TIOCSWINSZ, win)
             self._size = [w, h]
 
-    def set_webserver(self, server):
-        self._server = server
-
     def resize(self, lines, cols):
         # this is only eventual consistent :/
-        self.output_queue.put(lambda: self.screen.resize(lines, cols)) # put resize on the render thread
+        self.input_queue.put(lambda: self.screen.resize(lines, cols)) # put resize on the render thread
         self.set_size(lines, cols) # -> issues sigwinch
 
     def set_focus(self, focus=True):
@@ -375,14 +398,20 @@ class Pty(object):
         self._focus = bool(focus)
 
         # redraw the terminal with the new focus settings
-        self.output_queue.put('')
+        self.input_queue.put(('redraw', None))
 
     def read_and_feed(self):
-        res = self.output_queue.get(block=True)
+        res = self.input_queue.get(block=True)
         if isinstance(res, types.FunctionType):
             res()
-        elif res:
-            self.stream.feed(res)
+        else:
+            type, data = res
+            if type == 'pty_data':
+                self.stream.feed(data)
+            elif type == 'pty_read_error':
+                sys.exit(0) # ???
+            elif type == 'redraw':
+                pass
 
     def render_changes(self):
         """
@@ -390,7 +419,7 @@ class Pty(object):
         """
         q = []
         lines = self.screen.linecontainer
-        
+
         if not self.screen.cursor.hidden and not self.screen.iframe_mode:
             # make sure the terminal cursor is drawn
             #print "cursor is", self.screen.cursor.y, self.screen.cursor.x
@@ -399,31 +428,8 @@ class Pty(object):
                               'cursor' if self._focus else 'cursor-inactive')
 
         events = lines.get_and_clear_events()
-        triggers = {}
         for e in events:
-            # iframe events do sometimes more than just updating the
-            # screen
-            if e[0] == 'iframe_register_resource':
-                self._server.register_resource(*e[1:])
-            elif e[0] == 'iframe_respond':
-                self._server.respond(e[1], e[2])
-            elif e[0] == 'iframe_enter':
-                # Make sure we have no old resources.
-                # The embedded webkit takes some time to load
-                # resources, so we want them to be around even if we
-                # already left iframe mode.
-                #self._server.clear_resources()
-                pass
-            elif e[0] == 'iframe_leave':
-                q.append(EventRenderer.iframe_close())
-                q.append(EventRenderer.iframe_leave())
-            elif e[0] == 'iframe_debug':
-                print e[1]
-            elif e[0] == 'set_title':
-                q.append(EventRenderer.set_title(e[1]))
-            else:
-                # plain old terminal screen updating
-                q.append(getattr(EventRenderer, e[0])(*e[1:]))
+            q.append(getattr(EventRenderer, e[0])(*e[1:]))
 
         # line changes
         line_q = []
@@ -441,7 +447,6 @@ class Pty(object):
             # we update the screen
             lines.hide_cursor(self.screen.cursor.y)
 
-        # todo: append a cursor undraw event for the next render invocation
         return q
 
     def read_and_feed_and_render(self):

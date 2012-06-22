@@ -13,7 +13,7 @@ class TabLabel (gtk.HBox):
                   (gobject.TYPE_OBJECT,))
         }
 
-    def __init__ (self, title, child):
+    def __init__(self, title, child):
         """initialize the tab label"""
         gtk.HBox.__init__(self, False, 4)
         self.title = title
@@ -37,11 +37,14 @@ class TabLabel (gtk.HBox):
         self.set_data("close-button", close_button)
         self.connect("style-set", tab_label_style_set_cb)
 
-    def set_label (self, text):
+    def set_label(self, text):
         """sets the text of this label"""
         self.label.set_label(text)
 
-    def _close_tab (self, widget, child):
+    def get_label(self):
+        return self.label.get_text()
+
+    def _close_tab(self, widget, child):
         self.emit("close", child)
 
 
@@ -68,8 +71,6 @@ class ContentPane (gtk.Notebook):
         gtk.Notebook.__init__(self)
         self.props.scrollable = True
         self.props.homogeneous = True
-        self.connect("switch-page", self._switch_page)
-
         self.show_all()
         self._hovered_uri = None
 
@@ -110,12 +111,6 @@ class ContentPane (gtk.Notebook):
             self.remove_page(page_num)
         self.set_show_tabs(self.get_n_pages() > 1)
 
-    def _switch_page(self, notebook, page, page_num):
-        child = self.get_nth_page(page_num)
-        view = child.get_child()
-        frame = view.get_main_frame()
-        #self.emit("focus-view-title-changed", frame, frame.props.title)
-
     # set the tabs label
     def _title_changed_cb(self, view, frame, title):
         child = self.get_nth_page(self.get_current_page())
@@ -139,9 +134,7 @@ class TabbedWindow(gtk.Window):
         self.add(self.content_tabs)
 
         self.set_default_size(800, 600)
-        self.connect('destroy', destroy_cb, self.content_tabs)
         self.show_all()
-        #content_tabs.new_tab("http://www.google.com")
 
     def new_tab(self, content):
         self.content_tabs.new_tab(content)
@@ -153,17 +146,15 @@ class TabbedWindow(gtk.Window):
         else:
             return self.content_tabs.get_nth_page(n)
 
-def destroy_cb(window, content_pane):
-    """destroy window resources"""
-    num_pages = content_pane.get_n_pages()
-    while num_pages != -1:
-        child = content_pane.get_nth_page(num_pages)
-        if child:
-            view = child.get_child()
-        num_pages = num_pages - 1
-    window.destroy()
-    gtk.main_quit()
+    def set_tab_label(self, child_component, title):
+        child = self.content_tabs.get_nth_page(self.content_tabs.get_current_page())
+        label = self.content_tabs.get_tab_label(child)
+        label.set_label(title)
 
+    def get_tab_label(self, child_component):
+        child = self.content_tabs.get_nth_page(self.content_tabs.get_current_page())
+        label = self.content_tabs.get_tab_label(child)
+        return label.get_label()
 
 if __name__ == '__main__':
     w = TabbedWindow()

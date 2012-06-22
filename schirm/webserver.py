@@ -76,8 +76,8 @@ class Server(object):
         self._id = 0 # last request id
 
         self.listen_thread = None
-
         self.output_queue = output_queue
+        self.start()
 
     def _getnextid(self):
         self._id += 1
@@ -89,10 +89,12 @@ class Server(object):
         self.socket.listen(backlog)
         # listen to connections and write things to the terminal process
         self.listen_thread = threading.Thread(target=self.listen)
+        self.listen_thread.setDaemon(True)
         self.listen_thread.start()
         # close the connections for requests the terminal process has
         # not responded in REQUEST_TIMEOUT time
         self.prune_old_request_thread = threading.Thread(target=self.prune_old_requests)
+        self.prune_old_request_thread.setDaemon(True)
         self.prune_old_request_thread.start()
         return self
 

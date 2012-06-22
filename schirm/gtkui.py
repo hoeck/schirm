@@ -17,6 +17,7 @@
 
 import os
 import Queue
+import threading
 from gettext import gettext as _
 
 import gobject
@@ -27,6 +28,11 @@ import tabbed_window
 from promise import Promise
 import webkitutils
 import webserver
+
+class attrdict(dict):
+
+    def __getattr__(self, k):
+        return self[k]
 
 def gtk_invoke(f, *args, **kwargs):
     """Invoke f with the given args in the gtkthread and ignore the result.
@@ -39,7 +45,7 @@ def gtk_invoke_s(f, *args, **kwargs):
     """Invoke f with the given args in the gtkthread and wait for the invocations result.
     """
     p = Promise(f)
-    invoke(p, *args, **kwargs)
+    gtk_invoke(p, *args, **kwargs)
     return p.get()
 
 class Inspector (gtk.Window):
@@ -322,28 +328,55 @@ class PageProxy (object):
             page_proxy.handle_keypress(event)
 
     @classmethod
+    def _switch_page_cb(self, notebook, page, page_num):
+        # called whenever the selected tabpage changes
+        # set the window title to the tabs title
+        #child = self.window.content_tabs.get_nth_page(self.window.get_current_page())
+        child = self.window.get_current_page_component()
+        title = self.window.get_tab_label(child)
+        self.window.set_title(title)
+
+    @classmethod
     def start(self, schirm_type):
         """Start the ui."""
         self.window = tabbed_window.TabbedWindow()
+        self.window.content_tabs.connect('switch-page', self._switch_page_cb)
         self.window.set_events(gtk.gdk.KEY_PRESS_MASK | gtk.gdk.KEY_RELEASE_MASK)
         self.window.connect('key_press_event', self.keypress_cb)
+        self.window.connect('destroy', lambda w: self.quit())
         self.schirm_type = schirm_type
+
+        self.new_tab()
+        self.new_tab()
         gtk.main()
 
     @classmethod
     def new_tab(self):
         """Open a tabpage."""
         def _new_tab():
-            t = PageProxy(window)
+            t = PageProxy()
             self.pages.append(t)
-            window.new_tab(t.get_component())
+            self.window.new_tab(t.get_component())
             return t
-        t = gtk_invoke_s(_new_tab)
-        return t
+        t = gtk_invoke(_new_tab)
+
+    @classmethod
+    def quit(self):
+        gtk.main_quit()
 
     def __init__(self):
+        # communication
+        # schirm -> webview communication
+        self.input_queue = Queue.Queue()
+        # webview -> schirm communication
+        # each message on output queue is a tuple of: (typename, attrdict-value)
+        self.output_queue = Queue.Queue()
+        # webview <-> schirm http communication
+        self.webserver = webserver.Server(self.output_queue)
+
         # gtk
         self.webview = TerminalWebview()
+        self.webview.set_proxy("http://localhost:{}".format(self.webserver.getport()))
         self.box = None
         self.search_forward = True
         self.pages.append(self)
@@ -351,23 +384,17 @@ class PageProxy (object):
         # logging
         self.console_log_level = 0 # 0,1,2,3
 
-        # communication
-        # schirm -> webview communication
-        self.input_queue = Queue.Queue
-        # webview -> schirm communication
-        self.output_queue = Queue.Queue
-        # webview <-> schirm http communication
-        self.webserver = webserver.Server()
-
         # gtk setup
         self._construct()
         self.setup_handlers()
 
         # terminal
-        self._init_schirm(self)
+        self.schirm = self.schirm_type(self)
 
-    def _init_schirm(self):
-        self.schirm = self.schirm_type()
+        # setup the input queue worker
+        self.input_worker = threading.Thread(target=self.input_worker_f)
+        self.input_worker.setDaemon(True)
+        self.input_worker.start()
 
     def _construct_search_box(self, parent_box):
         searchbox = gtk.HBox(homogeneous=False)
@@ -391,12 +418,12 @@ class PageProxy (object):
         searchframe.set_border_width(0)
         searchframe.add(searchbox)
 
-        def entry_changed_cb(browser, editable, *user_data):
-            browser.unmark()
+        def entry_changed_cb(editable):
+            self.webview.unmark()
             val = editable.get_property('text')
             if val:
-                self.webkit.search(val, jump_to=True, forward=self.search_forward)
-        searchentry.connect('changed', lambda editable: entry_changed_cb(browser, editable))
+                self.webview.search(val, jump_to=True, forward=self.search_forward)
+        searchentry.connect('changed', entry_changed_cb)
 
         searchclose.connect('clicked', lambda *_: self.hide_searchframe())
 
@@ -470,7 +497,11 @@ class PageProxy (object):
 
     def set_title(self, title):
         # todo: set the tabpage label
-        gtk_invoke(lambda : self.window.set_title(title))
+        def _set_title():
+            self.window.set_tab_label(self.box, title)
+            self.window.set_title(title)
+
+        gtk_invoke(_set_title)
 
     # public interface
 
@@ -485,13 +516,13 @@ class PageProxy (object):
         self.input_queue.put(lambda : gtk_invoke_s(self.webview.execute_script_frame, frameid, src))
 
     def load_uri_and_wait(self, uri):
-        self.input_queue.put(lambda : gtk_invoke_s(self.load_uri_and_wait, uri))
+        self.input_queue.put(lambda: self._load_uri_and_wait(uri))
 
     def respond(self, requestid, data):
         self.input_queue.put(lambda : self.webserver.respond(requestid, data))
 
     def set_title(self, title):
-        return self.output_queue.put(lambda : self.set_title(title))
+        self.input_queue.put(lambda : self.set_title(title))
 
     def receive(self):
         return self.output_queue.get()
@@ -506,16 +537,16 @@ class PageProxy (object):
             h = d.get('height')
 
             if w and h:
-                self.output_queue.put({'type':'resize',
-                                       'value': {'width': int(w),
-                                                 'height':int(h)}})
+                self.output_queue.put(('resize',
+                                       attrdict({'width': int(w),
+                                                 'height':int(h)})))
 
         elif msg.startswith("frame"):
             frame_id = msg[5:msg.find(" ")]
             logging.debug("Log message for iframe {}".format(frame_id))
-            self.output_queue.put({'type':'frame-console-log',
-                                   'value': {'frameid':frameid,
-                                             'message':msg[msg.find(" ")+1:]}})
+            self.output_queue.put(('frame-console-log',
+                                   attrdict({'frameid':frameid,
+                                             'message':msg[msg.find(" ")+1:]})))
 
         elif msg.startswith("iframeresize"):
             try:
@@ -524,23 +555,22 @@ class PageProxy (object):
                 return False
 
             logging.debug("Iframe resize request to {}".format(height))
-            self.output_queue.put({'type':'iframe-resize',
-                                   'value':height})
+            self.output_queue.put(('iframe-resize',
+                                   attrdict({'height':height})))
 
         elif msg.startswith("removehistory"):
             try:
                 n = int(msg[13:])
             except:
                 return False
-            self.output_queue.put({'type':'remove-history',
-                                   'value': n})
+            self.output_queue.put(('remove-history', attrdict(lines=n)))
 
         else:
             return False # not handled
 
         return True # handled
 
-    def handle_keypress(event):
+    def handle_keypress(self, event):
         """Handle directly or put keypress envents onto the output_queue.
 
         Intercept some standard terminal key combos, like shift +
@@ -556,10 +586,13 @@ class PageProxy (object):
         #                        keyval
         #                        string
         name = gtk.gdk.keyval_name(event.keyval)
-
+        string = event.string
         shift = event.state == gtk.gdk.SHIFT_MASK
         alt = event.state == gtk.gdk.MOD1_MASK
         control = event.state == gtk.gdk.CONTROL_MASK
+
+        focus_widget = self.window.focus_widget
+        focus_widget_name = focus_widget.get_name() if focus_widget else None
 
         # handle key commands
 
@@ -581,6 +614,7 @@ class PageProxy (object):
             return True
 
         # custom schirm commands
+
         elif name == 'S' and event.string == '\x13': # gtk weirdness: uppercase S and \x13 to catch a shift-control-s
             # control-shift-s to search forward
             self.search(forward=True)
@@ -589,38 +623,38 @@ class PageProxy (object):
             # control-shift-r to search backward
             self.search(forward=False)
             return True
-        elif self.window.focus_widget.get_name() == 'search-entry' and name == 'g' and control:
+        elif focus_widget_name == 'search-entry' and name == 'g' and control:
             # while searching: control-g to hide the searchframe and the searchresult
             self.hide_searchframe()
             return True
 
-        elif self.window.focus_widget is self.webview:
+        elif focus_widget is self.webview:
             # terminal input
-            self.output_queue.put({'type':'key',
-                                   'value':{'name':name,
-                                            'shift':shift,
-                                            'alt':alt,
-                                            'control':control,
-                                            'string':string}})
+            self.output_queue.put(('key',
+                                   attrdict({'name':name,
+                                             'shift':shift,
+                                             'alt':alt,
+                                             'control':control,
+                                             'string':string})))
 
             # let the webview handle this event too
             # TODO: add an 'iframe_mode' flag to not propagate keyevents
             #       to the terminal when not in iframe mode
             return False
 
-    def setup_handlers():
+    def setup_handlers(self):
         """Connect console.log and other handlers."""
         # console.log
         def _console_message_cb(view, msg, line, source_id):
-            if console_log == 3:
+            if self.console_log_level == 3:
                 print "console-log-ipc: {}:{} {}".format(source, line, msg)
 
             res = self.console_log_msg_handler(msg)
 
             if not res:
-                if console_log == 2:
+                if self.console_log_level == 2:
                     print "console-log: {}:{} {}".format(source, line, msg)
-                if console_log == 1:
+                if self.console_log_level == 1:
                     print "console-log: ".format(msg)
             # 1 .. do not invoke the default console message handler
             # 0 .. invoke other handlers
@@ -629,16 +663,16 @@ class PageProxy (object):
         self.webview.connect('console-message', _console_message_cb)
 
         # terminal focus
-        self.webview.connect('focus-in-event', lambda *_: self.output_queue.put({'type':'focus', 'value':True}))
-        self.webview.connect('focus-out-event', lambda *_: self.output_queue.put({'type':'focus', 'value':False}))
+        self.webview.connect('focus-in-event',  lambda *_: self.output_queue.put(('focus', attrdict(focus=True ))))
+        self.webview.connect('focus-out-event', lambda *_: self.output_queue.put(('focus', attrdict(focus=False))))
 
-    def input_message_loop(self):
+    def input_worker_f(self):
         """Process the messages from the input_message queue."""
         while True:
             msg_f = self.input_queue.get()
             msg_f()
 
-    def load_uri_and_wait(self, uri):
+    def _load_uri_and_wait(self, uri):
         """Load uri and wait else until the webview fires a document-load-finished."""
 
         # setup onetime load finished handler to track load status of

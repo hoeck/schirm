@@ -55,9 +55,13 @@ class Webview():
     def respond(self, requestid, data):
         # respond to an earlier request with data
         pass
-    
+
     def load_uri_and_wait(self, uri):
         # load a URI into the webview
+        pass
+
+    def set_title(self, title):
+        # set the webviews title (in tab, titlebar whatever)
         pass
 
     # webview -> schirm
@@ -66,9 +70,10 @@ class Webview():
         # key
         # mouse
         # request
-        dict(type={'key', 'mouse', 'console', 'request'},
-             value='',
-             frameid='')
+        # focus
+        ({'key', 'mouse', 'console', 'request'},
+         attrdict(**value))
+
 
 def get_term_iframe(view, frame):
     """Given a frame, return the frames iframe-mode frame ancestor or None.
@@ -279,7 +284,7 @@ def webkit_event_loop(console_log=None, user_css='~/.schirm/user.css'):
 #                 x(pty, schirmview, gtkthread)
 #             else:
 #                 logging.warn("unknown render event: {}".format(x[0]))
-# 
+#
 #     # p.disable()
 #     # p.dump_stats("schirmprof.pstats")
 #     stop()
@@ -310,11 +315,11 @@ def webkit_event_loop(console_log=None, user_css='~/.schirm/user.css'):
 
 
 # class Schirm(object):
-    
+
     # def __init__(self, webview, profile_file):
     #     self.webview = webview # Webview Proxy: either gtk or sth. else
     #     self.pty = term.Pty([80,24])
-    # 
+    #
     # def pty_out_loop(self):
     #     """Move information from the terminal to the (embedded) webkit browser."""
     #     self.webview.execute_s("termInit();") # execute and wait for the result
@@ -329,22 +334,22 @@ def webkit_event_loop(console_log=None, user_css='~/.schirm/user.css'):
     #                 x(self.pty, self.webkit, gui.gtkthread)?
     #             else:
     #                 logging.warn("unknown render event: {}".format(x[0]))
-    # 
+    #
     # def pty_in_loop(self):
     #     # read console.log from webkit messages starting with 'schirm'
     #     # and decode them with json
     #     message_queue = Queue.Queue()
-    # 
+    #
     #     def console_message_cb(view, msg, line, source_id):
     #         # source_id .. uri string of the document the console.log occured in
     #         message_queue.put((msg, line, source_id))
-    # 
+    #
     #         # 1 .. do not invoke the default console message handler
     #         # 0 .. invoke other handlers
     #         return 1
-    # 
+    #
     #     self.webkit.connect('console-message', console_message_cb)
-    # 
+    #
     #     def receive(block=True, timeout=None):
     #         """
     #         Like Queue.get but return None if nothing is available
@@ -354,7 +359,7 @@ def webkit_event_loop(console_log=None, user_css='~/.schirm/user.css'):
     #             return message_queue.get(block=block, timeout=timeout)
     #         except Queue.Empty:
     #             return None
-    # 
+    #
     #     while True: #running():
     #         msg, line, source = receive(block=True, timeout=0.1) or (None, None, None) # timeout to make waiting for events interruptible
     #         if msg:
@@ -382,16 +387,28 @@ class Schirm(object):
                         #'/user.css': get_user_css(user_css) # TODO
                         }
 
-    self.not_found = set(["/favicon.ico"])
+    not_found = set(["/favicon.ico"])
 
     def __init__(self, uiproxy):
-        self.uiproxy
+        self.uiproxy = uiproxy
         self.resources = {} # iframe_id -> resource name -> data
-        
-        
+
+        print "pty"
         self.pty = term.Pty([80,24])
-        self.uiproxy.load_uri("")
-        self.uiproxy.execute("termInit();")
+        print "load_uri_and_wait"
+        self.uiproxy.load_uri_and_wait("http://termframe.localhost/term.html")
+        print "terminit"
+        self.uiproxy.execute_script("termInit();")
+        print "start workers"
+
+        # start workers
+        ui_input_worker = threading.Thread(target=self.ui_in_loop)
+        ui_input_worker.setDaemon(True)
+        ui_input_worker.start()
+
+        pty_output_worker = threading.Thread(target=self.pty_out_loop)
+        pty_output_worker.setDaemon(True)
+        pty_output_worker.start()
 
     # requests
 
@@ -525,7 +542,7 @@ class Schirm(object):
         # compute the terminal key
         k = self.pty.map_key(key.name, (key.shift, key.alt, key.control))
         if not k:
-            if alt:
+            if key.alt:
                 k = "\033%s" % key.string
             else:
                 k = key.string
@@ -545,23 +562,50 @@ class Schirm(object):
 
     def pty_out_loop(self):
         """Move information from the terminal to the (embedded) webkit browser."""
-        self.uiproxy.execute_script("termInit();") # execute and wait for the result
+        print "pty_out_loop"
+        try:
+            while True: #self.pty.running():
+                # reads term input from a queue, alters the term input
+                # accordingly, reads output and enques that on the
+                # uiproxies input queue
+                for x in self.pty.read_and_feed_and_render():
+                    if isinstance(x, basestring):
+                        # strings are evaled as javascript in the main term document
+                        self.uiproxy.execute_script(x)
+                    elif isinstance(x, types.FunctionType):
+                        # functions are invoked with self (in order to get
+                        # access to the uiproxy and the pty)
+                        x(self)
+                    else:
+                        logging.warn("unknown render event: {}".format(x[0]))
+        except SystemExit:
+            print "exiting"
+            self.uiproxy.quit()
 
-        while self.pty.running():
-            # reads term input from a queue, alters term input accordingly, reads output
-            for x in self.pty.read_and_feed_and_render():
-                if isinstance(x, basestring):
-                    # strings are evaled as javascript in the main term document
-                    self.uiprocy.execute_script(x)
-                elif isinstance(x, types.FunctionType):
-                    # functions are invoked with self (in order to get
-                    # access to the uiproxy and the pty)
-                    x(self.uiproxy)
-                else:
-                    logging.warn("unknown render event: {}".format(x[0]))
+    def ui_in_loop(self):
+        """Read messages from the uiproxy and respond with appropriate actions onto the ptys in queue."""
+        while True:
+            # uiproxy.receive only returns messages for terminal related events.
+            # events things which are handled in the ui layer are
+            # scrolling, searching and console log debug output.
+            type, value = self.uiproxy.receive()
+            if type == 'focus':
+                self.pty.q_set_focus(value.focus)
+            elif type == 'key':
+                self._handle_keypress(value)
+            elif type == 'resize':
+                self.pty.q_resize(value.height, value.width)
+            elif type == 'iframe-resize':
+                pass #todo
+            elif type == 'remove-history':
+                pass #todo
+            elif type == 'frame-console-log':
+                pass #todo
+
 
 def main():
     gtkui.PageProxy.start(Schirm)
+    gtkui.PageProxy.new_tab()
 
 if __name__ == '__main__':
     main()
