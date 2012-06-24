@@ -63,7 +63,7 @@ class ContentPane (gtk.Notebook):
     __gsignals__ = {
         "focus-view-title-changed": (gobject.SIGNAL_RUN_FIRST,
                                      gobject.TYPE_NONE,
-                                     (gobject.TYPE_OBJECT, gobject.TYPE_STRING,)),
+                                     (gobject.TYPE_OBJECT, gobject.TYPE_STRING,))
         }
 
     def __init__ (self):
@@ -73,6 +73,7 @@ class ContentPane (gtk.Notebook):
         self.props.homogeneous = True
         self.show_all()
         self._hovered_uri = None
+        self.set_show_border(False)
 
     def new_tab (self, content):
         """creates a new tab with the given content as its child"""
@@ -80,7 +81,7 @@ class ContentPane (gtk.Notebook):
 
     def _construct_tab_view (self, content):
         # create the tab
-        label = TabLabel("labeltext", content)
+        label = TabLabel("", content)
         label.connect("close", self._close_tab)
         label.show_all()
 
@@ -106,8 +107,8 @@ class ContentPane (gtk.Notebook):
     def _close_tab(self, label, child):
         page_num = self.page_num(child)
         if page_num != -1:
-            view = child.get_child()
-            view.destroy()
+            # view = child.get_child()
+            # view.destroy()
             self.remove_page(page_num)
         self.set_show_tabs(self.get_n_pages() > 1)
 
@@ -155,6 +156,14 @@ class TabbedWindow(gtk.Window):
         child = self.content_tabs.get_nth_page(self.content_tabs.get_current_page())
         label = self.content_tabs.get_tab_label(child)
         return label.get_label()
+
+    def connect_tab_close(self, f):
+        """Call the function f right after a tabpage was closed.
+
+        Arguments to f are: (window, child).
+        """
+        # 'page-removed': notebook, child, page_num
+        self.content_tabs.connect('page-removed', lambda notebook, child, page_num: f(self, child))
 
 if __name__ == '__main__':
     w = TabbedWindow()

@@ -19,7 +19,6 @@
 import os
 import re
 import socket
-import mimetypes
 import threading
 import base64
 import time
@@ -30,11 +29,10 @@ from BaseHTTPServer import BaseHTTPRequestHandler
 from StringIO import StringIO
 
 
-ESC = "\033"
-SEP = ESC + ";"
-START_REQ = ESC + "R" + "request" + SEP
-END = ESC + "Q"
-NEWLINE = "\n" # somehow required for 'flushing', tcflush and other ioctls didn't work :/
+class attrdict(dict):
+    def __getattr__(self, k):
+        return self[k]
+
 
 class HTTPRequest(BaseHTTPRequestHandler):
     def __init__(self, stream): #request_text
@@ -46,6 +44,7 @@ class HTTPRequest(BaseHTTPRequestHandler):
     def send_error(self, code, message):
         self.error_code = code
         self.error_message = message
+
 
 class Server(object):
     """
@@ -143,17 +142,16 @@ class Server(object):
         else:
             data = None
 
-        req_message = {'type'   : 'request',
-                       'value'  : {'id'              : req_id,
-                                   'request_version' : req.request_version,
-                                   'method'          : req.command,
-                                   'path'            : req.path,
-                                   'headers'         : dict(req.headers),
-                                   'data'            : data,
-                                   'error_code'      : req.error_code,
-                                   'error_message'   : req.error_message}}
+        req_message = attrdict({'id'              : req_id,
+                                'request_version' : req.request_version,
+                                'method'          : req.command,
+                                'path'            : req.path,
+                                'headers'         : dict(req.headers),
+                                'data'            : data,
+                                'error_code'      : req.error_code,
+                                'error_message'   : req.error_message})
 
-        self.output_queue.put(req_message)
+        self.output_queue.put(('request', req_message))
 
     def make_status404(self):
         data = "not found"
@@ -166,10 +164,10 @@ class Server(object):
 
     def respond(self, req_id, data=None):
         # todo: data=None -> 404
-        logging.debug("server responding to {} with {}...".format(req_id, data[:60]))
         with self._requests_lock:
             req = self.requests.pop(int(req_id), None) # atomic
         if req:
+            logging.debug("server responding to {} with {}".format(req_id, repr(data)[:60], '...' if len(repr(data)) > 60 else ''))
             client = req['client']
             client.sendall(data if data != None else self.make_status404())
             self._close_conn(client)

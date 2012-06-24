@@ -18,6 +18,7 @@
 import os
 import Queue
 import threading
+import simplejson
 from gettext import gettext as _
 
 import gobject
@@ -30,7 +31,6 @@ import webkitutils
 import webserver
 
 class attrdict(dict):
-
     def __getattr__(self, k):
         return self[k]
 
@@ -318,6 +318,9 @@ class PageProxy (object):
     window = None
     schirm_type = None
 
+    # logging
+    console_log_level = 0 # 0,1,2,3
+
     @classmethod
     def keypress_cb(self, window, event):
         # all key events are handled in the toplevel window
@@ -325,7 +328,11 @@ class PageProxy (object):
         tabpage = self.window.get_current_page_component()
         if tabpage:
             page_proxy = tabpage.user_data.get('page_proxy')
-            page_proxy.handle_keypress(event)
+            if not self.window.focus_widget:
+                self.window.set_focus(page_proxy.webview)
+            return page_proxy.handle_keypress(event)
+        else:
+            return True
 
     @classmethod
     def _switch_page_cb(self, notebook, page, page_num):
@@ -341,13 +348,17 @@ class PageProxy (object):
         """Start the ui."""
         self.window = tabbed_window.TabbedWindow()
         self.window.content_tabs.connect('switch-page', self._switch_page_cb)
-        self.window.set_events(gtk.gdk.KEY_PRESS_MASK | gtk.gdk.KEY_RELEASE_MASK)
         self.window.connect('key_press_event', self.keypress_cb)
         self.window.connect('destroy', lambda w: self.quit())
+        self.window.connect_tab_close(self.close_tab_cb)
+
+        self.window.set_events(gtk.gdk.KEY_PRESS_MASK | gtk.gdk.KEY_RELEASE_MASK)
+
         self.schirm_type = schirm_type
 
         self.new_tab()
-        self.new_tab()
+        #self.new_tab()
+        #self.new_tab()
         gtk.main()
 
     @classmethod
@@ -359,6 +370,12 @@ class PageProxy (object):
             self.window.new_tab(t.get_component())
             return t
         t = gtk_invoke(_new_tab)
+
+    @classmethod
+    def close_tab_cb(self, window, child):
+        p = child.user_data.get('page_proxy')
+        if p:
+            p.destroy
 
     @classmethod
     def quit(self):
@@ -380,9 +397,8 @@ class PageProxy (object):
         self.box = None
         self.search_forward = True
         self.pages.append(self)
-
-        # logging
-        self.console_log_level = 0 # 0,1,2,3
+        self.set_title('schirm - loading')
+        self.webview.grab_focus()
 
         # gtk setup
         self._construct()
@@ -417,6 +433,7 @@ class PageProxy (object):
         searchframe = gtk.Frame()
         searchframe.set_border_width(0)
         searchframe.add(searchbox)
+        searchframe.hide()
 
         def entry_changed_cb(editable):
             self.webview.unmark()
@@ -438,7 +455,7 @@ class PageProxy (object):
 
         # put the webview inside a ScrolledWindow
         scrolled_window = gtk.ScrolledWindow()
-        scrolled_window.props.hscrollbar_policy = gtk.POLICY_AUTOMATIC
+        scrolled_window.props.hscrollbar_policy = gtk.POLICY_NEVER #gtk.POLICY_AUTOMATIC
         scrolled_window.props.vscrollbar_policy = gtk.POLICY_AUTOMATIC
         scrolled_window.add(self.webview)
         # gtk.POLICY_NEVER seems to be ignored, hscrollbar renders anyway
@@ -495,7 +512,7 @@ class PageProxy (object):
         if val:
             self.webview.search(val, jump_to=True, forward=self._search_forward)
 
-    def set_title(self, title):
+    def _set_title(self, title):
         # todo: set the tabpage label
         def _set_title():
             self.window.set_tab_label(self.box, title)
@@ -515,14 +532,14 @@ class PageProxy (object):
         # TODO: implement discard result
         self.input_queue.put(lambda : gtk_invoke_s(self.webview.execute_script_frame, frameid, src))
 
-    def load_uri_and_wait(self, uri):
-        self.input_queue.put(lambda: self._load_uri_and_wait(uri))
+    def load_uri(self, uri):
+        self.input_queue.put(lambda: self._load_uri(uri))
 
     def respond(self, requestid, data):
         self.input_queue.put(lambda : self.webserver.respond(requestid, data))
 
     def set_title(self, title):
-        self.input_queue.put(lambda : self.set_title(title))
+        self.input_queue.put(lambda : self._set_title(title))
 
     def receive(self):
         return self.output_queue.get()
@@ -637,9 +654,12 @@ class PageProxy (object):
                                              'control':control,
                                              'string':string})))
 
-            # let the webview handle this event too
+            # let the webview handle this event too when in iframe mode (-> return False)
             # TODO: add an 'iframe_mode' flag to not propagate keyevents
             #       to the terminal when not in iframe mode
+            # in plain terminal mode, don't let the webview handle the event (-> return True)
+            return True
+        else:
             return False
 
     def setup_handlers(self):
@@ -672,23 +692,29 @@ class PageProxy (object):
             msg_f = self.input_queue.get()
             msg_f()
 
-    def _load_uri_and_wait(self, uri):
-        """Load uri and wait else until the webview fires a document-load-finished."""
+    def _load_uri(self, uri):
+        """Load uri.
 
-        # setup onetime load finished handler to track load status of
-        # document at URI
-        load_finished = Promise()
+        Put an 'document-load-finished' message onto the output_queue
+        if the webview finishes loading.
+        """
         load_finished_id = None
         def load_finished_cb(webview, frame):
-            load_finished.deliver()
+            self.output_queue.put(('document-load-finished', uri))
             if load_finished_id:
                 webview.disconnect(load_finished_id)
         load_finished_id = gtk_invoke_s(lambda : self.webview.connect('document-load-finished', load_finished_cb))
 
         # load uri
         gtk_invoke(lambda : self.webview.load_uri(uri))
-        load_finished.get()
 
+    def destroy(self):
+        # TODO:
+        # self.webview.destroy()
+        # self.webserver.stop()
+        # self.box.destroy()
+        # ... ???
+        pass
 
 if __name__ == '__main__':
     ctruct_
