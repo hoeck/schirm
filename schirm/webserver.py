@@ -64,7 +64,7 @@ class Server(object):
     # and received no response after this amount of seconds
     REQUEST_TIMEOUT = 30
 
-    def __init__(self, output_queue): # queue to put received requests on
+    def __init__(self, schirm): # queue to put received requests on
         self.socket = socket.socket()
         # the terminal process will receive the request data and a
         # connection-id and its response must contain the
@@ -75,7 +75,7 @@ class Server(object):
         self._id = 0 # last request id
 
         self.listen_thread = None
-        self.output_queue = output_queue
+        self.schirm = schirm
         self.start()
 
     def _getnextid(self):
@@ -151,7 +151,7 @@ class Server(object):
                                 'error_code'      : req.error_code,
                                 'error_message'   : req.error_message})
 
-        self.output_queue.put(('request', req_message))
+        self.schirm.request(req_message)
 
     def make_status404(self):
         data = "not found"
@@ -162,12 +162,19 @@ class Server(object):
                             "",
                             data])
 
-    def respond(self, req_id, data=None):
-        # todo: data=None -> 404
+    def respond(self, req_id, data=None, close=True):
         with self._requests_lock:
-            req = self.requests.pop(int(req_id), None) # atomic
+            req = self.requests.pop(int(req_id), None)
+
         if req:
             logging.debug("server responding to {} with {}".format(req_id, repr(data)[:60], '...' if len(repr(data)) > 60 else ''))
             client = req['client']
             client.sendall(data if data != None else self.make_status404())
-            self._close_conn(client)
+            if close:
+                self._close_conn(client)
+            else:
+                # keep the connection around
+                with self._requests_lock:
+                    self.requests[req_id] = {'client': client, 'time': time.time()}
+        else:
+            loggin.error("unknown request: %r" % (req_id, ))

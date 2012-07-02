@@ -204,9 +204,10 @@ var Lines = (function(linesElement, term) {
     },
 
     // iframe functions
-    insertIframe: function (index, id) {
+    insertIframe: function (index, id, uri) {
       // insert an iframe 'line' before linenumber
       // close the old iframe
+      // TODO: this should be done in termscreen.py
       if (term.currentIframe) {
         try {
           term.currentIframe.contentDocument.close();
@@ -222,7 +223,7 @@ var Lines = (function(linesElement, term) {
       div.appendChild(iframe);
 
       // provide a means to send messages to the pty
-      iframe.contentWindow.schirmlog = function(msg) { console.log("frame" + id + " " + msg); };
+      //iframe.contentWindow.schirmlog = function(msg) { console.log("frame" + id + " " + msg); };
 
       var newline = document.createElement('span');
       newline.innerHTML = "\n";
@@ -239,10 +240,12 @@ var Lines = (function(linesElement, term) {
       // inital resize of an iframe with vertically scrolled content
       iframe.style.minHeight = getVScrollbarHeight();
 
-      iframe.resizeHandler = function() { resizeIframe(iframe); };
-      iframe.contentDocument.open("text/html");
+      //iframe.resizeHandler = function() { resizeIframe(iframe); };
       this.adjustTrailingSpace();
       window.iframe = iframe; // keep the current iframe around for debugging
+
+      // load the frame document
+      iframe.src = uri;
     },
 
     // contentDocument.write content (a string) to the currentIframe and
@@ -358,7 +361,7 @@ var App = (function(appElement, term) {
     // TODO
     // insert iframe as large as the whole screen
     // or use a second gtk webview instead - might be safer & more robust
-    insertIframe: function (linenumber, id) {
+    insertIframe: function (linenumber, id, uri) {
       // close the old iframe
       // if (term.currentIframe) {
       //   term.currentIframe.contentDocument.close();
@@ -453,7 +456,7 @@ var Term = function() {
     removeHistoryLines: function(n) { fn.getScreen().removeHistoryLines(n); },
     checkHistorySize: function() { fn.getScreen().checkHistorySize(); },
 
-    insertIframe: function (index, id) { fn.getScreen().insertIframe(index, id); },
+    insertIframe: function (index, iframeId, uri) { fn.getScreen().insertIframe(index, iframeId, uri); }, // TODO: create the uri!!!
     iframeWrite: function (content) { fn.getScreen().iframeWrite(content); },
     iframeCloseDocument: function() { fn.getScreen().iframeCloseDocument(); },
     iframeLeave: function() { fn.getScreen().iframeLeave(); },

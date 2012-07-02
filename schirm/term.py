@@ -18,7 +18,6 @@
 
 import os
 import sys
-import simplejson
 import fcntl
 import termios
 import itertools
@@ -156,7 +155,6 @@ def render_all_js(screen):
 def set_line_to(i, content):
     return """term.setLine({0}, {1});""".format(i, json.dumps(content))
 
-
 # screen events, return a js string
 class EventRenderer():
 
@@ -193,7 +191,10 @@ class EventRenderer():
     def set(index, line):
         if isinstance(line, termscreen.IframeLine):
             # TODO: close leave the current iframe (if any)
-            return 'term.insertIframe({}, {}, {});'.format(index, json.dumps(line.id), json.dumps(line.args))
+            #return 'term.insertIframe({}, {});'.format(index, json.dumps(line.id))
+            def _iframe_insert(schirm):
+                schirm.iframe_insert(index, line.id)
+            return _iframe_insert
         else:
             content = renderline(line)
             return set_line_to(index, content)
@@ -215,34 +216,51 @@ class EventRenderer():
     # iframe
 
     @staticmethod
-    def iframe(content):
-        # TODO: iframe-http: instead of document.write, use an open HTTP connection.
-        return 'term.iframeWrite({});'.format(json.dumps(content))
+    def iframe_write(iframe_id, content):
+        def _iframe_write(schirm):
+            schirm.iframe_write(iframe_id, content)
+        #return 'term.iframeWrite({});'.format(json.dumps(content))
+        return _iframe_write
 
     @staticmethod
-    def iframe_close():
+    def iframe_close(iframe_id):
         # TODO: iframe-http: this should only close the http connection
-        return 'term.iframeCloseDocument();'
+        #return 'term.iframeCloseDocument();'
+        def _iframe_close(schirm):
+            schirm.iframe_close(iframe_id)
+        return _iframe_close
 
     @staticmethod
-    def iframe_leave():
+    def iframe_enter():
+        # ???
+        # set iframe 'open' status ???
+        # better: keep iframe state (id, open/close) only in term.py,
+        # when the iframe status must be accessed from within schirm,
+        # use the input queue and output queue
+        pass
+
+    @staticmethod
+    def iframe_leave(iframe_id):
         # TODO: iframe-http: this should also close the http connection
-        return 'term.iframeLeave();'
+        #return 'term.iframeLeave();'
+        def _iframe_leave(schirm):
+            schirm.iframe_leave(iframe_id)
+        return _iframe_leave
 
     @staticmethod
-    def iframe_execute(source):
+    def iframe_execute(iframe_id, source):
         """Execute and discard the result."""
         def _iframe_execute(schirm):
-            logging.debug('iframe-execute: {}'.format(source))
-            schirm.uiproxy.execute_script_frame(None, source, discard_result=True)
+            logging.debug('iframe-execute (id: {}}: {}'.format(iframe_id, source))
+            schirm.uiproxy.execute_script_frame(iframe_id, source, discard_result=True)
         return _iframe_execute
 
     @staticmethod
-    def iframe_eval(source):
+    def iframe_eval(iframe_id, source):
         """Execute and write the result to the pty."""
         def _iframe_eval(schirm):
             # TODO: implement this in schirm.Schirm: pty.q_write(("\033Rresult\033;", base64.encodestring(ret), "\033Q", "\n"))
-            schirm.uiproxy.execute_script_frame(None, source, discard_result=False)
+            schirm.uiproxy.execute_script_frame(iframe_id, source, discard_result=False)
         return _iframe_eval
 
     @staticmethod
@@ -258,8 +276,8 @@ class EventRenderer():
         return _iframe_respond
 
     @staticmethod
-    def iframe_debug(message):
-        print message
+    def iframe_debug(iframe_id, message):
+        print "iframe %s:" % iframe_id, message
         return lambda schirm: None
 
     @staticmethod
@@ -429,7 +447,9 @@ class Pty(object):
 
         events = lines.get_and_clear_events()
         for e in events:
-            q.append(getattr(EventRenderer, e[0])(*e[1:]))
+            x = getattr(EventRenderer, e[0])(*e[1:])
+            if x:
+                q.append(x)
 
         # line changes
         line_q = []

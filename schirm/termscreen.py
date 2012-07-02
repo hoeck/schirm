@@ -410,32 +410,32 @@ class LineContainer(): # lazy
 
     ## iframe events, not directly line-based
 
-    def iframecharinsert(self, char):
-        self.events.append(('iframe', char))
+    def iframe_write(self, iframe_id, data):
+        self.events.append(('iframe_write', iframe_id, data))
 
     def iframe_register_resource(self, id, name, mimetype, data):
         self.events.append(('iframe_register_resource', id, name, mimetype, data))
 
-    def iframe_respond(self, name, data):
-        self.events.append(('iframe_respond', name, data))
+    def iframe_respond(self, req_id, data):
+        self.events.append(('iframe_respond', req_id, data))
 
-    def iframe_debug(self, data):
-        self.events.append(('iframe_debug', data))
+    def iframe_debug(self, iframe_id, data):
+        self.events.append(('iframe_debug', iframe_id, data))
 
-    def iframe_close(self):
-        self.events.append(('iframe_close', ))
+    def iframe_close(self, iframe_id):
+        self.events.append(('iframe_close', iframe_id))
 
     def iframe_enter(self):
         self.events.append(('iframe_enter', ))
 
-    def iframe_leave(self):
-        self.events.append(('iframe_leave', ))
+    def iframe_leave(self, iframe_id):
+        self.events.append(('iframe_leave', iframe_id))
 
-    def iframe_execute(self, source):
-        self.events.append(('iframe_execute', source))
+    def iframe_execute(self, iframe_id, source):
+        self.events.append(('iframe_execute', iframe_id, source))
 
-    def iframe_eval(self, source):
-        self.events.append(('iframe_eval', source))
+    def iframe_eval(self, iframe_id, source):
+        self.events.append(('iframe_eval', iframe_id, source))
 
     def iframe_resize(self, iframe_id, height):
         self.events.append(('iframe_resize', iframe_id, height))
@@ -883,6 +883,12 @@ class TermScreen(pyte.Screen):
 
         self.linecontainer.purge_empty_lines()
 
+    ## cutting the terminal scrollback
+
+    def remove_history(self, lines):
+        """Remove the first n lines from the history."""
+        self.linecontainer.remove_history(lines)
+
     ## xterm title hack
 
     def os_command(self, command_id, data):
@@ -906,7 +912,7 @@ class TermScreen(pyte.Screen):
         if self.iframe_mode == None:
             self.linecontainer.iframe_enter()
             self.iframe_id = self.get_next_iframe_id()
-            self.linecontainer[self.cursor.y] = IframeLine(str(self.iframe_id), args)
+            self.linecontainer[self.cursor.y] = IframeLine(self.iframe_id, args)
             self.iframe_mode = 'open' # iframe document opened
         elif self.iframe_mode == 'closed':
             self.iframe_mode = 'open'
@@ -916,31 +922,31 @@ class TermScreen(pyte.Screen):
             raise Exception("Illegal iframe_mode: '{}'".format(self.iframe_mode))
 
     def iframe_leave(self):
-        self.linecontainer.iframe_leave()
+        self.linecontainer.iframe_leave(self.iframe_id)
         self.iframe_mode = None
 
-    def iframe_write(self, char):
+    def iframe_write(self, s):
         if self.iframe_mode == 'open':
-            self.linecontainer.iframecharinsert(char)
+            self.linecontainer.iframe_write(self.iframe_id, s)
         else:
             # ignore all writes to closed documents:
             # those are echo writes of input to the terminal
             pass
 
     def iframe_close(self):
-        self.linecontainer.iframe_close()
+        self.linecontainer.iframe_close(self.iframe_id)
         self.iframe_mode = 'closed'
 
     def iframe_register_resource(self, name_b64, mimetype_b64, data_b64):
         name = base64.b64decode(name_b64)
         data = base64.b64decode(data_b64)
         mimetype = base64.b64decode(mimetype_b64)
-        self.linecontainer.iframe_register_resource(str(self.iframe_id), name, mimetype, data)
+        self.linecontainer.iframe_register_resource(self.iframe_id, name, mimetype, data)
 
     def iframe_respond(self, request_id, data_b64):
         """
         Respond to the request identified by request_id.
-        data_b64 is the full, base64 encoded response data, includung
+        data_b64 is the full, base64 encoded response data, including
         HTTP status line, headers and data.
         """
         data = base64.b64decode(data_b64)
@@ -951,19 +957,15 @@ class TermScreen(pyte.Screen):
         Write a string to sys stdout of the emulator process.
         """
         data = base64.b64decode(b64_debugmsg)
-        self.linecontainer.iframe_debug(data)
+        self.linecontainer.iframe_debug(self.iframe_id, data)
 
     def iframe_execute(self, b64_source):
         source = base64.b64decode(b64_source)
-        self.linecontainer.iframe_execute(source)
+        self.linecontainer.iframe_execute(self.iframe_id, source)
 
     def iframe_eval(self, b64_source):
         source = base64.b64decode(b64_source)
-        self.linecontainer.iframe_eval(source)
-
-    def remove_history(self, lines):
-        """Remove the first n lines from the history."""
-        self.linecontainer.remove_history(lines)
+        self.linecontainer.iframe_eval(self.iframe_id, source)
 
 
 class SchirmStream(pyte.Stream):

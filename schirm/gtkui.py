@@ -385,11 +385,12 @@ class PageProxy (object):
         # communication
         # schirm -> webview communication
         self.input_queue = Queue.Queue()
-        # webview -> schirm communication
-        # each message on output queue is a tuple of: (typename, attrdict-value)
-        self.output_queue = Queue.Queue()
+
+        # terminal
+        self.schirm = self.schirm_type(self)
+
         # webview <-> schirm http communication
-        self.webserver = webserver.Server(self.output_queue)
+        self.webserver = webserver.Server(self.schirm)
 
         # gtk
         self.webview = TerminalWebview()
@@ -403,9 +404,6 @@ class PageProxy (object):
         # gtk setup
         self._construct()
         self.setup_handlers()
-
-        # terminal
-        self.schirm = self.schirm_type(self)
 
         # setup the input queue worker
         self.input_worker = threading.Thread(target=self.input_worker_f)
@@ -535,14 +533,20 @@ class PageProxy (object):
     def load_uri(self, uri):
         self.input_queue.put(lambda: self._load_uri(uri))
 
-    def respond(self, requestid, data):
-        self.input_queue.put(lambda : self.webserver.respond(requestid, data))
+    def respond(self, requestid, data, close=True):
+        self.input_queue.put(lambda : self.webserver.respond(requestid, data, close))
 
     def set_title(self, title):
         self.input_queue.put(lambda : self._set_title(title))
 
-    def receive(self):
-        return self.output_queue.get()
+    # todo: wrap output_queue.put in a function
+
+    # def iframe_write(self, iframe_id, data):
+    #     self.schirm.enqueue_message(('iframe_write', attrdict(iframe_id=iframe_id,
+    #                                                     data=data)))
+    # 
+    # def iframe_close(self, iframe_id):
+    #     self.schirm.enqueue_message(('iframe_close', attrdict(iframe_id=iframe_id)))
 
     # webview implementations
     def console_log_msg_handler(self, msg):
@@ -554,14 +558,13 @@ class PageProxy (object):
             h = d.get('height')
 
             if w and h:
-                self.output_queue.put(('resize',
-                                       attrdict({'width': int(w),
-                                                 'height':int(h)})))
+                self.schirm.resize(attrdict({'width': int(w),
+                                             'height':int(h)}))
 
         elif msg.startswith("frame"):
             frame_id = msg[5:msg.find(" ")]
             logging.debug("Log message for iframe {}".format(frame_id))
-            self.output_queue.put(('frame-console-log',
+            self.schirm.enqueue_message(('frame-console-log',
                                    attrdict({'frameid':frameid,
                                              'message':msg[msg.find(" ")+1:]})))
 
@@ -572,7 +575,7 @@ class PageProxy (object):
                 return False
 
             logging.debug("Iframe resize request to {}".format(height))
-            self.output_queue.put(('iframe-resize',
+            self.schirm.enqueue_message(('iframe-resize',
                                    attrdict({'height':height})))
 
         elif msg.startswith("removehistory"):
@@ -580,7 +583,7 @@ class PageProxy (object):
                 n = int(msg[13:])
             except:
                 return False
-            self.output_queue.put(('remove-history', attrdict(lines=n)))
+            self.schirm.enqueue_message(('remove-history', attrdict(lines=n)))
 
         else:
             return False # not handled
@@ -647,12 +650,11 @@ class PageProxy (object):
 
         elif focus_widget is self.webview:
             # terminal input
-            self.output_queue.put(('key',
-                                   attrdict({'name':name,
-                                             'shift':shift,
-                                             'alt':alt,
-                                             'control':control,
-                                             'string':string})))
+            self.schirm.keypress(attrdict({'name':name,
+                                           'shift':shift,
+                                           'alt':alt,
+                                           'control':control,
+                                           'string':string}))
 
             # let the webview handle this event too when in iframe mode (-> return False)
             # TODO: add an 'iframe_mode' flag to not propagate keyevents
@@ -683,8 +685,8 @@ class PageProxy (object):
         self.webview.connect('console-message', _console_message_cb)
 
         # terminal focus
-        self.webview.connect('focus-in-event',  lambda *_: self.output_queue.put(('focus', attrdict(focus=True ))))
-        self.webview.connect('focus-out-event', lambda *_: self.output_queue.put(('focus', attrdict(focus=False))))
+        self.webview.connect('focus-in-event',  lambda *_: self.schirm.set_focus(True))
+        self.webview.connect('focus-out-event', lambda *_: self.schirm.set_focus(False))
 
     def input_worker_f(self):
         """Process the messages from the input_message queue."""
@@ -695,12 +697,11 @@ class PageProxy (object):
     def _load_uri(self, uri):
         """Load uri.
 
-        Put an 'document-load-finished' message onto the output_queue
-        if the webview finishes loading.
+        Call schirm.document_load_finished(uri) if the webview finishes loading.
         """
         load_finished_id = None
         def load_finished_cb(webview, frame):
-            self.output_queue.put(('document-load-finished', uri))
+            self.schirm.document_load_finished(uri)
             if load_finished_id:
                 webview.disconnect(load_finished_id)
         load_finished_id = gtk_invoke_s(lambda : self.webview.connect('document-load-finished', load_finished_cb))
