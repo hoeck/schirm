@@ -431,7 +431,7 @@ class PageProxy (object):
         searchframe = gtk.Frame()
         searchframe.set_border_width(0)
         searchframe.add(searchbox)
-        searchframe.hide()
+        searchframe.connect_after('realize', lambda w: w.hide()) # hide the searchbar by default
 
         def entry_changed_cb(editable):
             self.webview.unmark()
