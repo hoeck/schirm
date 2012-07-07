@@ -170,7 +170,9 @@ class Schirm(object):
             # respond immediately
             self.respond(req_id, data, close=False)
         else:
-            # 'enqueue' the data
+            # 'enqueue' the data, the _request_iframe handler will
+            # then send all the data once the iframe is ready and
+            # requests it.
             self.iframe_document_data[iframe_id]['data'].append(data)
 
     def iframe_write(self, iframe_id, data):
@@ -255,29 +257,11 @@ class Schirm(object):
     def resize(self, size):
         self.enqueue_f(self._resize, size)
 
-    def _request(self, req):
-        # TODO: split this up into separate functions
-        (scheme, netloc, path, params, query, fragment) = urlparse.urlparse(req.path)
+    def _request_iframe(self, iframe_id, req, path):
+        """Handle requests coming from iframes."""
 
-        logging.info("%s %s" % (req.method, req.path))
-
-        # use the subdomain to sandbox iframes and separate requests
-        m = re.match("(.+)\.localhost", netloc)
-        if m:
-            try:
-                iframe_id = int(m.group(1))
-            except:
-                iframe_id = None
-        else:
-            iframe_id = None
-
-        if req.error_code:
-            logging.debug(req.error_message)
-            self.respond(req.id)
-
-        elif req.method == 'GET' \
-                and iframe_id    \
-                and path == '/'  \
+        if req.method == 'GET' \
+                and path == '/' \
                 and iframe_id in self.iframe_document_data:
             # iframe document data request
             self.iframe_document_data[iframe_id]['req_id'] = req.id
@@ -290,44 +274,23 @@ class Schirm(object):
                                            data]),
                          close=False)
             if self.iframe_document_data[iframe_id].get('close'):
-                # close the connection and delete the iframe data
+                # close the connection
                 self.respond(req.id, '')
+                # Keep the iframe data around in order to be able to
+                # reloading iframes? Reloading iframes may be
+                # necessary when recreating an existing terminal
+                # session (terminal window managers like screen are
+                # doing this).
+                # TODO: GCing of iframe resources and document data should
+                # be triggered by the respective remove_history_event
+                # droping an iframe line.
+                # For now, just delete the document data
                 del self.iframe_document_data[iframe_id]
 
-        elif req.method == 'GET' \
-                and iframe_id \
-                and iframe_id in self.resources \
-                and path in self.resources[iframe_id]:
+        elif iframe_id in self.resources and path in self.resources[iframe_id]:
             # it's a known static (iframe) resource, serve it!
             logging.debug("serving static resource {} for iframe {}".format(path, iframe_id))
             self.respond(req.id, self.resources[iframe_id][path])
-
-        elif req.method == 'GET' \
-                and path in self.static_resources:
-            # builtin static resource, serve it!
-            res = self.static_resources[path]
-            if os.path.isabs(res):
-                # external resource (e.g. user.css file in ~/.schirm/)
-                f = None
-                try:
-                    with open(res, 'r') as f:
-                        data = f.read()
-                    logging.debug("serving builtin static resource {} from external path {}.".format(path, res))
-                    self.respond(req.id, self._make_response(self.guess_type(path), data))
-                except:
-                    logging.error("failed to load static resource {} from path {}.".format(path, res))
-                    self.respond(req.id)
-
-            else:
-                # internal, packaged resource
-                logging.debug("serving builtin static resource {}.".format(path))
-                data = pkg_resources.resource_string('schirm.resources', res)
-                self.respond(req.id, self._make_response(self.guess_type(path), data))
-
-        elif req.method == 'GET' and path in self.not_found:
-            # ignore some requests (e.g. favicon)
-            logging.debug("Ignoring request ({})".format(path))
-            self.respond(req.id)
 
         elif self.pty.screen.iframe_mode == 'closed':
             # Write requests into stdin of the current terminal process.
@@ -364,12 +327,72 @@ class Schirm(object):
 
         else:
             # only serve non-static requests if terminal is in iframe_mode == 'open'
-            if self.pty.screen.iframe_mode == 'open':
+            if self.pty.screen.iframe_mode == 'open': # TODO: remove this race condition by using explicit messages to set the terminal iframe state in thos thread
                 logging.debug("unknown resource: '{}' - responding with 404".format(path))
             else:
                 logging.debug("Not in iframe mode - responding with 404")
-
             self.respond(req.id)
+
+    def _request_termframe(self, req, path):
+        """Handle internal schirm requests."""
+        # non iframe requests must be GETs
+        if req.method == 'GET' and path in self.static_resources:
+            # builtin static resource, serve it!
+            res = self.static_resources[path]
+            if os.path.isabs(res):
+                # external resource (e.g. user.css file in ~/.schirm/)
+                f = None
+                try:
+                    with open(res, 'r') as f:
+                        data = f.read()
+                    logging.debug("serving builtin static resource {} from external path {}.".format(path, res))
+                    self.respond(req.id, self._make_response(self.guess_type(path), data))
+                except:
+                    logging.error("failed to load static resource {} from path {}.".format(path, res))
+                    self.respond(req.id)
+
+            else:
+                # internal, packaged resource
+                logging.debug("serving builtin static resource {}.".format(path))
+                data = pkg_resources.resource_string('schirm.resources', res)
+                self.respond(req.id, self._make_response(self.guess_type(path), data))
+
+        elif req.method == 'GET' and path in self.not_found:
+            # ignore some requests (e.g. favicon)
+            logging.debug("Ignoring request ({})".format(path))
+            self.respond(req.id)
+
+        else:
+            # error
+            self.respond(req.id) # 404
+
+    def _request(self, req):
+        """Handle requests from the webviews proxy server."""
+        (scheme, netloc, path, params, query, fragment) = urlparse.urlparse(req.path)
+
+        logging.info("%s %s" % (req.method, req.path))
+
+        if req.error_code:
+            logging.debug(req.error_message)
+            self.respond(req.id)
+            return
+
+        # use the subdomain to sandbox iframes and separate requests
+        m = re.match("(.+)\.localhost", netloc)
+        if m:
+            # TODO: allow other identifiers than plain numbers
+            try:
+                iframe_id = int(m.group(1))
+            except:
+                iframe_id = None
+        else:
+            iframe_id = None
+
+        # there are two kinds of requests ...
+        if iframe_id:
+            self._request_iframe(iframe_id, req, path)
+        else:
+            self._request_termframe(req, path)
 
     def request(self, req):
         self.enqueue_f(self._request, req)
