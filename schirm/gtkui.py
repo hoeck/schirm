@@ -118,10 +118,6 @@ class TerminalWebview(webkit.WebView):
         # scale other content besides from text as well
         self.set_full_content_zoom(True)
 
-        # make sure the items will be added in the end
-        # hence the reason for the connect_after
-        self.connect_after("populate-popup", self.populate_popup_cb)
-
         # Placeholder for a function to paste to the pty and return
         # True or False when in iframe mode.
         self.paste_to_pty = lambda text: True
@@ -180,64 +176,19 @@ class TerminalWebview(webkit.WebView):
         context = self._last_frame.get_global_context()
         return webkitutils.eval_js(context, script_uri, script_source)
 
-    # right click popup menu
-    def populate_popup_cb(self, view, menu):
-        # remove all items but the 'inspect element' one
-        for ch in list(menu.get_children())[:-2]:
-            menu.remove(menu.get_children()[0])
-
-        # customizing the menu
-        zoom_in = gtk.ImageMenuItem(gtk.STOCK_ZOOM_IN)
-        zoom_in.connect('activate', self.zoom_in_cb, view)
-        menu.prepend(zoom_in)
-
-        zoom_out = gtk.ImageMenuItem(gtk.STOCK_ZOOM_OUT)
-        zoom_out.connect('activate', self.zoom_out_cb, view)
-        menu.prepend(zoom_out)
-
-        zoom_hundred = gtk.ImageMenuItem(gtk.STOCK_ZOOM_100)
-        zoom_hundred.connect('activate', self.zoom_hundred_cb, view)
-        menu.prepend(zoom_hundred)
-
-        sep = gtk.SeparatorMenuItem()
-        menu.prepend(sep)
-
-        paste = gtk.ImageMenuItem(gtk.STOCK_PASTE)
-        paste.connect('activate', self.paste_cb, view)
-        menu.prepend(paste)
-
-        copy = gtk.ImageMenuItem(gtk.STOCK_COPY)
-        copy.connect('activate', self.copy_cb, view)
-        menu.prepend(copy)
-
-        menu.show_all()
-        return False
-
-    # popup callbacks
-    def zoom_in_cb(self, menu_item, web_view):
-        """Zoom into the page"""
-        web_view.zoom_in()
-
-    def zoom_out_cb(self, menu_item, web_view):
-        """Zoom out of the page"""
-        web_view.zoom_out()
-
-    def zoom_hundred_cb(self, menu_item, web_view):
+    def zoom_hundred(self):
         """Zoom 100%"""
-        if not (web_view.get_zoom_level() == 1.0):
-            web_view.set_zoom_level(1.0)
-    def copy_cb(self, menu_item, web_view):
-        """Copy the current selection."""
-        web_view.copy_clipboard()
+        if not (self.get_zoom_level() == 1.0):
+            self.set_zoom_level(1.0)
 
-    def paste_cb(self, menu_item, web_view):
+    def paste(self):
         """Paste from clipboard."""
-        clipb = web_view.get_clipboard(gtk.gdk.SELECTION_CLIPBOARD)
+        clipb = self.get_clipboard(gtk.gdk.SELECTION_CLIPBOARD)
         text = clipb.wait_for_text()
         if not (text and self.paste_to_pty(text)):
-            web_view.paste_clipboard()
+            self.paste_clipboard()
 
-    def paste_xsel(self):
+    def paste_xsel(self): # TODO: equivalent of copy_xsel()
         """Paste the current X selection."""
         xclipb = self.get_clipboard(gtk.gdk.SELECTION_PRIMARY)
         text = xclipb.wait_for_text()
@@ -392,9 +343,14 @@ class PageProxy (object):
         # webview <-> schirm http communication
         self.webserver = webserver.Server(self.schirm)
 
-        # gtk
+        # webview
         self.webview = TerminalWebview()
         self.webview.set_proxy("http://localhost:{}".format(self.webserver.getport()))
+        # webview right-click popup menu: make sure the items will be
+        # added in the end, hence the reason for the connect_after
+        self.webview.connect_after("populate-popup", self.populate_popup_cb)
+
+        # gtk
         self.box = None
         self.search_forward = True
         self.pages.append(self)
@@ -472,6 +428,52 @@ class PageProxy (object):
         self.component = box
         self.component.user_data = {'page_proxy': self}
 
+    # building the right-click popup menu
+    def populate_popup_cb(self, view, menu):
+        # remove all items but the 'inspect element' one
+        for ch in list(menu.get_children())[:-2]:
+            menu.remove(menu.get_children()[0])
+
+        # customizing the menu
+        zoom_in = gtk.ImageMenuItem(gtk.STOCK_ZOOM_IN)
+        zoom_in.connect('activate', lambda _: self.webview.zoom_in())
+        menu.prepend(zoom_in)
+
+        zoom_out = gtk.ImageMenuItem(gtk.STOCK_ZOOM_OUT)
+        zoom_out.connect('activate', lambda _: self.webview.zoom_out())
+        menu.prepend(zoom_out)
+
+        zoom_hundred = gtk.ImageMenuItem(gtk.STOCK_ZOOM_100)
+        zoom_hundred.connect('activate', lambda _: self.webview.zoom_hundred())
+        menu.prepend(zoom_hundred)
+
+        sep = gtk.SeparatorMenuItem()
+        menu.prepend(sep)
+
+        new_tab = gtk.ImageMenuItem(gtk.STOCK_ADD) # TODO: set text
+        new_tab.set_label("Open Tab")
+        new_tab.connect('activate', lambda _: self.new_tab())
+        menu.prepend(new_tab)
+
+        sep = gtk.SeparatorMenuItem()
+        menu.prepend(sep)
+
+        find = gtk.ImageMenuItem(gtk.STOCK_FIND)
+        find.set_label('Search')
+        find.connect('activate', lambda _: self.search())
+        menu.prepend(find)
+
+        paste = gtk.ImageMenuItem(gtk.STOCK_PASTE)
+        paste.connect('activate', lambda _: self.webview.paste()) # TODO: refactor paste to use the queues
+        menu.prepend(paste)
+
+        copy = gtk.ImageMenuItem(gtk.STOCK_COPY)
+        copy.connect('activate', lambda _: self.webview.copy_clipboard())
+        menu.prepend(copy)
+
+        menu.show_all()
+        return False
+
     def get_component(self):
         """Return the gtk component for this terminal."""
         return self.component
@@ -499,6 +501,7 @@ class PageProxy (object):
         va.set_value(va.upper - va.page_size)
 
     def search(self, forward=None):
+        """Shows the searchbox and performs a search using the boxes current text."""
         if forward != None:
             self._search_forward = bool(forward)
 
