@@ -99,6 +99,11 @@ class Schirm(object):
         self.uiproxy = uiproxy
         self.resources = {} # iframe_id -> resource name -> data
 
+        # load the terminal ui
+        self._term_uri = "http://termframe.localhost/term.html"
+        self.uiproxy.execute_script("termInit();") # first to be executed after document load
+        self.uiproxy.load_uri(self._term_uri)
+
         # start the pty
         self.pty = term.Pty([80,24])
 
@@ -110,11 +115,6 @@ class Schirm(object):
         pty_output_worker = threading.Thread(target=self.pty_out_loop)
         pty_output_worker.setDaemon(True)
         pty_output_worker.start()
-
-        # load the terminal ui
-        self._term_uri = "http://termframe.localhost/term.html"
-        self._term_init_js = "termInit();" # executed after document load
-        self.uiproxy.load_uri(self._term_uri)
 
         # iframe_write connections
         self.iframe_document_data = {}
@@ -396,15 +396,6 @@ class Schirm(object):
 
     def request(self, req):
         self.enqueue_f(self._request, req)
-
-    def _document_load_finished(self, uri):
-        if uri == self._term_uri:
-            self.uiproxy.execute_script(self._term_init_js)
-        else:
-            logging.error("Unexpected document-load-finished. %r" % (uri,))
-
-    def document_load_finished(self, uri):
-        self.enqueue_f(self._document_load_finished, uri)
 
     # ui event loop
 

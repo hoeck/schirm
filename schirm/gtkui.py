@@ -308,8 +308,7 @@ class PageProxy (object):
         self.schirm_type = schirm_type
 
         self.new_tab()
-        #self.new_tab()
-        #self.new_tab()
+
         gtk.main()
 
     @classmethod
@@ -336,6 +335,10 @@ class PageProxy (object):
         # communication
         # schirm -> webview communication
         self.input_queue = Queue.Queue()
+
+        # list of scripts to be executed after load_uri/document-load-finished
+        self._execute_script_list = []
+        self._document_loaded     = False
 
         # terminal
         self.schirm = self.schirm_type(self)
@@ -521,10 +524,17 @@ class PageProxy (object):
 
         gtk_invoke(_set_title)
 
+    def _execute_script(self, src):
+        # do not start executing scripts until the document is loaded
+        if self._document_loaded:
+            gtk_invoke_s(self.webview.execute_script, src)
+        else:
+            self._execute_script_list.append(src)
+
     # public interface
 
     def execute_script(self, src):
-        self.input_queue.put(lambda : gtk_invoke_s(self.webview.execute_script, src))
+        self.input_queue.put(lambda: self._execute_script(src))
 
     def execute_script_frame(self, frameid, src, discard_result=False):
         # if frameid == None -> execute in last iframe.
@@ -568,8 +578,8 @@ class PageProxy (object):
             frame_id = msg[5:msg.find(" ")]
             logging.debug("Log message for iframe {}".format(frame_id))
             self.schirm.enqueue_message(('frame-console-log',
-                                   attrdict({'frameid':frameid,
-                                             'message':msg[msg.find(" ")+1:]})))
+                                         attrdict({'frameid':frameid,
+                                                   'message':msg[msg.find(" ")+1:]})))
 
         elif msg.startswith("iframeresize"):
             try:
@@ -579,7 +589,7 @@ class PageProxy (object):
 
             logging.debug("Iframe resize request to {}".format(height))
             self.schirm.enqueue_message(('iframe-resize',
-                                   attrdict({'height':height})))
+                                         attrdict({'height':height})))
 
         elif msg.startswith("removehistory"):
             try:
@@ -700,13 +710,20 @@ class PageProxy (object):
     def _load_uri(self, uri):
         """Load uri.
 
-        Call schirm.document_load_finished(uri) if the webview finishes loading.
+        Do not start executing javascript before the document qat uri is loaded.
         """
+        def execute_pending_scripts():
+            for src in self._execute_script_list:
+                gtk_invoke_s(self.webview.execute_script, src)
+            self._execute_script_list = []
+            self._document_loaded = True
+
         load_finished_id = None
         def load_finished_cb(webview, frame):
-            self.schirm.document_load_finished(uri)
+            self.input_queue.put(execute_pending_scripts)
             if load_finished_id:
                 webview.disconnect(load_finished_id)
+
         load_finished_id = gtk_invoke_s(lambda : self.webview.connect('document-load-finished', load_finished_cb))
 
         # load uri
