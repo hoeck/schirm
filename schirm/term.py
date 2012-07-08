@@ -362,7 +362,7 @@ class Pty(object):
     def q_set_focus(self, focus=True):
         self.input_queue.put(lambda : self.set_focus(focus))
 
-    def q_removehistory(self, lines_to_remove):
+    def q_remove_history(self, lines_to_remove):
         self.input_queue.put(lambda: self.screen.remove_history(lines_to_remove))
 
     def q_iframe_resize(self, height):

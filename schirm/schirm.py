@@ -397,10 +397,21 @@ class Schirm(object):
     def request(self, req):
         self.enqueue_f(self._request, req)
 
-    # ui event loop
 
-    def enqueue_message(self, message):
-        self._input_queue.put(message)
+    def _remove_history(self, lines):
+        self.pty.q_remove_history(lines)
+
+    def remove_history(self, lines):
+        self.enqueue_f(self._remove_history, lines)
+
+
+    def _iframe_resize(self, height):
+        self.pty.q_iframe_resize(height)
+
+    def iframe_resize(self, height):
+        self.enqueue_f(self._iframe_resize, height)
+
+    # ui event loop
 
     def enqueue_f(self, f, *args, **kwargs):
         self._input_queue.put(lambda: f(*args, **kwargs))

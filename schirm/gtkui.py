@@ -560,15 +560,6 @@ class PageProxy (object):
     def set_title(self, title):
         self.input_queue.put(lambda : self._set_title(title))
 
-    # todo: wrap output_queue.put in a function
-
-    # def iframe_write(self, iframe_id, data):
-    #     self.schirm.enqueue_message(('iframe_write', attrdict(iframe_id=iframe_id,
-    #                                                     data=data)))
-    # 
-    # def iframe_close(self, iframe_id):
-    #     self.schirm.enqueue_message(('iframe_close', attrdict(iframe_id=iframe_id)))
-
     # webview implementations
     def console_log_msg_handler(self, msg):
         if msg.startswith("schirm"):
@@ -582,13 +573,6 @@ class PageProxy (object):
                 self.schirm.resize(attrdict({'width': int(w),
                                              'height':int(h)}))
 
-        elif msg.startswith("frame"):
-            frame_id = msg[5:msg.find(" ")]
-            logging.debug("Log message for iframe {}".format(frame_id))
-            self.schirm.enqueue_message(('frame-console-log',
-                                         attrdict({'frameid':frameid,
-                                                   'message':msg[msg.find(" ")+1:]})))
-
         elif msg.startswith("iframeresize"):
             try:
                 height = int(msg[len("iframeresize"):])
@@ -596,15 +580,14 @@ class PageProxy (object):
                 return False
 
             logging.debug("Iframe resize request to {}".format(height))
-            self.schirm.enqueue_message(('iframe-resize',
-                                         attrdict({'height':height})))
+            self.schirm.iframe_resize(height)
 
         elif msg.startswith("removehistory"):
             try:
                 n = int(msg[13:])
             except:
                 return False
-            self.schirm.enqueue_message(('remove-history', attrdict(lines=n)))
+            self.schirm.remove_history(n)
 
         else:
             return False # not handled
