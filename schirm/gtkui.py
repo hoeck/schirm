@@ -333,7 +333,7 @@ class PageProxy (object):
     def close_tab_cb(self, window, child):
         p = child.user_data.get('page_proxy')
         if p:
-            p.destroy
+            p.destroy()
 
     @classmethod
     def quit(self):
@@ -559,6 +559,10 @@ class PageProxy (object):
 
     def set_title(self, title):
         self.input_queue.put(lambda : self._set_title(title))
+
+    def close(self):
+        # close the tab
+        self.input_queue.put(lambda : gtk_invoke(self.window.close_tab, self.get_component()))
 
     # webview implementations
     def console_log_msg_handler(self, msg):

@@ -284,6 +284,13 @@ class EventRenderer():
     def iframe_resize(iframe_id, height):
         return "term.iframeResize(\"%s\", %s);" % (iframe_id, int(height))
 
+    @staticmethod
+    def close_stream():
+        # terminal quit
+        def _close_stream(schirm):
+            schirm.uiproxy.close()
+        return _close_stream
+
 class Pty(object):
 
     def __init__(self, size=(80, 25)):
@@ -427,7 +434,7 @@ class Pty(object):
             if type == 'pty_data':
                 self.stream.feed(data)
             elif type == 'pty_read_error':
-                sys.exit(0) # ???
+                self.stream.close()
             elif type == 'redraw':
                 pass
 

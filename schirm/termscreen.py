@@ -389,6 +389,9 @@ class LineContainer(): # lazy
         self.events.append(('remove_history_lines', n))
         self.set_screen0(self.screen0 - n)
 
+    def close_stream(self):
+        self.events.append(('close_stream',))
+
     ## cursor show and hide events
 
     def show_cursor(self, linenumber, column, cursorclass='cursor'):
@@ -967,6 +970,10 @@ class TermScreen(pyte.Screen):
         source = base64.b64decode(b64_source)
         self.linecontainer.iframe_eval(self.iframe_id, source)
 
+    def close_stream(self):
+        # just hand of the event to the linecontainer
+        self.linecontainer.close_stream()
+
 
 class SchirmStream(pyte.Stream):
 
@@ -980,6 +987,14 @@ class SchirmStream(pyte.Stream):
                 'escape': self._escape,
                 })
         self._draw_buffer = []
+
+    def close(self):
+        """Mark the stream as closed.
+
+        Call this to indicate that there will be no more data being
+        fed into this Stream.
+        """
+        self.dispatch('close_stream')
 
     def feed(self, bytes):
         """

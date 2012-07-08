@@ -82,7 +82,7 @@ class ContentPane (gtk.Notebook):
     def _construct_tab_view (self, content):
         # create the tab
         label = TabLabel("", content)
-        label.connect("close", self._close_tab)
+        label.connect("close", lambda label, child: self.close_tab(child))
         label.show_all()
 
         new_tab_number = self.append_page(content, label)
@@ -104,11 +104,11 @@ class ContentPane (gtk.Notebook):
         #     menu.show_all()
         pass
 
-    def _close_tab(self, label, child):
+    def close_tab(self, child):
+        """Remove the tab which contains child (a gtk component)."""
+        label = self.get_tab_label(child)
         page_num = self.page_num(child)
         if page_num != -1:
-            # view = child.get_child()
-            # view.destroy()
             self.remove_page(page_num)
         self.set_show_tabs(self.get_n_pages() > 1)
 
@@ -126,6 +126,8 @@ class TabbedWindow(gtk.Window):
         self.set_title("Schirm")
         self.content_tabs = ContentPane()
 
+        self.content_tabs.connect('page-removed', self._close_tab_cb)
+
         # example: add toolbar + tab panel:
         # vbox = gtk.VBox(spacing=1)
         # vbox.pack_start(toolbar, expand=False, fill=False)
@@ -137,8 +139,16 @@ class TabbedWindow(gtk.Window):
         self.set_default_size(800, 600)
         self.show_all()
 
+    def _close_tab_cb(self, notebook, child, page_num):
+        # close the window if the last tab has been removed
+        if notebook.get_n_pages() == 0:
+            self.destroy()
+
     def new_tab(self, content):
         self.content_tabs.new_tab(content)
+
+    def close_tab(self, content_component):
+        self.content_tabs.close_tab(content_component)
 
     def get_current_page_component(self):
         n = self.content_tabs.get_current_page()
