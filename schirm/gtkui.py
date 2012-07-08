@@ -176,6 +176,14 @@ class TerminalWebview(webkit.WebView):
         context = self._last_frame.get_global_context()
         return webkitutils.eval_js(context, script_uri, script_source)
 
+    def execute_script(self, src):
+        """Like WebView.execute_script but also accept a list of strings."""
+        if isinstance(src, basestring):
+            super(TerminalWebview, self).execute_script(src)
+        else:
+            for s in src:
+                super(TerminalWebview, self).execute_script(s)
+
     def zoom_hundred(self):
         """Zoom 100%"""
         if not (self.get_zoom_level() == 1.0):

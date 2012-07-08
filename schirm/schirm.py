@@ -414,6 +414,18 @@ class Schirm(object):
 
     def pty_out_loop(self):
         """Move information from the terminal to the (embedded) webkit browser."""
+
+        # transfer execute_script messages in blocks to reduce overhead
+        scripts = []
+
+        def s_append(x):
+            scripts.append(x)
+
+        def s_flush():
+            if scripts:
+                self.uiproxy.execute_script(list(scripts))
+                scripts[:] = []
+
         while True: #self.pty.running():
             # reads term input from a queue, alters the term input
             # accordingly, reads output and enques that on the
@@ -421,14 +433,16 @@ class Schirm(object):
             for x in self.pty.read_and_feed_and_render():
                 if isinstance(x, basestring):
                     # strings are evaled as javascript in the main term document
-                    self.uiproxy.execute_script(x)
+                    s_append(x)
                 elif isinstance(x, types.FunctionType):
                     # functions are invoked with self (in order to get
                     # access to the uiproxy and the pty)
+                    s_flush()
                     x(self)
                 else:
                     logging.warn("unknown render event: {}".format(x[0]))
 
+            s_flush()
 
 def main():
     parser = argparse.ArgumentParser(description="A linux compatible terminal emulator providing modes for rendering (interactive) html documents.")
