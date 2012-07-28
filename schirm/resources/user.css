@@ -63,7 +63,7 @@
 
 /* terminal appearance */
 
-.screen {
+.terminal-line-container {
     padding: 1px;
     font-family: "DejaVu Sans Mono", "FreeMono", "Bitstream Vera Mono", monospaced;
 }

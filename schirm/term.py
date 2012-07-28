@@ -149,9 +149,6 @@ def renderline(line):
 def wrap_in_span(s):
     return '<span>{0}</span>'.format(s)
 
-def render_all_js(screen):
-    return """document.getElementById("term").innerHTML = {0};""".format(json.dumps("\n".join(map(wrap_in_span, map(renderline, screen)))))
-
 def set_line_to(i, content):
     return """term.setLine({0}, {1});""".format(i, json.dumps(content))
 
@@ -265,6 +262,7 @@ class EventRenderer():
 
     @staticmethod
     def iframe_register_resource(frame_id, name, mimetype, data):
+        # TODO: resources must be registered with the Term
         def _iframe_register_resource(schirm):
             schirm.register_resource(frame_id, name, mimetype, data)
         return _iframe_register_resource
@@ -291,9 +289,32 @@ class EventRenderer():
             schirm.uiproxy.close()
         return _close_stream
 
+def fork_terminal(f, *args):
+    pid, master = os.forkpty()
+    if pid == 0:
+        # child
+        os.putenv('TERM', 'xterm')
+        os.putenv('COLORTERM', 'Terminal')
+        os.putenv('COLUMNS', str(size[0]))
+        os.putenv('LINES', str(size[1]))
+        os.execl(shell, shell_name)
+        assert False
+    else:
+        # parent
+        return pid, master
+
 class Pty(object):
 
     def __init__(self, size=(80, 25)):
+
+        shell = pwd.getpwuid(os.getuid()).pw_shell
+        shell_name = os.path.basename(shell)
+
+        # WTF?: putting the forkpty into a method or function does not
+        # work, am I missing sth?
+        #self._pid, self._pty = self.fork(shell, shell_name)
+        #self._pid, self._pty = fork_terminal(shell, shell_name)
+
         pid, master = os.forkpty()
         if pid == 0:
             # child
@@ -301,16 +322,15 @@ class Pty(object):
             os.putenv('COLORTERM', 'Terminal')
             os.putenv('COLUMNS', str(size[0]))
             os.putenv('LINES', str(size[1]))
-            shell = pwd.getpwuid(os.getuid()).pw_shell
-            shell_name = os.path.basename(shell)
             os.execl(shell, shell_name)
+            assert False
         else:
             # parent
-            pass
+            self._pid = pid
+            self._pty = master
+
         self._running = True
         self._size = [0,0]
-        self._pty = master
-        self._server = None # must be set later
 
         self._focus = True
 
@@ -344,6 +364,22 @@ class Pty(object):
         t = threading.Thread(target=read_from_pty)
         t.setDaemon(True)
         t.start()
+
+
+    # def fork(self, file, args):
+    #     pid, master = os.forkpty()
+    #     if pid == 0:
+    #         # child
+    #         os.putenv('TERM', 'xterm')
+    #         os.putenv('COLORTERM', 'Terminal')
+    #         os.putenv('COLUMNS', str(size[0]))
+    #         os.putenv('LINES', str(size[1]))
+    #         os.execl(file, *args)
+    #     else:
+    #         # parent
+    #         return pid, master
+
+    # q
 
     def q_write(self, s):
         "Queued version of self.write()."
@@ -439,9 +475,11 @@ class Pty(object):
                 pass
 
     def render_changes(self):
-        """
-        Find changes and return a list of strings.
-        """
+        # TODO: move this into termscreen
+        # make this a function of:
+        # the termscreen + an EventRenderer class/instance providing event implementations
+        # to render
+
         q = []
         lines = self.screen.linecontainer
 

@@ -26,22 +26,21 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 <script type="text/javascript" src="term.js"></script>
 
 <script type="text/javascript">
+
 var term;
-
 function termInit() {
-  term = Term();
-  term.init();
-  term.resizeHandler();
-
+  term = new SchirmTerminal(document.body);
   document.body.onresize = term.resizeHandler;
 };
 </script>
 
 </head>
 <body>
-    <div id="termscreen">
-      <pre id="term" class="screen"></pre>
-    </div>
-    <pre id="app" class="screen"></pre>
+  <!-- <div class="schirm-terminal"> -->
+  <!--   <div class="terminal-screen"> -->
+  <!--     <pre class="terminal-line-container"></pre> -->
+  <!--   </div> -->
+  <!--   <pre class="terminal-app-container"></pre> -->
+  <!-- </div> -->
 </body>
 </html>

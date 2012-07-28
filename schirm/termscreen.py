@@ -160,7 +160,7 @@ class IframeLine(Line):
               '100%': make the iframe as large as the schirm window in this dimension
               'auto': resize the iframe whenever its content changes
         """
-        self.args = {'width':'100%', 'height':'auto'}
+        self.args = {'width':'100%', 'height':'auto'} # OBSOLETE: does not work as intended, would only work anyway if iframes have the same origin as termframe (which they should not!), use a schirm.js lib and a iframe-resize command instead.
         self.args.update(dict(args[i:i+2] for i in range(0, len(args), 2)))
         self.id = id
         self.changed = False
@@ -212,7 +212,8 @@ class LineContainer(): # lazy
         # be defined by: len(lines) - height
         self.screen0 = 0
         self.lines  = []
-        # list of events (tuples) sent to the browser
+        # list of events (tuples) describing changes (line
+        # insertions, changes, cursor movement ..)
         self.events = []
         self._create_line_fn = create_line_fn
 
@@ -246,6 +247,9 @@ class LineContainer(): # lazy
 
         Return a list of (linenumber, Line).
         """
+        # TODO: instead of returning all currently visible and changed
+        # lines, let the lines themselves append a 'i-am-changed'
+        # event to the LineContainers eventlist.
         return ((i,l) for i, l in enumerate(self.lines[self.screen0:], self.screen0) if l.changed)
 
     def reset(self, height):
@@ -442,6 +446,10 @@ class LineContainer(): # lazy
 
     def iframe_resize(self, iframe_id, height):
         self.events.append(('iframe_resize', iframe_id, height))
+
+    ## event rendering:
+    ##   convert the containers events into method calls of the EventRenderer object
+    ##   in order to produce a sequence of functions to change the terminal webview state
 
 
 class TermScreen(pyte.Screen):

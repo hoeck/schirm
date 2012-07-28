@@ -4,7 +4,7 @@
 /*   border: solid 1px #ccc; */
 /* } */
 
-div#termscreen {
+div.terminal-screen {
     height:100%;
     position: absolute;
     top:0px;
@@ -13,7 +13,7 @@ div#termscreen {
     right:0px;
 }
 
-pre#term {
+pre.terminal-line-container {
     position:relative;
     margin: 0px;
     overflow: visible;
@@ -21,14 +21,18 @@ pre#term {
     padding-bottom: 2px;
 }
 
+pre.terminal-line-container {
+    overflow-x:hidden;
+    width: 100%;
+}
+
+pre.terminal-app-container {
+    display:None;
+}
+
 iframe {
     border: None;
     /* -webkit-transition: all 5s; */
-}
-
-#term {
-    overflow-x:hidden;
-    width: 100%;
 }
 
 #app {

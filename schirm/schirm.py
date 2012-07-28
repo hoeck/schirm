@@ -64,13 +64,13 @@ def get_config_file_path(filename):
     If it does not exist, return the one from resources.
     """
     config = os.path.join(os.path.expanduser('~/.schirm'), filename)
-    if not os.path.exists(config):
+    if os.path.exists(config):
+        return config
+    else:
         resource = pkg_resources.resource_filename('schirm.resources', filename)
         if not os.path.exists(resource):
             raise Exception("Unknown resource: %r" % (filename, ))
-        return resource_dir
-    return config
-
+        return None
 
 class Schirm(object):
 
@@ -85,7 +85,7 @@ class Schirm(object):
                         '/term.js': 'term.js',
                         '/term.css': 'term.css',
                         # user configurable stylesheets
-                        '/user.css': get_config_file_path('user.css'),
+                        '/user.css': get_config_file_path('user.css') or 'user.css',
                         }
 
     not_found = set(["/favicon.ico"])
