@@ -1,7 +1,9 @@
 // Redesign of the Schirm API using a js object pattern
 // goal: reuse this code to create embedded terminals
 
-var SchirmTerminal = function(parentElement) {
+var SchirmTerminal = function(parentElement, termId) {
+    // When a termId & iframeId is given, the resulting terminal will act as an
+    // embedded terminal running inside a main terminals iframe line.
 
     var termMarkup = "\
 <div class=\"schirm-terminal\">\
@@ -268,4 +270,28 @@ var SchirmTerminal = function(parentElement) {
     linesElement = parentElement.getElementsByClassName('terminal-line-container')[0];
     appElement   = parentElement.getElementsByClassName('terminal-app-container')[0];
     resizeHandler();
+
+    if (termId) {
+        // we are an embedded terminal, enter the ajax loop
+        self.termAjaxWorker = function() {
+            var termXHR = new XMLHttpRequest();
+            termXHR.open("GET", termId, true); // asnyc
+            termXHR.onreadystatechange = function (event) {
+                if (termXHR.readyState === 4) {
+                    if (termXHR.status === 200) {
+                        // evil eval:
+                        var code = "function(term) {"+termXHR.responseText+"}(self);"
+                        console.log("term"+termId+"evaling:"+code);
+                        // TODO: use json-data to drive the terminal functions!
+                        eval(code);
+                        self.termAjaxWorker(); // send the next request
+                        // TODO: exit this loop
+                    } else {
+                        console.log("Error", termXHR.statusText);
+                    }
+                }
+            };
+            termXHR.send(null);
+        };
+    }
 };

@@ -447,9 +447,52 @@ class LineContainer(): # lazy
     def iframe_resize(self, iframe_id, height):
         self.events.append(('iframe_resize', iframe_id, height))
 
-    ## event rendering:
+    ## event rendering TODO:
     ##   convert the containers events into method calls of the EventRenderer object
     ##   in order to produce a sequence of functions to change the terminal webview state
+
+    # embedded terminals
+
+    def iframe_terminal_create(self, iframe_id, terminal_id):
+        # Create an embedded terminal for the given iframe using the
+        # given terminal_id as a handle in terminal_writes and
+        # terminal_responses.
+        # Free the used terminal responses when the iframe closes.
+
+        # self._iframe_id()
+        # self._embedded_terminals = self.__init__
+        self.events.append(('iframe_terminal_create', iframe_id, terminal_id))
+
+    def iframe_terminal_write(self, iframe_id, terminal_id, data):
+        self.events.append(('iframe_terminal_write', iframe_id, terminal_id, data))
+
+    # example usage
+    # with schirmclient.iframe():
+    #     # plain iframe-term RPC
+    #     term_id = schirmclient.create_terminal()
+    #     # ESC R 'terminal_create' ESC Q
+    #     # response?:
+    #     # ESC R 'terminal_created' ESC ; <term-id> ESC Q
+    #     # alternatively, specify the terminal_id when creating the terminal
+    #     # client will be responsible to specify a uniqe (per iframe) term-id
+    #     # renders the 'terminal_create' response redundant (less complexity)
+    #
+    #     schirmclient.write("""
+    #         <h1>embedded terminal<h1>
+    #         <div id="terminal"></div>
+    #         <script type=text/javascript>
+    #              var term = SchirmTerminal(document.getElementById("terminal"), %(term_id)s);
+    #         </script>
+    #     """ % term_id);
+    #     schirmclient.close()
+    #
+    #     # write contents to the embedded terminal:
+    #     schirmclient.write(term_id, 'hello world')
+    #     # ESC R 'terminal_write' ESC ; <term-id> ESC ; <b64-encoded data> ESC Q
+    #
+    #     # any need to get information from the embedded terminal??
+    #     # yes, for iframe content, read via stdin:
+    #     # ESC R 'terminal_response' ESC ; <term-id> ESC ; <b64-encoded data> ESC Q
 
 
 class TermScreen(pyte.Screen):
