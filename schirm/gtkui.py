@@ -366,7 +366,7 @@ class PageProxy (object):
         self.search_forward = True
         self.pages.append(self)
         self.set_title('schirm - loading')
-        self.webview.grab_focus()
+        gtk_invoke(self.webview.grab_focus)
 
         # gtk setup
         self._construct()
