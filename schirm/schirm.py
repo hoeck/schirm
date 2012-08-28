@@ -37,6 +37,7 @@ import json
 
 import gtkui
 import term
+import terminalio
 
 ESC = "\033"
 SEP = ESC + ";"
@@ -72,29 +73,29 @@ def get_config_file_path(filename):
             raise Exception("Unknown resource: %r" % (filename, ))
         return None
 
+def put_nowait_sleep(queue, data):
+    """Given a limited queue and an object, try to put object on the queue.
+
+    If the queue is Full, wait an increasing fraction of a second
+    until trying again. Return when the data has been put on the queue.
+    """
+    times = 0
+    wait_f = lambda x: 0.01 * (2 ** x) if x < 9 else 1.28
+    while True:
+        try:
+            queue.put_nowait(data)
+            return
+        except Queue.Full:
+            time.sleep(wait_f(times))
+            times += 1
+
 class Schirm(object):
-
-    # default static resources:
-    # - relative paths are looked up in schirm.resources module
-    #   using pkg_resources.
-    # - absolute paths are loaded from the filesystem (user.css)
-    static_resources = {'/schirm.js': "schirm.js",   # schirm client lib
-                        '/schirm.css': "schirm.css", # schirm iframe mode styles
-                        # terminal emulator files
-                        '/term.html': 'term.html',
-                        '/term.js': 'term.js',
-                        '/term.css': 'term.css',
-                        # user configurable stylesheets
-                        '/user.css': get_config_file_path('user.css') or 'user.css',
-                        }
-
-    not_found = set(["/favicon.ico"])
 
     def __init__(self, uiproxy):
         # pty, webview, webserver -> schirm communication
         # each message on output queue is a tuple of: (typename, attrdict-value)
         # TODO: would be easier to directly enqueue functions + their arguments
-        self._input_queue = Queue.Queue()
+        self.input_queue = Queue.Queue(1)
 
         self.uiproxy = uiproxy
         self.resources = {} # iframe_id -> resource name -> data
@@ -104,43 +105,28 @@ class Schirm(object):
         self.uiproxy.execute_script("termInit();") # first to be executed after document load
         self.uiproxy.load_uri(self._term_uri)
 
-        # start the pty
-        self.pty = term.Pty([80,24])
+        self.terminal_io = terminalio.PseudoTerminal(size=[80,24])
+
+        # connect the terminal emulator with the pty and the ui
+        self.emulator = term.Terminal(terminal_ui=self,
+                                      terminal_io=self.terminal_io,
+                                      size=[80,24])
 
         # start workers
-        ui_input_worker = threading.Thread(target=self.ui_in_loop)
-        ui_input_worker.setDaemon(True)
-        ui_input_worker.start()
+        term_worker = threading.Thread(target=self.term_worker)
+        term_worker.setDaemon(True)
+        term_worker.start()
 
-        pty_output_worker = threading.Thread(target=self.pty_out_loop)
-        pty_output_worker.setDaemon(True)
-        pty_output_worker.start()
+        # set up a default producer which os.reads from the pty
+        # to get simple asyncronous/interruptible os.read without
+        # dealing with signals
+        read_worker = threading.Thread(target=self.term_read_worker)
+        read_worker.setDaemon(True)
+        read_worker.start()
 
-        # iframe_write connections
-        self.iframe_document_data = {}
+    # API required to respond to requests and execute javascript
 
-    # requests
-
-    def respond(self, req_id, data=None, close=True):
-        self.uiproxy.respond(req_id, data, close)
-
-    def register_resource(self, frame_id, name, mimetype, data):
-        """Add a static resource name to be served.
-
-        Use the resources name to guess an appropriate Content-Type if
-        no mimetype is provided.
-        """
-
-        if not name.startswith("/"):
-            name = "/" + name
-        if frame_id not in self.resources:
-            self.resources[frame_id] = {}
-
-        # todo: cleanup old resources:
-        # need timeout and old iframe to decide whether to delete
-        self.resources[frame_id][name] = self._make_response(mimetype or self.guess_type(name), data)
-
-    def _make_response(self, mimetype, data):
+    def make_response(self, mimetype, data):
         """Return a string making up an HTML response."""
         return "\n".join(["HTTP/1.1 200 OK",
                           "Cache-Control: " + "no-cache",
@@ -155,305 +141,73 @@ class Schirm(object):
         guessed_type, encoding = mimetypes.guess_type(name, strict=False)
         return guessed_type or "text/plain"
 
-    # state changing functions, all executed from input_queue in a
-    # dedicated thread to keep consistency, the _underscored versions
-    # are the tasks running in the input thread
+    def respond(self, req_id, data=None, close=True):
+        self.uiproxy.respond(req_id, data, close)
 
-    # 1) methods called from the terminal (render_chanages -> EventRenderer.xxx)
-    #    to update UI and webserver state
-
-    def _iframe_write(self, iframe_id, data):
-        # enqueue document data for the iframe or respond immediately
-        # to the still open connection
-        req_id = self.iframe_document_data[iframe_id]['req_id']
-        if req_id:
-            # respond immediately
-            self.respond(req_id, data, close=False)
-        else:
-            # 'enqueue' the data, the _request_iframe handler will
-            # then send all the data once the iframe is ready and
-            # requests it.
-            self.iframe_document_data[iframe_id]['data'].append(data)
-
-    def iframe_write(self, iframe_id, data):
-        self.enqueue_f(self._iframe_write, iframe_id, data)
-
-    def _iframe_insert(self, line_index, iframe_id):
-        self.iframe_document_data[iframe_id] = {'req_id':None,
-                                                'data':[]}
-        # create the js to insert an iframe line
-        uri = "http://{iframe_id}.localhost/".format(iframe_id=iframe_id) # TODO: urlencode iframe_id
-        js = "term.insertIframe({line_index}, {iframe_id}, {uri})".format(
-            line_index=json.dumps(line_index),
-            iframe_id=json.dumps(iframe_id),
-            uri=json.dumps(uri))
-        self.uiproxy.execute_script(js)
-
-    def iframe_insert(self, line_index, iframe_id):
-        self.enqueue_f(self._iframe_insert, line_index, iframe_id)
-
-    def _iframe_close(self, iframe_id):
-        # iframe data entry must already exist
-        iframe = self.iframe_document_data[iframe_id]
-        req_id = iframe['req_id']
-        if req_id:
-            # close instantly
-            self.respond(req_id, '', close=True)
-            del self.iframe_document_data[iframe_id]
-        else:
-            # 'enqueue' a close message
-            self.iframe_document_data[iframe_id]['close'] = True
-
-    def iframe_close(self, iframe_id):
-        # close the iframe connection but stay in iframe mode
-        self.enqueue_f(self._iframe_close, iframe_id)
-
-    def _iframe_leave(self, iframe_id):
-        # back to classic terminal mode
-        # TODO: check and close the current iframe data connection
-        self.uiproxy.execute_script('iframeLeave();')
-
-    def iframe_leave(self, iframe_id):
-        self.enqueue_f(self._iframe_leave, iframe_id)
-
-    # 2) methods called from the uiproxy to change the terminal state
-    #    (http requests, document-load-finished, keypresses, mouseclicks ..)
-
-    def _set_focus(self, focus):
-        self.pty.q_set_focus(focus)
-
-    def set_focus(self, focus):
-        self.enqueue_f(self._set_focus, focus)
-
-    def _keypress(self, key):
-        """Map gtk keyvals/strings to terminal keys."""
-        # compute the terminal key
-        k = self.pty.map_key(key.name, (key.shift, key.alt, key.control))
-        if not k:
-            if key.alt:
-                k = "\033%s" % key.string
-            else:
-                k = key.string
-
-        # TODO: this must be a function running in the pty thread
-        #       to get rid of the iframe_mode race condition
-        if self.pty.screen.iframe_mode:
-            # in iframe mode, only write some ctrl-* events to the
-            # terminal process
-            if k and \
-                    key.control and \
-                    key.name in "dcz":
-                self.pty.q_write(k)
-        else:
-            if k:
-                self.pty.q_write(k)
-
-    def keypress(self, key):
-        self.enqueue_f(self._keypress, key)
-
-    def _resize(self, size):
-        self.pty.q_resize(size.height, size.width)
-
-    def resize(self, size):
-        self.enqueue_f(self._resize, size)
-
-    def _request_iframe(self, iframe_id, req, path):
-        """Handle requests coming from iframes."""
-
-        if req.method == 'GET' \
-                and path == '/' \
-                and iframe_id in self.iframe_document_data:
-            # iframe document data request
-            self.iframe_document_data[iframe_id]['req_id'] = req.id
-            data = ''.join(self.iframe_document_data[iframe_id]['data'])
-            self.respond(req.id,
-                         data="\r\n".join(["HTTP/1.1 200 OK",
-                                           "Cache-Control: no-cache",
-                                           "Content-Type: text/html",
-                                           "",
-                                           data]),
-                         close=False)
-            if self.iframe_document_data[iframe_id].get('close'):
-                # close the connection
-                self.respond(req.id, '')
-                # Keep the iframe data around in order to be able to
-                # reloading iframes? Reloading iframes may be
-                # necessary when recreating an existing terminal
-                # session (terminal window managers like screen are
-                # doing this).
-                # TODO: GCing of iframe resources and document data should
-                # be triggered by the respective remove_history_event
-                # droping an iframe line.
-                # For now, just delete the document data
-                del self.iframe_document_data[iframe_id]
-
-        elif iframe_id in self.resources and path in self.resources[iframe_id]:
-            # it's a known static (iframe) resource, serve it!
-            logging.debug("serving static resource {} for iframe {}".format(path, iframe_id))
-            self.respond(req.id, self.resources[iframe_id][path])
-
-        elif self.pty.screen.iframe_mode == 'closed':
-            # Write requests into stdin of the current terminal process.
-            # Only if all document data has already been sent to the iframe.
-            # So that requests are not echoed into the document or
-            # into the terminal screen.
-
-            def clear_path(path):
-                # transform the iframe path from a proxy path to a normal one
-                root = "http://{}.localhost".format(iframe_id)
-                if root in path:
-                    return path[len(root):]
-                else:
-                    return path
-
-            # transmitting: req_id, method, path, (k, v)*, data
-            data = [str(req.id),
-                    req.request_version,
-                    req.method,
-                    clear_path(req.path)]
-
-            for k in req.headers.keys():
-                data.append(k)
-                data.append(req.headers[k])
-            data.append(req.data or "")
-
-            pty_request = START_REQ + SEP.join(base64.encodestring(x) for x in data) + END + NEWLINE
-            # TODO: better IN loop, also, check the flag _inside_ the
-            # loop thread by pushing a fnuction onto the input_queue
-            # and have it execute in the context of the thread to
-            # avoid race conditions
-            if self.pty.screen.iframe_mode == 'closed':
-                self.pty.q_write_iframe(pty_request)
-
-        else:
-            # only serve non-static requests if terminal is in iframe_mode == 'open'
-            if self.pty.screen.iframe_mode == 'open': # TODO: remove this race condition by using explicit messages to set the terminal iframe state in thos thread
-                logging.debug("unknown resource: '{}' - responding with 404".format(path))
-            else:
-                logging.debug("Not in iframe mode - responding with 404")
-            self.respond(req.id)
-
-    def _request_termframe(self, req, path):
-        """Handle internal schirm requests."""
-        # non iframe requests must be GETs
-        if req.method == 'GET' and path in self.static_resources:
-            # builtin static resource, serve it!
-            res = self.static_resources[path]
-            if os.path.isabs(res):
-                # external resource (e.g. user.css file in ~/.schirm/)
-                f = None
-                try:
-                    with open(res, 'r') as f:
-                        data = f.read()
-                    logging.debug("serving builtin static resource {} from external path {}.".format(path, res))
-                    self.respond(req.id, self._make_response(self.guess_type(path), data))
-                except:
-                    logging.error("failed to load static resource {} from path {}.".format(path, res))
-                    self.respond(req.id)
-
-            else:
-                # internal, packaged resource
-                logging.debug("serving builtin static resource {}.".format(path))
-                data = pkg_resources.resource_string('schirm.resources', res)
-                self.respond(req.id, self._make_response(self.guess_type(path), data))
-
-        elif req.method == 'GET' and path in self.not_found:
-            # ignore some requests (e.g. favicon)
-            logging.debug("Ignoring request ({})".format(path))
-            self.respond(req.id)
-
-        else:
-            # error
-            self.respond(req.id) # 404
-
-    def _request(self, req):
-        """Handle requests from the webviews proxy server."""
-        (scheme, netloc, path, params, query, fragment) = urlparse.urlparse(req.path)
-
-        logging.info("%s %s" % (req.method, req.path))
-
-        if req.error_code:
-            logging.debug(req.error_message)
-            self.respond(req.id)
-            return
-
-        # use the subdomain to sandbox iframes and separate requests
-        m = re.match("(.+)\.localhost", netloc)
-        if m:
-            # TODO: allow other identifiers than plain numbers
+    def respond_resource_file(self, req_id, path):
+        if os.path.isabs(path):
+            # external resource (e.g. user.css file in ~/.schirm/)
+            f = None
             try:
-                iframe_id = int(m.group(1))
+                with open(path, 'r') as f:
+                    data = f.read()
+                self.respond(req_id, self.make_response(self.guess_type(path), data))
             except:
-                iframe_id = None
-        else:
-            iframe_id = None
+                self.respond(req_id)
 
-        # there are two kinds of requests ...
-        if iframe_id:
-            self._request_iframe(iframe_id, req, path)
         else:
-            self._request_termframe(req, path)
+            # internal, packaged resource
+            data = pkg_resources.resource_string('schirm.resources', path)
+            self.respond(req_id, self.make_response(self.guess_type(path), data))
+
+    def execute(self, src):
+        if isinstance(src, basestring):
+            js = [src]
+        else:
+            js = []
+        self.uiproxy.execute_script(src)
+
+    def set_title(self, title):
+        pass
+
+    # ui callbacks
 
     def request(self, req):
-        self.enqueue_f(self._request, req)
+        self.input_queue.put(('request', req))
 
+    def keypress(self, key):
+        self.input_queue.put(('keypress', key))
 
-    def _remove_history(self, lines):
-        self.pty.q_remove_history(lines)
+    def set_focus(self, focus):
+        self.input_queue.put(('set_focus', focus))
 
-    def remove_history(self, lines):
-        self.enqueue_f(self._remove_history, lines)
+    def resize(self, size):
+        self.input_queue.put(('resize', size))
 
+    # terminal emulation event loop
 
-    def _iframe_resize(self, height):
-        self.pty.q_iframe_resize(height)
+    def term_read_worker(self):
+        try:
+            while True:
+                res = self.terminal_io.read()
+                put_nowait_sleep(self.input_queue, res)
+                if isinstance(res, tuple) and res[0] == 'pty_read_error':
+                    return
+        except:
+            self.uiproxy.quit()
+            raise
 
-    def iframe_resize(self, height):
-        self.enqueue_f(self._iframe_resize, height)
-
-    # ui event loop
-
-    def enqueue_f(self, f, *args, **kwargs):
-        self._input_queue.put(lambda: f(*args, **kwargs))
-
-    def ui_in_loop(self):
-        """Pop functions (tasks) from the _input_queue and execute them."""
-        while True:
-            self._input_queue.get()()
-
-    # pty render input loop
-
-    def pty_out_loop(self):
-        """Move information from the terminal to the (embedded) webkit browser."""
-
-        # transfer execute_script messages in blocks to reduce overhead
-        scripts = []
-
-        def s_append(x):
-            scripts.append(x)
-
-        def s_flush():
-            if scripts:
-                self.uiproxy.execute_script(list(scripts))
-                scripts[:] = []
-
-        while True: #self.pty.running():
-            # reads term input from a queue, alters the term input
-            # accordingly, reads output and enques that on the
-            # uiproxies input queue
-            for x in self.pty.read_and_feed_and_render():
-                if isinstance(x, basestring):
-                    # strings are evaled as javascript in the main term document
-                    s_append(x)
-                elif isinstance(x, types.FunctionType):
-                    # functions are invoked with self (in order to get
-                    # access to the uiproxy and the pty)
-                    s_flush()
-                    x(self)
-                else:
-                    logging.warn("unknown render event: {}".format(x[0]))
-
-            s_flush()
+    def term_worker(self):
+        try:
+            while True:
+                self.emulator.advance((self.input_queue.get(),))
+        except:
+            # todo: proper error handling:
+            # do not close the whole terminal, instead, stop the
+            # current tab, maybe use a red background/border to
+            # indicate an error
+            self.uiproxy.quit()
+            raise
 
 def main():
     parser = argparse.ArgumentParser(description="A linux compatible terminal emulator providing modes for rendering (interactive) html documents.")

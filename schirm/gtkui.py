@@ -705,7 +705,7 @@ class PageProxy (object):
     def _load_uri(self, uri):
         """Load uri.
 
-        Do not start executing javascript before the document qat uri is loaded.
+        Do not start executing javascript before the document has loaded.
         """
         def execute_pending_scripts():
             for src in self._execute_script_list:
@@ -731,6 +731,3 @@ class PageProxy (object):
         # self.box.destroy()
         # ... ???
         pass
-
-if __name__ == '__main__':
-    ctruct_

@@ -22,7 +22,8 @@ var SchirmTerminal = function(parentElement, termId) {
     var screen0 = 0; // offset from the first line to the current terminal line 0
     var appMode = false;
     var currentIframe;
-    var size = { lines: 0, cols: 0 };
+
+    this.size = { lines: 0, cols: 0 };
 
     // IPC
 
@@ -107,16 +108,16 @@ var SchirmTerminal = function(parentElement, termId) {
     // Determine the new size of the currently active screen and
     // return it by sending JSON encoded mapping of the size to the
     // terminal emulator process
-    var resizeHandler = function(event) {
-        size = getTermSize(linesElement);
-        sendCommand('schirm{"width":'+size.cols+',"height":'+size.lines+'}');
+    this.resize = function() {
+        self.size = getTermSize(linesElement);
+        sendCommand('schirm{"width":'+self.size.cols+',"height":'+self.size.lines+'}');
     };
 
     // terminal render functions
 
     // adjust layout to 'render' empty lines at the bottom
     var adjustTrailingSpace = function() {
-        if (linesElement.childNodes.length && ((linesElement.childNodes.length - screen0) <= term.size.lines)) {
+        if (linesElement.childNodes.length && ((linesElement.childNodes.length - screen0) <= self.size.lines)) {
             var historyHeight = linesElement.childNodes[screen0].offsetTop;
             // position the <pre> so that anything above the screen0 line is outside the termscreen client area
             linesElement.style.setProperty("top", -historyHeight);
@@ -124,6 +125,7 @@ var SchirmTerminal = function(parentElement, termId) {
             linesElement.parentElement.style.setProperty("margin-top", historyHeight);
         }
     };
+    this.adjustTrailingSpace = adjustTrailingSpace;
 
     var checkHistorySizePending = false;
     this.checkHistorySize = function() {
@@ -156,8 +158,8 @@ var SchirmTerminal = function(parentElement, termId) {
         checkHistorySizePending = false;
     };
 
-    this.setScreen0 = function(screen0) {
-        screen0 = screen0;
+    this.setScreen0 = function(s0) {
+        screen0 = s0;
         adjustTrailingSpace();
     };
 
@@ -193,11 +195,7 @@ var SchirmTerminal = function(parentElement, termId) {
       adjustTrailingSpace();
     };
 
-    this.resize = function(oldLines, newLines) {
-        // todo: remove
-    };
-
-    // clear all a lines and the history (
+    // clear all a lines and the history
     this.reset = function() {
         linesElement.innerHTML = "";
     };
@@ -269,7 +267,7 @@ var SchirmTerminal = function(parentElement, termId) {
     parentElement.innerHTML = termMarkup;
     linesElement = parentElement.getElementsByClassName('terminal-line-container')[0];
     appElement   = parentElement.getElementsByClassName('terminal-app-container')[0];
-    resizeHandler();
+    self.resize();
 
     if (termId) {
         // we are an embedded terminal, enter the ajax loop

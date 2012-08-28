@@ -28,6 +28,7 @@ from pyte import modes as mo, graphics as g, charsets as cs, control as ctrl
 
 # create an explicit interface to Lines and the seq of Lines to be
 # able to create better js dom-update instructions
+
 class Line(UserList):
     """
     A line of characters
@@ -43,6 +44,27 @@ class Line(UserList):
         # the kind of cursor to render, either 'cursor' or 'cursor-inactive'
         # set in self.show_cursor()
         self.cursorclass = ''
+
+    def modified(self, linecontainer, real_line_index):
+        """Mark this line as modified."""
+        # try limiting the amount of modify events by not adding consecutive duplicates
+        if linecontainer.events:
+            last_ev = linecontainer.events[-1]
+            if last_ev[0] == 'modify' \
+                    and last_ev[1] == real_line_index \
+                    and last_ev[2] is self:
+                # skip consecutive modify events of the same line
+                return
+            elif last_ev[0] == 'append' \
+                    and last_ev[1] is self:
+                # skip append - modify sequences
+                # event though append receives an empty line, at
+                # rendering time, it will be rendered with the full
+                # lines contents, this works because each events keeps
+                # a reference to the line instead of only its value.
+                return
+
+        linecontainer.events.append(('modify', real_line_index, self))
 
     def is_empty(self):
         return (not self.cursorpos) \
@@ -146,6 +168,8 @@ class Line(UserList):
         self.changed = True
         self.cursorpos = None
 
+    def __repr__(self):
+        return "#<Line %s>" % repr(''.join(c.data for c in self))
 
 class IframeLine(Line):
 
@@ -242,16 +266,6 @@ class LineContainer(): # lazy
         self.events = []
         return ret
 
-    def get_changed_lines(self):
-        """Iterator to get a sequence of all changed lines.
-
-        Return a list of (linenumber, Line).
-        """
-        # TODO: instead of returning all currently visible and changed
-        # lines, let the lines themselves append a 'i-am-changed'
-        # event to the LineContainers eventlist.
-        return ((i,l) for i, l in enumerate(self.lines[self.screen0:], self.screen0) if l.changed)
-
     def reset(self, height):
         self.height = height # height of the terminal screen in lines
         self.set_screen0(0)
@@ -265,7 +279,7 @@ class LineContainer(): # lazy
         if self.screen0 > 0:
             self.set_screen0(self.screen0 - 1)
         line = self.lines.pop(ri)
-        self.events.append(('pop', index, line))
+        self.events.append(('pop', ri, line))
         return line
 
     def pop_bottom(self):
@@ -307,7 +321,9 @@ class LineContainer(): # lazy
     def __getitem__(self, index):
         self._ensure_lines(index)
         ri = self.real_line_index(index)
-        return self.lines[self.real_line_index(index)]
+        line = self.lines[ri]
+        line.modified(self, ri)
+        return line
 
     def __setitem__(self, index, line):
         self._ensure_lines(index)
@@ -316,8 +332,8 @@ class LineContainer(): # lazy
         self.events.append(('set', ri, line))
 
     def __iter__(self):
+        assert False # do we need an __iter__ method?
         self._ensure_lines() # ???
-        # do we need an __iter__ method?
         return self.lines[self.real_line_index(0):].__iter__()
 
     def resize(self, newheight, newwidth):
@@ -380,7 +396,6 @@ class LineContainer(): # lazy
         """Implements marginless erase_in_display type 2 preserving the history."""
         # push the current terminal contents to the history
         self.set_screen0(len(self.lines))
-        self.show_cursor(cursor_line, cursor_column)
 
     def remove_history(self, lines_to_remove=None):
         """Remove all or the first n lines_to_remove from the history."""
@@ -399,32 +414,21 @@ class LineContainer(): # lazy
     ## cursor show and hide events
 
     def show_cursor(self, linenumber, column, cursorclass='cursor'):
-        self._ensure_lines(linenumber)
-        index = self.real_line_index(linenumber)
-        line = self.lines[index]
-        line.show_cursor(column, cursorclass)
+        self[linenumber].show_cursor(column, cursorclass)
 
     def hide_cursor(self, linenumber):
-        self._ensure_lines(linenumber)
-        index = self.real_line_index(linenumber)
-        line = self.lines[index]
-        line.hide_cursor()
-        if not isinstance(line, IframeLine):
-            # update this line explicitly, as it may have been moved
-            # into the scrollback (above line 0) which is not included
-            # in the get_changed_lines result
-            self.events.append(('set', index, line))
+        self[linenumber].hide_cursor()
 
     ## iframe events, not directly line-based
 
     def iframe_write(self, iframe_id, data):
         self.events.append(('iframe_write', iframe_id, data))
 
-    def iframe_register_resource(self, id, name, mimetype, data):
-        self.events.append(('iframe_register_resource', id, name, mimetype, data))
+    def iframe_register_resource(self, iframe_id, name, mimetype, data):
+        self.events.append(('iframe_register_resource', iframe_id, name, mimetype, data))
 
     def iframe_respond(self, req_id, data):
-        self.events.append(('iframe_respond', req_id, data))
+        self.events.append(('iframe_respond', self.iframe_id, req_id, data))
 
     def iframe_debug(self, iframe_id, data):
         self.events.append(('iframe_debug', iframe_id, data))
@@ -432,8 +436,8 @@ class LineContainer(): # lazy
     def iframe_close(self, iframe_id):
         self.events.append(('iframe_close', iframe_id))
 
-    def iframe_enter(self):
-        self.events.append(('iframe_enter', ))
+    def iframe_enter(self, iframe_id):
+        self.events.append(('iframe_enter', iframe_id))
 
     def iframe_leave(self, iframe_id):
         self.events.append(('iframe_leave', iframe_id))
@@ -444,12 +448,8 @@ class LineContainer(): # lazy
     def iframe_eval(self, iframe_id, source):
         self.events.append(('iframe_eval', iframe_id, source))
 
-    def iframe_resize(self, iframe_id, height):
-        self.events.append(('iframe_resize', iframe_id, height))
-
-    ## event rendering TODO:
-    ##   convert the containers events into method calls of the EventRenderer object
-    ##   in order to produce a sequence of functions to change the terminal webview state
+    # def iframe_resize(self, iframe_id, height):
+    #     self.events.append(('iframe_resize', iframe_id, height))
 
     # embedded terminals
 
@@ -509,6 +509,8 @@ class TermScreen(pyte.Screen):
         self.iframe_mode = None
         self.iframe_id = None
         self.reset()
+
+    # pyte.Screen implementation
 
     def __before__(self, command):
         pass
@@ -774,7 +776,8 @@ class TermScreen(pyte.Screen):
 
     def reverse_index(self):
         """Move the cursor up one line in the same column. If the cursor
-        is at the first line, create a new line at the top.
+        is at the first line, create a new line at the top and remove
+        the last one, scrolling all lines in between.
         """
         top, bottom = self.margins
 
@@ -793,7 +796,7 @@ class TermScreen(pyte.Screen):
         """
         count = count or 1
         top, bottom = self.margins
-
+        print 'insert_lines'
         # If cursor is outside scrolling margins it -- do nothin'.
         if top <= self.cursor.y <= bottom:
             #                           v +1, because range() is exclusive.
@@ -964,8 +967,8 @@ class TermScreen(pyte.Screen):
         # For arguments, see IframeLine
 
         if self.iframe_mode == None:
-            self.linecontainer.iframe_enter()
             self.iframe_id = self.get_next_iframe_id()
+            self.linecontainer.iframe_enter(self.iframe_id)
             self.linecontainer[self.cursor.y] = IframeLine(self.iframe_id, args)
             self.iframe_mode = 'open' # iframe document opened
         elif self.iframe_mode == 'closed':
@@ -997,14 +1000,14 @@ class TermScreen(pyte.Screen):
         mimetype = base64.b64decode(mimetype_b64)
         self.linecontainer.iframe_register_resource(self.iframe_id, name, mimetype, data)
 
-    def iframe_respond(self, request_id, data_b64):
+    def iframe_respond(self, iframe_id, request_id, data_b64):
         """
         Respond to the request identified by request_id.
         data_b64 is the full, base64 encoded response data, including
         HTTP status line, headers and data.
         """
         data = base64.b64decode(data_b64)
-        self.linecontainer.iframe_respond(request_id, data)
+        self.linecontainer.iframe_respond(iframe_id, request_id, data)
 
     def iframe_debug(self, b64_debugmsg):
         """
