@@ -26,6 +26,8 @@ import pyte
 from pyte.screens import Char, Margins, Cursor
 from pyte import modes as mo, graphics as g, charsets as cs, control as ctrl
 
+logger = logging.getLogger(__name__)
+
 # create an explicit interface to Lines and the seq of Lines to be
 # able to create better js dom-update instructions
 
@@ -188,6 +190,11 @@ class IframeLine(Line):
         self.args.update(dict(args[i:i+2] for i in range(0, len(args), 2)))
         self.id = id
         self.changed = False
+        self.cursorpos = None
+        self.cursorclass = None
+
+    def modified(self, linecontainer, index):
+        pass
 
     def is_empty(self):
         return False
@@ -329,7 +336,10 @@ class LineContainer(): # lazy
         self._ensure_lines(index)
         ri = self.real_line_index(index)
         self.lines[ri] = line
-        self.events.append(('set', ri, line))
+        if isinstance(line, IframeLine):
+            self.events.append(('set_iframe', ri, line.id))
+        else:
+            self.events.append(('set', ri, line))
 
     def __iter__(self):
         assert False # do we need an __iter__ method?
@@ -954,8 +964,9 @@ class TermScreen(pyte.Screen):
 
     ## iframe extensions
 
-    def get_next_iframe_id(self):
-        return (self.iframe_id or 0) + 1;
+    def next_iframe_id(self):
+        self.iframe_id = str(int(self.iframe_id or 0) + 1)
+        return self.iframe_id
 
     def iframe_enter(self, *args):
         # replace the current line with an iframe line at the current
@@ -967,9 +978,9 @@ class TermScreen(pyte.Screen):
         # For arguments, see IframeLine
 
         if self.iframe_mode == None:
-            self.iframe_id = self.get_next_iframe_id()
-            self.linecontainer.iframe_enter(self.iframe_id)
-            self.linecontainer[self.cursor.y] = IframeLine(self.iframe_id, args)
+            iframe_id = self.next_iframe_id()
+            self.linecontainer.iframe_enter(iframe_id)
+            self.linecontainer[self.cursor.y] = IframeLine(iframe_id, args)
             self.iframe_mode = 'open' # iframe document opened
         elif self.iframe_mode == 'closed':
             self.iframe_mode = 'open'
@@ -1132,7 +1143,7 @@ class SchirmStream(pyte.Stream):
             if kwargs.get("reset", True): self.reset()
             if kwargs.get("iframe", False): self.state = 'iframe_write'
         else:
-            logging.warn("no listener set")
+            logger.warn("no listener set")
 
 
     # State transformers.
@@ -1189,7 +1200,7 @@ class SchirmStream(pyte.Stream):
             self.dispatch('iframe_write', "\033", iframe=True)
         else:
             # leave the iframe mode on invalid commands
-            logging.debug("Invalid Iframe Mode Command: ESC {} ({})".format(char, ord(char)))
+            logger.debug("Invalid Iframe Mode Command: ESC {} ({})".format(char, ord(char)))
             self.dispatch('iframe_leave')
 
     def _iframe_data(self, char):
@@ -1222,7 +1233,7 @@ class SchirmStream(pyte.Stream):
             self.current = []
             self.dispatch(cmd, *args, iframe=True)
         else:
-            logging.debug("Unknown escape sequence in iframe data: ESC-{}".format(repr(char)))
+            logger.debug("Unknown escape sequence in iframe data: ESC-{}".format(repr(char)))
 
     def _iframe_write(self, char):
         """Read a normal char or string and write it to an iframe

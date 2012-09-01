@@ -28,11 +28,11 @@ import pkg_resources
 from BaseHTTPServer import BaseHTTPRequestHandler
 from StringIO import StringIO
 
+logger = logging.getLogger(__name__)
 
 class attrdict(dict):
     def __getattr__(self, k):
         return self[k]
-
 
 class HTTPRequest(BaseHTTPRequestHandler):
     def __init__(self, stream): #request_text
@@ -102,12 +102,13 @@ class Server(object):
         return port
 
     def listen(self):
-        logging.debug("Server listening on localhost:{}".format(self.getport()))
+        logger.debug("Schirm HTTP proxy server listening on localhost:%s" % (self.getport(),))
         while 1:
             client, address = self.socket.accept()
             self.receive(client)
 
     def prune_old_requests(self):
+        # simple request gc
         while True:
             with self._requests_lock:
                 current_time = time.time()
@@ -118,7 +119,7 @@ class Server(object):
                         req = self.requests.pop(rid, None)
                         req['client'].sendall(self.make_status404())
                         self._close_conn(req['client'])
-                        logging.info("request {rid} timed out".format(rid=rid))
+                        logger.info("request %(rid)s timed out" % {'rid':rid})
             time.sleep(1)
 
     @staticmethod
@@ -167,7 +168,7 @@ class Server(object):
             req = self.requests.pop(int(req_id), None)
 
         if req:
-            logging.debug("server responding to {} with {}".format(req_id, repr(data)[:60], '...' if len(repr(data)) > 60 else ''))
+            logger.debug("responding to %s with %s%s" % (req_id, repr(data)[:60], '...' if len(repr(data)) > 60 else ''))
             client = req['client']
             client.sendall(data if data != None else self.make_status404())
             if close:
@@ -177,4 +178,4 @@ class Server(object):
                 with self._requests_lock:
                     self.requests[req_id] = {'client': client, 'time': time.time()}
         else:
-            loggin.error("unknown request: %r" % (req_id, ))
+            logger.error("unknown request id: %r" % (req_id, ))

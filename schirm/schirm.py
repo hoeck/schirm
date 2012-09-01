@@ -34,6 +34,7 @@ import pkg_resources
 import types
 import Queue
 import json
+import traceback
 
 import gtkui
 import term
@@ -44,6 +45,19 @@ SEP = ESC + ";"
 START_REQ = ESC + "R" + "request" + SEP
 END = ESC + "Q"
 NEWLINE = "\n" # somehow required for 'flushing', tcflush and other ioctls didn't work :/
+
+def init_logger(level=logging.ERROR):
+    l = logging.getLogger('schirm')
+    h = logging.StreamHandler()
+    f = logging.Formatter("%(name)s - %(message)s")
+
+    h.setFormatter(f)
+    l.addHandler(h)
+    if level:
+        l.setLevel(level)
+    return l
+
+logger = init_logger()
 
 def init_dotschirm():
     """Create ~/.schirm/ and or missing files in it."""
@@ -194,35 +208,53 @@ class Schirm(object):
                 if isinstance(res, tuple) and res[0] == 'pty_read_error':
                     return
         except:
+            traceback.print_exc()
             self.uiproxy.quit()
-            raise
 
     def term_worker(self):
         try:
             while True:
                 self.emulator.advance((self.input_queue.get(),))
         except:
+            traceback.print_exc()
             # todo: proper error handling:
             # do not close the whole terminal, instead, stop the
             # current tab, maybe use a red background/border to
             # indicate an error
             self.uiproxy.quit()
-            raise
+
+def create_log_filter(filter=lambda record: True):
+    class _Filter(logging.Filter):
+
+        def __init__(self, fn):
+            self._f = f
+
+        def filter(self, record):
+            if f(record):
+                return 1
+            else:
+                return 0
+
+    return _Filter(filter)
 
 def main():
     parser = argparse.ArgumentParser(description="A linux compatible terminal emulator providing modes for rendering (interactive) html documents.")
     parser.add_argument("-v", "--verbose", help="be verbose, -v for info, -vv for debug log level", action="count")
-    parser.add_argument("-c", "--console-log", help="write all console.log messages to stdout (use -cc to include document URL and linenumber)", action="count")
+    parser.add_argument("-c", "--console-log", help="write all console.log messages to stdout (use -cc to include document URL and linenumber, -ccc to include schirm-internal usages of console.log)", action="count")
     args = parser.parse_args()
 
     if args.verbose:
-        logging.basicConfig(level=[None, logging.INFO, logging.DEBUG][args.verbose])
+        logger.setLevel([None, logging.INFO, logging.DEBUG][max(0, min(2, args.verbose))])
 
     if not (args.verbose and args.verbose > 1):
         warnings.simplefilter('ignore')
 
-    if args.console_log > 0:
-        gtkui.console_log_level = min(3, max(0, args.console_log))
+    if args.console_log:
+        cl = gtkui.PageProxy.console_logger
+        cl.setLevel([None, logging.INFO, logging.DEBUG][max(0, min(2, args.console_log))])
+        h = logging.StreamHandler()
+        h.setFormatter(logging.Formatter("%(name)s - %(message)s"))
+        cl.addHandler(h)
 
     init_dotschirm()
     gtkui.PageProxy.start(Schirm)

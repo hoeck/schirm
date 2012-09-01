@@ -136,15 +136,18 @@ class Events():
 
     @staticmethod
     def set(index, line):
-        #if isinstance(line, termscreen.IframeLine):
-        #    # TODO: close leave the current iframe (if any)
-        #    #return 'term.insertIframe({}, {});'.format(index, json.dumps(line.id))
-        #    def _iframe_insert(schirm):
-        #        schirm.iframe_insert(index, line.id)
-        #    return _iframe_insert
-        #else:
         content = renderline(line)
         return set_line_to(index, content)
+
+    @staticmethod
+    def set_iframe(index, iframe_id):
+        # js to insert an iframe line
+        uri = "http://{iframe_id}.localhost/".format(iframe_id=iframe_id) # TODO: urlencode iframe_id
+        js = "term.insertIframe({index}, {iframe_id}, {uri})".format(
+            index=json.dumps(index),
+            iframe_id=json.dumps(iframe_id),
+            uri=json.dumps(uri))
+        return js
 
     @staticmethod
     def modify(index, line):

@@ -1,5 +1,8 @@
 import re
 import urlparse
+import logging
+
+logger = logging.getLogger(__name__)
 
 class Iframes(object):
     """
@@ -13,6 +16,7 @@ class Iframes(object):
         self.terminal_ui = terminal_ui
 
     def request(self, req):
+
         # http://<iframe-id>.localhost
         (scheme, netloc, path, params, query, fragment) = urlparse.urlparse(req.path)
         # use the subdomain to sandbox iframes and separate requests
@@ -24,10 +28,11 @@ class Iframes(object):
                 iframe_id = None
         else:
             iframe_id = None
-        
+
+        logger.debug("(iframe %s) request", repr(iframe_id))
         if iframe_id in self.iframes:
             # dispatch
-            iframes[iframe_id].request(req, path)
+            self.iframes[iframe_id].request(req, path)
         else:
             # 404
             self.terminal_ui.respond(req.id, close=True)
@@ -37,10 +42,11 @@ class Iframes(object):
         # create iframes and relay the iframe events to each iframe
         # object using the iframe_id
 
-        name, iframe_id = event[0:1]
+        name, iframe_id = event[:2]
         args = event[2:]
 
         if name == 'iframe_enter':
+            logger.debug("iframe_enter %s", event)
             self.iframes[iframe_id] = Iframe(iframe_id, self.terminal_io, self.terminal_ui)
         elif name == 'iframe_resize':
             # todo:
@@ -49,24 +55,28 @@ class Iframes(object):
         else:
             f = self.iframes.get(iframe_id)
             if f:
-                getattr(f, name, *args)
+                logger.debug("iframe id: %r, state: %r, event: %r" % (f.id, f.state, event))
+                getattr(f, name)(*args)
+                logger.debug("       -> state: %r" % (f.state,))
             else:
-                warn('no iframe with id %r' % iframe_id)
+                logger.warn('no iframe with id %r', iframe_id)
 
 class Iframe(object):
     """Represents an iframe line created inside a schirm terminal emulation."""
+
+    static_resources = {}
 
     def __init__(self, iframe_id, terminal_io, terminal_ui):
         self.id = iframe_id
         self.resources = {}
         self.state = 'open'
-        self.req_id = None
+        self.root_document_req_id = None
 
         self.terminal_io = terminal_io
         self.terminal_ui = terminal_ui
 
         # communication url
-        # use to send execute_iframe commands 
+        # use to send execute_iframe commands
         self.comm_path = '__comm__'
         self.comm_req_id = None
         self.comm_commands_pending = [] # queue up commands, send one at a time
@@ -101,11 +111,11 @@ class Iframe(object):
         elif self.state == 'document_requested':
             self.resources.setdefault(None, []).append(data)
             # write more data
-            self.terminal_ui.respond(self.req_id, data, close=False)
+            self.terminal_ui.respond(self.root_document_req_id, data, close=False)
 
     def iframe_close(self):
         if self.state == 'document_requested':
-            self.terminal_ui.respond(self.req_id, '', close=True)
+            self.terminal_ui.respond(self.root_document_req_id, '', close=True)
         self.state = 'close'
 
     def iframe_leave(self):
@@ -114,7 +124,7 @@ class Iframe(object):
 
     def iframe_execute(self, script):
         """Execute some javascript in the iframe document.
-        
+
         Requires the iframe to have loaded the terminal_ui.js lib.
         """
         self._command_send({'name':'execute',
@@ -140,35 +150,37 @@ class Iframe(object):
 
     # methods called by terminal_ui to respond to http requests to the iframes subdomain ???
     def request(self, req, path):
-        GET  = (req.method == GET)
-        POST = (req.method == POST)
+        GET  = (req.method == 'GET')
+        POST = (req.method == 'POST')
 
         # routing
         if GET and path == '/':
             # serve the root document regardless of the iframes state
+            self.root_document_req_id = req.id
 
             if self.state == 'open':
                 self.state = 'document_requested'
-                data = ''.join(self.resources.get(None, []))
-            else:
-                data = ''
 
+            data = ''.join(self.resources.get(None, []))
+
+            logger.debug("getting iframe root document: %s", repr((self.state, data)))
             self.terminal_ui.respond(req.id,
-                                data="\r\n".join(["HTTP/1.1 200 OK",
-                                                  "Cache-Control: no-cache",
-                                                  "Content-Type: text/html",
-                                                  "",
-                                                  data]),
-                                close=(self.state == 'close'))
+                                     data="\r\n".join(["HTTP/1.1 200 OK",
+                                                       "Cache-Control: no-cache",
+                                                       "Content-Type: text/html",
+                                                       "",
+                                                       data]),
+                                     close=(self.state != 'document_requested'))
+
         elif GET and path in self.static_resources:
             # todo: write this function, should serve the file
             # named in path from the internal terminal_ui.resources
             # directory
-            self.terminal_ui.respond_resource_file(req_id, path)
+            self.terminal_ui.respond_resource_file(req.id, path)
 
         elif GET and path in self.resources:
             data = self.resources[path]
-            self.terminal_ui.respond(req_id, data) # data in resources is already in http-request form
+            self.terminal_ui.respond(req.id, data) # data in resources is already in http-request form
 
         elif POST and path == self.comm_path and self.state == 'open':
             if req.data:

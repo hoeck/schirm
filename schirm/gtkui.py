@@ -19,6 +19,7 @@ import os
 import Queue
 import threading
 import simplejson
+import logging
 from gettext import gettext as _
 
 import gobject
@@ -29,6 +30,8 @@ import tabbed_window
 from promise import Promise
 import webkitutils
 import webserver
+
+logger = logging.getLogger(__name__)
 
 class attrdict(dict):
     def __getattr__(self, k):
@@ -147,10 +150,10 @@ class TerminalWebview(webkit.WebView):
             try:
                 settings.set_property(key, val)
             except TypeError:
-                logging.warn(("Your version of WebKit does not support "
-                    "the setting '{0}'.  This setting requires version "
-                    "{1}.  For best compatibility, use at least version "
-                    "1.1.22.").format(key, version))
+                logger.warn(("Your version of WebKit does not support "
+                             "the setting '%s'. This setting requires version "
+                             "%s. For best compatibility, use at least version "
+                             "1.1.22."), key, version)
 
     def set_proxy(self, uri):
         webkitutils.set_proxy(uri)
@@ -277,8 +280,8 @@ class PageProxy (object):
     window = None
     schirm_type = None
 
-    # logging
-    console_log_level = 0 # 0,1,2,3
+    # webview console logging
+    console_logger = logging.getLogger('webview_console')
 
     @classmethod
     def keypress_cb(self, window, event):
@@ -583,7 +586,7 @@ class PageProxy (object):
             except:
                 return False
 
-            logging.debug("Iframe resize request to {}".format(height))
+            logger.debug("Iframe resize request to %s", height)
             self.schirm.iframe_resize(height)
 
         elif msg.startswith("removehistory"):
@@ -676,16 +679,17 @@ class PageProxy (object):
         """Connect console.log and other handlers."""
         # console.log
         def _console_message_cb(view, msg, line, source_id):
-            if self.console_log_level == 3:
-                print "console-log-ipc: {}:{} {}".format(source, line, msg)
 
             res = self.console_log_msg_handler(msg)
 
             if not res:
-                if self.console_log_level == 2:
-                    print "console-log: {}:{} {}".format(source, line, msg)
-                if self.console_log_level == 1:
-                    print "console-log: ".format(msg)
+                if source_id:
+                    self.console_logger.info("(%s:%s): %s", source_id, line, msg)
+                else:
+                    self.console_logger.info(msg)
+            else:
+                self.console_logger.debug("IPC: %s:%s %s", source_id, line, msg)
+
             # 1 .. do not invoke the default console message handler
             # 0 .. invoke other handlers
             return 1
