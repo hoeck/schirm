@@ -437,8 +437,8 @@ class LineContainer(): # lazy
     def iframe_register_resource(self, iframe_id, name, mimetype, data):
         self.events.append(('iframe_register_resource', iframe_id, name, mimetype, data))
 
-    def iframe_respond(self, req_id, data):
-        self.events.append(('iframe_respond', self.iframe_id, req_id, data))
+    def iframe_respond(self, iframe_id, req_id, data):
+        self.events.append(('iframe_respond', iframe_id, req_id, data))
 
     def iframe_debug(self, iframe_id, data):
         self.events.append(('iframe_debug', iframe_id, data))
@@ -458,8 +458,8 @@ class LineContainer(): # lazy
     def iframe_eval(self, iframe_id, source):
         self.events.append(('iframe_eval', iframe_id, source))
 
-    # def iframe_resize(self, iframe_id, height):
-    #     self.events.append(('iframe_resize', iframe_id, height))
+    def iframe_resize(self, iframe_id, height):
+        self.events.append(('iframe_resize', iframe_id, height))
 
     # embedded terminals
 
@@ -1011,14 +1011,14 @@ class TermScreen(pyte.Screen):
         mimetype = base64.b64decode(mimetype_b64)
         self.linecontainer.iframe_register_resource(self.iframe_id, name, mimetype, data)
 
-    def iframe_respond(self, iframe_id, request_id, data_b64):
-        """
-        Respond to the request identified by request_id.
+    def iframe_respond(self, request_id, data_b64):
+        """Respond to the request identified by request_id.
+
         data_b64 is the full, base64 encoded response data, including
         HTTP status line, headers and data.
         """
         data = base64.b64decode(data_b64)
-        self.linecontainer.iframe_respond(iframe_id, request_id, data)
+        self.linecontainer.iframe_respond(self.iframe_id, request_id, data)
 
     def iframe_debug(self, b64_debugmsg):
         """
@@ -1143,7 +1143,7 @@ class SchirmStream(pyte.Stream):
             if kwargs.get("reset", True): self.reset()
             if kwargs.get("iframe", False): self.state = 'iframe_write'
         else:
-            logger.warn("no listener set")
+            logger.error("no listener set")
 
 
     # State transformers.

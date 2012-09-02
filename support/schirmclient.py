@@ -225,8 +225,8 @@ def read_next():
             if ch == 'R':
                 args = read_list()
                 if args[0] == 'request':
-                    # (requestid, protocol, method, path, header-key*, header-value*, [post-data])
-                    headers = dict((args[i], args[i+1]) for i in range(4, len(args), 2))
+                    # ('request', requestid, protocol, method, path, header-key*, header-value*, [post-data])
+                    headers = dict((args[i], args[i+1]) for i in range(5, len(args)-1, 2))
                     return Request('request', args[1], args[2], args[3], args[4], headers, args[-1] if len(args)%2 else None)
                 else:
                     return Message(*args)

@@ -1,8 +1,17 @@
 import re
 import urlparse
 import logging
+import base64
+
+import htmlterm
 
 logger = logging.getLogger(__name__)
+
+ESC = "\033"
+SEP = ESC + ";"
+START_REQ = ESC + "R" + "request" + SEP
+END = ESC + "Q"
+NEWLINE = "\n" # somehow required for 'flushing', tcflush and other ioctls didn't work :/
 
 class Iframes(object):
     """
@@ -19,20 +28,30 @@ class Iframes(object):
 
         # http://<iframe-id>.localhost
         (scheme, netloc, path, params, query, fragment) = urlparse.urlparse(req.path)
+
         # use the subdomain to sandbox iframes and separate requests
         m = re.match("(.+)\.localhost", netloc)
         if m:
             try:
                 iframe_id = m.group(1)
+                # transform the iframe path from a proxy path to a normal one
+                root = "http://%s.localhost" % iframe_id
+                req['path'] = req['path'][len(root):]
+
             except:
                 iframe_id = None
         else:
             iframe_id = None
 
-        logger.debug("(iframe %s) request", repr(iframe_id))
-        if iframe_id in self.iframes:
+        logger.debug('iframe %(iframe_id)r request %(id)r: %(method)s %(path)r ' %
+                     {'iframe_id':iframe_id,
+                      'id':req.id,
+                      'method':req.method,
+                      'path':req.path})
+
+        if iframe_id in self.iframes and req.get('path'):
             # dispatch
-            self.iframes[iframe_id].request(req, path)
+            self.iframes[iframe_id].request(req)
         else:
             # 404
             self.terminal_ui.respond(req.id, close=True)
@@ -46,25 +65,25 @@ class Iframes(object):
         args = event[2:]
 
         if name == 'iframe_enter':
-            logger.debug("iframe_enter %s", event)
+            logger.debug("iframe_enter %r", event)
             self.iframes[iframe_id] = Iframe(iframe_id, self.terminal_io, self.terminal_ui)
-        elif name == 'iframe_resize':
-            # todo:
-            # send some js to the main terminal
-            pass
         else:
             f = self.iframes.get(iframe_id)
             if f:
-                logger.debug("iframe id: %r, state: %r, event: %r" % (f.id, f.state, event))
-                getattr(f, name)(*args)
-                logger.debug("       -> state: %r" % (f.state,))
+                event_method = getattr(f, name)
+                if event_method:
+                    event_method(*args)
+                else:
+                    logger.error('Unknown iframe event method: %r', name)
             else:
-                logger.warn('no iframe with id %r', iframe_id)
+                logger.warn('No iframe with id %r', iframe_id)
 
 class Iframe(object):
     """Represents an iframe line created inside a schirm terminal emulation."""
 
-    static_resources = {}
+    static_resources = {'/schirm.js': "schirm.js",   # schirm client lib
+                        '/schirm.css': "schirm.css", # schirm iframe mode styles
+                       }
 
     def __init__(self, iframe_id, terminal_io, terminal_ui):
         self.id = iframe_id
@@ -104,6 +123,10 @@ class Iframe(object):
         pass
 
     # iframe terminal methods
+
+    def iframe_resize(self, height):
+        # send some js to the terminal hosting this iframe
+        self.terminal_ui.execute(htmlterm.Events.iframe_resize(self.id, height))
 
     def iframe_write(self, data):
         if self.state in ('open', 'close'):
@@ -149,12 +172,12 @@ class Iframe(object):
         print msg
 
     # methods called by terminal_ui to respond to http requests to the iframes subdomain ???
-    def request(self, req, path):
+    def request(self, req):
         GET  = (req.method == 'GET')
         POST = (req.method == 'POST')
 
         # routing
-        if GET and path == '/':
+        if GET and req.path == '/':
             # serve the root document regardless of the iframes state
             self.root_document_req_id = req.id
 
@@ -172,17 +195,18 @@ class Iframe(object):
                                                        data]),
                                      close=(self.state != 'document_requested'))
 
-        elif GET and path in self.static_resources:
+        elif GET and req.path in self.static_resources:
             # todo: write this function, should serve the file
             # named in path from the internal terminal_ui.resources
             # directory
-            self.terminal_ui.respond_resource_file(req.id, path)
+            logger.debug('serving static resource %r to iframe %r', req.path, self.id)
+            self.terminal_ui.respond_resource_file(req.id, self.static_resources[req.path])
 
-        elif GET and path in self.resources:
-            data = self.resources[path]
+        elif GET and req.path in self.resources:
+            data = self.resources[req.path]
             self.terminal_ui.respond(req.id, data) # data in resources is already in http-request form
 
-        elif POST and path == self.comm_path and self.state == 'open':
+        elif POST and req.path == self.comm_path and self.state == 'open':
             if req.data:
                 self._command_respond(req.data)
             self.comm_req_id = req.id # there may only be one open request at a time
@@ -190,19 +214,12 @@ class Iframe(object):
         else:
             if self.state == 'close':
                 # write the response back to the terminal
-                def clear_path(path):
-                    # transform the iframe path from a proxy path to a normal one
-                    root = "http://{}.localhost".format(iframe_id)
-                    if root in path:
-                        return path[len(root):]
-                    else:
-                        return path
 
                 # transmitting: req_id, method, path, (k, v)*, data
                 data = [str(req.id),
                         req.request_version,
                         req.method,
-                        clear_path(req.path)]
+                        req.path]
 
                 for k in req.headers.keys():
                     data.append(k)

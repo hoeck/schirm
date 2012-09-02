@@ -31,6 +31,7 @@ import base64
 import pwd
 import types
 import time
+import simplejson
 from warnings import warn
 from UserList import UserList
 
@@ -43,7 +44,11 @@ import termkey
 import htmlterm
 import termiframe
 
+logger = logging.getLogger(__name__)
 
+class attrdict(dict):
+    def __getattr__(self, k):
+        return self[k]
 
 def json_escape_all_u(src):
     dst = ""
@@ -99,6 +104,9 @@ class Terminal(object):
 
         self.iframes = termiframe.Iframes(terminal_io, terminal_ui)
 
+        # webview console logging (setup in schirm.main())
+        self.console_logger = logging.getLogger('webview_console')
+
     def write(self, s):
         self.terminal_io.write(s)
 
@@ -134,6 +142,49 @@ class Terminal(object):
         # redraw the terminal with the new focus settings
         #self.input_queue.put(('redraw', None)) # ???
         # maybe there should be a TermScreen.set_focus method
+
+    def console_log(self, data):
+        msg, line, source_id = data
+
+        def log_ipc():
+            self.console_logger.debug("IPC: (%s:%s) %s", source_id, line, msg)
+
+        if msg.startswith("schirm"):
+            log_ipc()
+            d = simplejson.loads(msg[6:])
+
+            # always set size
+            w = d.get('width')
+            h = d.get('height')
+
+            if w and h:
+                self.resize(attrdict({'width': int(w),
+                                      'height':int(h)}))
+
+        elif msg.startswith("iframeresize"):
+            # TODO: use http + dangling post for this
+            log_ipc()
+            try:
+                height = int(msg[len("iframeresize"):])
+            except:
+                return False
+            logger.debug("Iframe resize request to %s", height)
+            self.screen.linecontainer.iframe_resize(self.screen.iframe_id, height)
+
+        elif msg.startswith("removehistory"):
+            log_ipc()
+            try:
+                n = int(msg[13:])
+            except:
+                return False
+            self.screen.linecontainer.remove_history(n)
+
+        else:
+            # log it
+            if source_id:
+                self.console_logger.info("(%s:%s): %s", source_id, line, msg)
+            else:
+                self.console_logger.info(msg)
 
     def _keypress(self, key):
         """Decode a keypress into terminal escape-codes.
@@ -184,8 +235,10 @@ class Terminal(object):
                         self.set_focus(data)
                     elif name == 'request':
                         self.request(data)
-                    elif name == 'resize':
-                        self.resize(data)
+                    elif name == 'console_log':
+                        self.console_log(data)
+                    else:
+                        logger.error('unknown input identifier: %r' % (name,))
             else:
                 pass
 
@@ -234,9 +287,13 @@ class Terminal(object):
                 self.terminal_ui.set_title(args[0])
             elif name == 'set_screen0':
                 screen0 = args[0]
-            else:
+            elif name == 'close_stream':
+                raise Exception('terminal exit')
+            elif name in htmlterm.Events.__dict__:
                 # sth. to be translated to js
-                js_append(getattr(htmlterm.Events, name)(*args))
+                js_append(getattr(htmlterm.Events,name)(*args))
+            else:
+                logger.error('unknown event: %r', name)
 
         if screen0 is not None:
             js_append(htmlterm.Events.set_screen0(screen0))
@@ -251,9 +308,7 @@ class Terminal(object):
             # - relative paths are looked up in schirm.resources module
             #   using pkg_resources.
             # - absolute paths are loaded from the filesystem (user.css)
-            static_resources = {'/schirm.js': "schirm.js",   # schirm client lib
-                                '/schirm.css': "schirm.css", # schirm iframe mode styles
-                                # terminal emulator files
+            static_resources = {# terminal emulator files
                                 '/term.html': 'term.html',
                                 '/term.js': 'term.js',
                                 '/term.css': 'term.css',

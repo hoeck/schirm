@@ -280,9 +280,6 @@ class PageProxy (object):
     window = None
     schirm_type = None
 
-    # webview console logging
-    console_logger = logging.getLogger('webview_console')
-
     @classmethod
     def keypress_cb(self, window, event):
         # all key events are handled in the toplevel window
@@ -568,38 +565,6 @@ class PageProxy (object):
         self.input_queue.put(lambda : gtk_invoke(self.window.close_tab, self.get_component()))
 
     # webview implementations
-    def console_log_msg_handler(self, msg):
-        if msg.startswith("schirm"):
-            d = simplejson.loads(msg[6:])
-
-            # always set size
-            w = d.get('width')
-            h = d.get('height')
-
-            if w and h:
-                self.schirm.resize(attrdict({'width': int(w),
-                                             'height':int(h)}))
-
-        elif msg.startswith("iframeresize"):
-            try:
-                height = int(msg[len("iframeresize"):])
-            except:
-                return False
-
-            logger.debug("Iframe resize request to %s", height)
-            self.schirm.iframe_resize(height)
-
-        elif msg.startswith("removehistory"):
-            try:
-                n = int(msg[13:])
-            except:
-                return False
-            self.schirm.remove_history(n)
-
-        else:
-            return False # not handled
-
-        return True # handled
 
     def handle_keypress(self, event):
         """Handle directly or put keypress envents onto the output_queue.
@@ -680,16 +645,7 @@ class PageProxy (object):
         # console.log
         def _console_message_cb(view, msg, line, source_id):
 
-            res = self.console_log_msg_handler(msg)
-
-            if not res:
-                if source_id:
-                    self.console_logger.info("(%s:%s): %s", source_id, line, msg)
-                else:
-                    self.console_logger.info(msg)
-            else:
-                self.console_logger.debug("IPC: %s:%s %s", source_id, line, msg)
-
+            self.schirm.console_log(msg, line, source_id)
             # 1 .. do not invoke the default console message handler
             # 0 .. invoke other handlers
             return 1

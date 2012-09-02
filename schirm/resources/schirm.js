@@ -1,7 +1,7 @@
 
 // schirm client module (use within terminal iframes)
 
-var Schirm = (function(schirm) {
+var schirm = (function(schirm) {
 
   // Determine and cache the height of a vertical scrollbar
   var __vscrollbarheight;
@@ -59,21 +59,16 @@ var Schirm = (function(schirm) {
     console.log("iframeresize"+newHeight); // IPC
   }
 
-
-  return schirm;
-
-})(window.schirm || {})
-
-
-var SchirmTerminal = function() {
   // Embedd a SchirmTerminal inside an iframe the embedded terminal
   // will be under full control of the surrounding schirm iframe and
   // provides the same capabilities (iframe mode, vt100 emulation) as
   // the main terminal.
+  schirm.SchirmTerminal = function() {
+    var self = this;
+    // RPC-style API
 
-  var self = this;
+  }
 
-  // RPC-style API
+  return schirm;
 
-
-}
+})(schirm || {})

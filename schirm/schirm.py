@@ -40,12 +40,6 @@ import gtkui
 import term
 import terminalio
 
-ESC = "\033"
-SEP = ESC + ";"
-START_REQ = ESC + "R" + "request" + SEP
-END = ESC + "Q"
-NEWLINE = "\n" # somehow required for 'flushing', tcflush and other ioctls didn't work :/
-
 def init_logger(level=logging.ERROR):
     l = logging.getLogger('schirm')
     h = logging.StreamHandler()
@@ -195,8 +189,8 @@ class Schirm(object):
     def set_focus(self, focus):
         self.input_queue.put(('set_focus', focus))
 
-    def resize(self, size):
-        self.input_queue.put(('resize', size))
+    def console_log(self, message, line, source_id):
+        self.input_queue.put(('console_log', (message, line, source_id)))
 
     # terminal emulation event loop
 
@@ -250,7 +244,7 @@ def main():
         warnings.simplefilter('ignore')
 
     if args.console_log:
-        cl = gtkui.PageProxy.console_logger
+        cl = logging.getLogger('webview_console')
         cl.setLevel([None, logging.INFO, logging.DEBUG][max(0, min(2, args.console_log))])
         h = logging.StreamHandler()
         h.setFormatter(logging.Formatter("%(name)s - %(message)s"))

@@ -110,17 +110,22 @@ html = """
 <body>
 <div id="tree-container"></div>
 <span></span>
-<script type="text/javascript" src="jquery.js"></script>
 
+<script type="text/javascript" src="schirm.js"></script> <!-- schirm client lib: resize -->
+<script type="text/javascript" src="jquery.js"></script>
 <script type="text/javascript" src="d3.min.js"></script>
 <script type="text/javascript" src="d3.layout.min.js"></script>
-
 <script type="text/javascript" src="nodeLinkTree.js"></script>
 
 <script>
     $(function() {
       buildTree();
-      schirmlog("done");
+      schirm.resize($('#tree-container').height());
+
+      // indicate readyness
+      var request = new XMLHttpRequest();
+      request.open('GET', 'done', true);
+      request.send(null);
     });
 </script>
 </body>
@@ -151,14 +156,15 @@ def show_tree(tree):
         schirm.register_resource_data(json.dumps(tree), 'tree.json', 'application/json')
         print html
         schirm.close()
-        # wait for the 'done' message
+        # wait for the 'done' get request
         req = schirm.read_next()
+        schirm.respond(req.id, '\r\n'.join(("HTTP/1.1", "404", "go ahead", "\r\n")))
 
 def main():
     parser = argparse.ArgumentParser(description="Display the current dir or PATH as a node link tree")
     parser.add_argument("path", metavar="PATH", default=".", nargs="?")
     args = parser.parse_args()
-    
+
     show_tree(create_tree(os.path.abspath(args.path), lambda x: not os.path.split(x)[1].startswith(".")))
 
 
