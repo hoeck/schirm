@@ -251,8 +251,36 @@ def table_test():
     with frame():
         print table(cols, header, rows)
 
+
+def test_websocket():
+    with frame():
+        print """
+<script type="text/javascript" src="schirm.js"></script>
+<script type="text/javascript" src="schirm-websocket-uri.js"></script>
+<script type="text/javascript">
+// websocket
+
+console.log('websocket-uri:', schirm.getWebSocketUri())
+var socket = new WebSocket(schirm.getWebSocketUri());
+socket.onopen = function (event) {
+  console.log('socket opened');
+  socket.send("test-payload");
+};
+
+socket.onmessage = function (event) {
+  console.log('websocket message:' + event.data);
+}
+
+</script>
+<h2>WebSocket</h2>
+"""
+        close()
+        req = read_next()
+    print req
+
 if __name__ == '__main__':
+    test_websocket()
     #frame_in_frame_test()
     #ajax_demo()
-    table_test()
+    #table_test()
 

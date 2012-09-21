@@ -26,6 +26,18 @@ class Iframes(object):
 
     def request(self, req):
 
+        if req.type == 'http':
+            self._request_http(req)
+        else:
+            logger.debug('iframe %(iframe_id)r websocket request %(id)r %(path)r ' %
+                         {'iframe_id':None,
+                          'id':req.id,
+                          'path':req.path})
+            print "responding!!!"
+            self.terminal_ui.respond(req.id, 'testfoo')
+
+    def _request_http(self, req):
+
         # http://<iframe-id>.localhost
         (scheme, netloc, path, params, query, fragment) = urlparse.urlparse(req.path)
 
@@ -104,8 +116,8 @@ class Iframe(object):
 
         def respond_w_cmd(cmd):
             self.terminal_ui.respond(self.comm_req_id,
-                                json.dumps(cmd),
-                                close=True)
+                                     json.dumps(cmd),
+                                     close=True)
 
         if self.comm_req_id:
             if self.comm_commands_pending:
@@ -201,6 +213,16 @@ class Iframe(object):
             # directory
             logger.debug('serving static resource %r to iframe %r', req.path, self.id)
             self.terminal_ui.respond_resource_file(req.id, self.static_resources[req.path])
+
+        elif GET and req.path == '/schirm-websocket-uri.js':
+            # hack to get a websocket uri for embedded terminals as
+            # proxying websocket connections does not work in the
+            # current webkitgtk
+            uri = "ws://localhost:%(port)s/%(id)s" % {'port': req.proxy_port,
+                                                      'id': self.id} # TODO: urlencode!
+            self.terminal_ui.respond(req.id,
+                                     self.terminal_ui.make_response('text/javascript',
+                                                                    "schirm.getWebSocketUri = function() { return '%s'; };" % uri))
 
         elif GET and req.path in self.resources:
             data = self.resources[req.path]
