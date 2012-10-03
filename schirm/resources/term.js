@@ -1,7 +1,7 @@
 // Redesign of the Schirm API using a js object pattern
 // goal: reuse this code to create embedded terminals
 
-var SchirmTerminal = function(parentElement, termId) {
+var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
     // When a termId & iframeId is given, the resulting terminal will act as an
     // embedded terminal running inside a main terminals iframe line.
 
@@ -27,9 +27,24 @@ var SchirmTerminal = function(parentElement, termId) {
 
     // IPC
 
-    var sendCommand = function(cmd) {
-        console.log(cmd);
-    };
+    if (false) {
+        var send = function(cmd) {
+            console.log("schirmcommand" + JSON.stringify(cmd));
+        };
+        this.send = send;
+    } else {
+        var socket = new WebSocket(webSocketUrl);
+        socket.onopen = function (event) {
+            console.log('socket opened');
+        };
+
+        var send = function(cmd) { socket.send };
+        this.send = send;
+
+        socket.onmessage = function (event) {
+            eval(event.data);
+        }
+    }
 
     // terminal sizing
 
@@ -110,7 +125,9 @@ var SchirmTerminal = function(parentElement, termId) {
     // terminal emulator process
     this.resize = function() {
         self.size = getTermSize(linesElement);
-        sendCommand('schirm{"width":'+self.size.cols+',"height":'+self.size.lines+'}');
+        send({cmd:'resize',
+              width:self.size.cols,
+              height:self.size.lines});
     };
 
     // terminal render functions
@@ -141,7 +158,8 @@ var SchirmTerminal = function(parentElement, termId) {
             if (historyHeight > maxHistoryHeight) {
                 for (var i=0; i<start; i++) {
                     if ((historyHeight - linesElement.childNodes[i].offsetTop) < maxHistoryHeight) {
-                        sendCommand('removehistory' + i);
+                        send({cmd:'removehistory',
+                              n:i});
                         checkHistorySizePending = true; // change state: wait for the removeHistory response
                         return
                     }
@@ -208,6 +226,7 @@ var SchirmTerminal = function(parentElement, termId) {
         linesElement.replaceChild(div, linesElement.childNodes[index]);
 
         var iframe = document.createElement('iframe');
+        // todo: add seamless & sandbox="allow-scripts allow-forms" attributes
         iframe.name = id;
         iframe.id = id;
         div.appendChild(iframe);
@@ -268,28 +287,4 @@ var SchirmTerminal = function(parentElement, termId) {
     linesElement = parentElement.getElementsByClassName('terminal-line-container')[0];
     appElement   = parentElement.getElementsByClassName('terminal-app-container')[0];
     self.resize();
-
-    if (termId) {
-        // we are an embedded terminal, enter the ajax loop
-        self.termAjaxWorker = function() {
-            var termXHR = new XMLHttpRequest();
-            termXHR.open("GET", termId, true); // asnyc
-            termXHR.onreadystatechange = function (event) {
-                if (termXHR.readyState === 4) {
-                    if (termXHR.status === 200) {
-                        // evil eval:
-                        var code = "function(term) {"+termXHR.responseText+"}(self);"
-                        console.log("term"+termId+"evaling:"+code);
-                        // TODO: use json-data to drive the terminal functions!
-                        eval(code);
-                        self.termAjaxWorker(); // send the next request
-                        // TODO: exit this loop
-                    } else {
-                        console.log("Error", termXHR.statusText);
-                    }
-                }
-            };
-            termXHR.send(null);
-        };
-    }
 };

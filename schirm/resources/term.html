@@ -29,7 +29,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 var term;
 function termInit() {
-  term = new SchirmTerminal(document.body);
+  term = new SchirmTerminal(document.body, null, %(websocket_url)s);
   document.body.onresize = term.resize;
 };
 </script>

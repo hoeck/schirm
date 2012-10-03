@@ -31,7 +31,7 @@ import base64
 import pwd
 import types
 import time
-import simplejson
+import pkg_resources
 from warnings import warn
 from UserList import UserList
 
@@ -104,6 +104,10 @@ class Terminal(object):
 
         self.iframes = termiframe.Iframes(terminal_io, terminal_ui)
 
+        # request id of the terminal comm websocket if established
+        self.termframe_websocket_id = websocket_id
+        self._execute_queue = []
+
         # webview console logging (setup in schirm.main())
         self.console_logger = logging.getLogger('webview_console')
 
@@ -143,42 +147,46 @@ class Terminal(object):
         #self.input_queue.put(('redraw', None)) # ???
         # maybe there should be a TermScreen.set_focus method
 
-    def console_log(self, data):
-        msg, line, source_id = data
-
-        def log_ipc():
-            self.console_logger.debug("IPC: (%s:%s) %s", source_id, line, msg)
-
-        if msg.startswith("schirm"):
-            log_ipc()
-            d = simplejson.loads(msg[6:])
-
+    def _dispatch_message(self, msg):
+        """Invoke the appropriate action according to msg['cmd']."""
+        if msg['cmd'] == 'resize':
             # always set size
-            w = d.get('width')
-            h = d.get('height')
+            w = msg.get('width')
+            h = msg.get('height')
 
             if w and h:
                 self.resize(attrdict({'width': int(w),
                                       'height':int(h)}))
 
-        elif msg.startswith("iframeresize"):
-            # TODO: use http + dangling post for this
-            log_ipc()
+        elif msg['cmd'] == "iframeresize":
             try:
-                height = int(msg[len("iframeresize"):])
+                height = int(msg['height'])
             except:
-                return False
+                return
             logger.debug("Iframe resize request to %s", height)
-            self.screen.linecontainer.iframe_resize(self.screen.iframe_id, height)
+            self.screen.linecontainer.iframe_resize(msg.get('id') or self.screen.iframe_id, height)
 
-        elif msg.startswith("removehistory"):
-            log_ipc()
+        elif msg['cmd'] == 'removehistory':
             try:
-                n = int(msg[13:])
+                n = int(msg['n'])
             except:
                 return False
             self.screen.linecontainer.remove_history(n)
 
+        else:
+            raise Exception("unknown command in message: %r" % msg)
+
+    def console_log(self, data): # TODO: move IPC dispatch code into a function, make args a dictionary (for easy json-over-websocket transport)
+        msg, line, source_id = data
+
+        # decode message to see if its a console log or IPC command
+        ipc_prefix = 'schirmcommand'
+        if msg.startswith(ipc_prefix):
+            self.console_logger.debug("IPC: (%s:%s) %s", source_id, line, msg)
+            # todo: only dispatch terminal command if source_id is 'termframe.html' or the like
+            # todo: check that, for iframe commands, source id contains the iframe id-url (iframe-id.localhost)
+            # todo: catch decode errors
+            self._dispatch_message(json.loads(msg))
         else:
             # log it
             if source_id:
@@ -242,6 +250,16 @@ class Terminal(object):
             else:
                 pass
 
+    def execute(self, js_string):
+        if self.termframe_websocket_id:
+            if self._execute_queue:
+                for s in self._execute_queue:
+                    self.terminal_ui.respond(self.termframe_websocket_id, data=''.join(s), close=False)
+                self._execute_queue = []
+            self.terminal_ui.respond(self.termframe_websocket_id, data=''.join(js_string), close=False)
+        else:
+            self._execute_queue.append(js_string)
+
     def advance(self, input):
 
         # turn off the cursor
@@ -264,7 +282,8 @@ class Terminal(object):
         # group javascript in chunks for performance
         js = [[]]
         def js_flush():
-            self.terminal_ui.execute(js[0])
+            #self.terminal_ui.execute(js[0])
+            self.execute(js[0])
             js[0] = []
 
         def js_append(x):
@@ -302,30 +321,56 @@ class Terminal(object):
 
     def request(self, req):
         # dispatch to self.iframes depending on the current subdomain
-        if req.path.startswith('http://termframe.localhost'):
-            # terminal requests
-            # default static resources:
-            # - relative paths are looked up in schirm.resources module
-            #   using pkg_resources.
-            # - absolute paths are loaded from the filesystem (user.css)
-            static_resources = {# terminal emulator files
-                                '/term.html': 'term.html',
-                                '/term.js': 'term.js',
-                                '/term.css': 'term.css',
-                                # user configurable stylesheets
-                                '/user.css': '/home/timmy/.schirm/user.css' #get_config_file_path('user.css') or 'user.css',
-                                }
-            not_found = set(["/favicon.ico"])
+        if req.type == 'http':
+            if req.path.startswith('http://termframe.localhost'):
+                # terminal requests
+                # default static resources:
+                # - relative paths are looked up in schirm.resources module
+                #   using pkg_resources.
+                # - absolute paths are loaded from the filesystem (user.css)
+                static_resources = {# terminal emulator files
+                                    #'/term.html': 'term.html',
+                                    '/term.js': 'term.js',
+                                    '/term.css': 'term.css',
+                                    # user configurable stylesheets
+                                    '/user.css': '/home/timmy/.schirm/user.css' #get_config_file_path('user.css') or 'user.css',
+                                    }
+                not_found = set(["/favicon.ico"])
 
-            path = req.path[len('http://termframe.localhost'):]
-            if path in not_found:
-                self.terminal_ui.respond(req.id)
-            elif path in static_resources:
-                self.terminal_ui.respond_resource_file(req.id, static_resources[path])
+                path = req.path[len('http://termframe.localhost'):]
+                if path in not_found:
+                    self.terminal_ui.respond(req.id)
+                elif path in static_resources:
+                    self.terminal_ui.respond_resource_file(req.id, static_resources[path])
+                elif path == '/term.html':
+                    data = pkg_resources.resource_string('schirm.resources', 'term.html')
+                    resp = self.terminal_ui.make_response('text/html', json.dumps(data % {'websocket_url': 'ws://localhost:%s' % req.proxy_port}))
+                    self.terminal_ui.respond(req.id, resp)
+
+            else:
+                # try to dispatch the request to the current iframe
+                self.iframes.request(req)
+
+        elif req.type == 'websocket':
+            if 'upgrade' in req and req.path == '/':
+                if not self.termframe_websocket_id:
+                    self.termframe_websocket_id = req.id
+                    self.terminal_ui.respond(req.id, True, close=False)
+                else:
+                    # deny
+                    self.terminal_ui.respond(req.id) # 404
+
+            elif req.id == self.termframe_websocket_id:
+                # main frame websocket connection:
+                # required for RPC
+                # todo: profile: is this faster than using webkit.execute and console.log for exchanging text??
+                self._dispatch_message(json.loads(req.data))
+
+            else:
+                self.iframes.request(req)
 
         else:
-            # try to dispatch the request to the current iframe
-            self.iframes.request(req)
+            assert False
 
 # interfaces to talk to:
 #   the webkit rendering the terminal state, reflecting the

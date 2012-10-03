@@ -173,7 +173,11 @@ class Server(object):
         # appropriate websockets .send method
 
         def recv(msg):
-            print "websocket received:", repr(msg.data)
+            req_message = attrdict({'id'              : req_id,
+                                    'type'            : 'websocket',
+                                    'path'            : req.path,
+                                    'data'            : msg})
+            self.schirm.request(req_message)
 
         websocket = CallbackWebSocket(sock=req['client'],
                                       protocols=req['ws_protocols'],
@@ -245,6 +249,7 @@ class Server(object):
                                 'type'            : 'websocket',
                                 'path'            : req.path,
                                 'headers'         : dict(req.headers),
+                                'upgrade'         : True,
                                 'data'            : ''})
 
         return req_message
@@ -268,10 +273,7 @@ class Server(object):
         else:
             data = None
 
-        #print "request:", req.path, req.headers
-
         if req.headers.get('Upgrade') == 'websocket':
-            print "upgrade to websocket", req.path
             # prepare for an upgrade to a websocket connection
             msg = self._receive_websocket(req_id, req)
             if msg:
@@ -312,7 +314,7 @@ class Server(object):
         logger.debug("responding to %s with %s%s" % (req_id, repr(data)[:60], '...' if len(repr(data)) > 60 else ''))
         client = req['client']
         client.sendall(data if data != None else self.make_status404())
-        if close:
+        if close or data == None:
             self._close_conn(client)
         else:
             # keep the connection around
@@ -322,21 +324,30 @@ class Server(object):
                                          'time': time.time()}
 
     def _respond_websocket(self, req_id, data, close):
-        with self._requests_lock:
-            req = self.requests.get(int(req_id), None)
-
-            if not req.get('opened'):
-                print "websocket upgrade response"
-                self.respond_websocket_upgrade(req_id)
+        if data != None:
+            with self._requests_lock:
                 req = self.requests.get(int(req_id), None)
-                req['opened'] = True
-                print "websocket upgrade response - done"
 
-            print "sending data:", repr(data)
-            req['websocket'].send(data);
+                if not req.get('opened'):
+                    logger.info("websocket: upgrade response")
+                    self.respond_websocket_upgrade(req_id)
+                    req = self.requests.get(int(req_id), None)
+                    req['opened'] = True
 
-            if close:
-                req['websocket'].close()
+                if data == True:
+                    # true indicates to only complete the handshake, without sending any data
+                    pass
+                else:
+                    logger.info("websocket: send %r", data[:50])
+                    req['websocket'].send(data)
+
+                if close:
+                    req['websocket'].close()
+        else:
+            logger.debug("responding to %s with 404" % req_id)
+            client = req['client']
+            client.sendall(self.make_status404())
+            self._close_conn(client)
 
     def respond(self, req_id, data=None, close=True):
 
