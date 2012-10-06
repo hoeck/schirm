@@ -132,8 +132,8 @@ class Server(object):
                 current_time = time.time()
                 for rid in self.requests.keys():
                     req = self.requests.get(rid)
-                    if not req.get('websocket'):
-                        # ignore connected websockets for now
+                    if req.type == 'websocket':
+                        # TODO: ignore connected websockets
                         pass
                     else:
                         t = req['time']
@@ -147,7 +147,6 @@ class Server(object):
     @staticmethod
     def _close_conn(client):
         client._sock.close()
-
 
     # websockets
 
@@ -165,12 +164,6 @@ class Server(object):
                 "",
                 ""])
         req['client'].sendall(data)
-
-        # todo: subclass WebSocket
-        # - overwrite received_message to call a schirm method for
-        #   further processing
-        # write a send-websocket(req_id, data) method wich calls the
-        # appropriate websockets .send method
 
         def recv(msg):
             req_message = attrdict({'id'              : req_id,
