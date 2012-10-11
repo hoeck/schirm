@@ -120,6 +120,17 @@ class Schirm(object):
                                       terminal_io=self.terminal_io,
                                       size=[80,24])
 
+        # websocket channel to communicate with the emulator document
+        self.termframe_websocket_id = None
+
+        # webview console logging (setup in main())
+        self.console_logger = logging.getLogger('webview_console')
+
+    def start_terminal_emulation(self):
+        # when using websockets for webkit <-> schirm communication,
+        # do not begin with the terminal emulation unless the
+        # websocket communication has been set up
+
         # start workers
         term_worker = threading.Thread(target=self.term_worker)
         term_worker.setDaemon(True)
@@ -172,8 +183,10 @@ class Schirm(object):
         if isinstance(src, basestring):
             js = [src]
         else:
-            js = []
-        self.uiproxy.execute_script(src)
+            js = src
+        #self.uiproxy.execute_script(src)
+        data = ''.join(js)
+        self.respond(self.termframe_websocket_id, data=data, close=False)
 
     def set_title(self, title):
         pass
@@ -181,7 +194,57 @@ class Schirm(object):
     # ui callbacks
 
     def request(self, req):
-        self.input_queue.put(('request', req))
+        # load the ui here
+        if req.type == 'http':
+            if req.path.startswith('http://termframe.localhost'):
+                # terminal requests
+                # default static resources:
+                # - relative paths are looked up in schirm.resources module
+                #   using pkg_resources.
+                # - absolute paths are loaded from the filesystem (user.css)
+                static_resources = {# terminal emulator files
+                                    #'/term.html': 'term.html',
+                                    '/term.js': 'term.js',
+                                    '/term.css': 'term.css',
+                                    # user configurable stylesheets
+                                    '/user.css': '/home/timmy/.schirm/user.css' #get_config_file_path('user.css') or 'user.css',
+                                    }
+                not_found = set(["/favicon.ico"])
+
+                path = req.path[len('http://termframe.localhost'):]
+                if path in not_found:
+                    self.respond(req.id)
+                elif path in static_resources:
+                    self.respond_resource_file(req.id, static_resources[path])
+                elif path == '/term.html':
+                    data = pkg_resources.resource_string('schirm.resources', 'term.html')
+                    resp = self.make_response('text/html',
+                                              data
+                                              % {'websocket_url': json.dumps(self.emulator.get_websocket_url(port=req.proxy_port))})
+                    self.respond(req.id, resp)
+            else:
+                # dispatch the http request to the terminal emulator
+                self.input_queue.put(('request', req))
+
+        elif req.type == 'websocket':
+            if 'upgrade' in req and req.path == self.emulator.get_websocket_path():
+                # open exactly one websocket request for webkit <-> schirm communication
+                if not self.termframe_websocket_id:
+                    self.termframe_websocket_id = req.id
+                    self.respond(req.id, True, close=False)
+                    # communication set up -> start the emulator state machine
+                    self.start_terminal_emulation()
+                else:
+                    # deny
+                    self.respond(req.id) # 404
+
+            elif req.id == self.termframe_websocket_id:
+                # main frame websocket connection:
+                # required for RPC, slower than webview.execute_script
+                self.input_queue.put(('message', json.loads(req.data)))
+
+            else:
+                self.input_queue.put(('request', req))
 
     def keypress(self, key):
         self.input_queue.put(('keypress', key))
@@ -189,8 +252,21 @@ class Schirm(object):
     def set_focus(self, focus):
         self.input_queue.put(('set_focus', focus))
 
-    def console_log(self, message, line, source_id):
-        self.input_queue.put(('console_log', (message, line, source_id)))
+    def console_log(self, msg, line, source_id):
+        # decode message to see if its a console log or IPC command
+        ipc_prefix = 'schirmcommand'
+        if msg.startswith(ipc_prefix):
+            self.console_logger.debug("IPC: (%s:%s) %s", source_id, line, msg)
+            # todo: only dispatch terminal command if source_id is 'termframe.html' or the like
+            # todo: check that, for iframe commands, source id contains the iframe id-url (iframe-id.localhost)
+            # todo: catch decode errors
+            self.input_queue.put(('message', json.loads(msg[len(ipc_prefix):])))
+        else:
+            # just log it
+            if source_id:
+                self.console_logger.info("(%s:%s): %s", source_id, line, msg)
+            else:
+                self.console_logger.info(msg)
 
     # terminal emulation event loop
 

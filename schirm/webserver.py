@@ -132,7 +132,7 @@ class Server(object):
                 current_time = time.time()
                 for rid in self.requests.keys():
                     req = self.requests.get(rid)
-                    if req.type == 'websocket':
+                    if 'websocket' in req:
                         # TODO: ignore connected websockets
                         pass
                     else:
@@ -168,8 +168,7 @@ class Server(object):
         def recv(msg):
             req_message = attrdict({'id'              : req_id,
                                     'type'            : 'websocket',
-                                    'path'            : req.path,
-                                    'data'            : msg})
+                                    'data'            : str(msg)})
             self.schirm.request(req_message)
 
         websocket = CallbackWebSocket(sock=req['client'],

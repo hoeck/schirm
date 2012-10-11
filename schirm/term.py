@@ -82,7 +82,9 @@ class Terminal(object):
     # transitions to the next state - i.e. it completely disregards
     # iframe resources).
 
-    def __init__(self, terminal_io, terminal_ui, size=(80, 25)):
+    def __init__(self, terminal_io, terminal_ui, size=(80, 25), term_id='terminal0'):
+
+        self.term_id = term_id
 
         # set up the screen
         self.screen = TermScreen(*size)
@@ -105,11 +107,19 @@ class Terminal(object):
         self.iframes = termiframe.Iframes(terminal_io, terminal_ui)
 
         # request id of the terminal comm websocket if established
-        self.termframe_websocket_id = websocket_id
+        self.termframe_websocket_id = None
         self._execute_queue = []
 
-        # webview console logging (setup in schirm.main())
-        self.console_logger = logging.getLogger('webview_console')
+    def get_websocket_url(self, port=None):
+        return ('ws://localhost%(port)s/%(term_id)s'
+                % {'port': ':%s' % (port or ''),
+                   'term_id': self.term_id or ''})
+
+    def get_websocket_path(self):
+        return '/%(term_id)s' % {'term_id': self.term_id or ''}
+
+    def get_url(self):
+        return 'http://%(term_id)s.localhost'
 
     def write(self, s):
         self.terminal_io.write(s)
@@ -147,7 +157,7 @@ class Terminal(object):
         #self.input_queue.put(('redraw', None)) # ???
         # maybe there should be a TermScreen.set_focus method
 
-    def _dispatch_message(self, msg):
+    def message(self, msg):
         """Invoke the appropriate action according to msg['cmd']."""
         if msg['cmd'] == 'resize':
             # always set size
@@ -175,24 +185,6 @@ class Terminal(object):
 
         else:
             raise Exception("unknown command in message: %r" % msg)
-
-    def console_log(self, data): # TODO: move IPC dispatch code into a function, make args a dictionary (for easy json-over-websocket transport)
-        msg, line, source_id = data
-
-        # decode message to see if its a console log or IPC command
-        ipc_prefix = 'schirmcommand'
-        if msg.startswith(ipc_prefix):
-            self.console_logger.debug("IPC: (%s:%s) %s", source_id, line, msg)
-            # todo: only dispatch terminal command if source_id is 'termframe.html' or the like
-            # todo: check that, for iframe commands, source id contains the iframe id-url (iframe-id.localhost)
-            # todo: catch decode errors
-            self._dispatch_message(json.loads(msg))
-        else:
-            # log it
-            if source_id:
-                self.console_logger.info("(%s:%s): %s", source_id, line, msg)
-            else:
-                self.console_logger.info(msg)
 
     def _keypress(self, key):
         """Decode a keypress into terminal escape-codes.
@@ -243,25 +235,14 @@ class Terminal(object):
                         self.set_focus(data)
                     elif name == 'request':
                         self.request(data)
-                    elif name == 'console_log':
-                        self.console_log(data)
+                    elif name == 'message':
+                        self.message(data)
                     else:
                         logger.error('unknown input identifier: %r' % (name,))
             else:
                 pass
 
-    def execute(self, js_string):
-        if self.termframe_websocket_id:
-            if self._execute_queue:
-                for s in self._execute_queue:
-                    self.terminal_ui.respond(self.termframe_websocket_id, data=''.join(s), close=False)
-                self._execute_queue = []
-            self.terminal_ui.respond(self.termframe_websocket_id, data=''.join(js_string), close=False)
-        else:
-            self._execute_queue.append(js_string)
-
     def advance(self, input):
-
         # turn off the cursor
         self.screen.linecontainer.hide_cursor(self.screen.cursor.y)
 
@@ -282,8 +263,7 @@ class Terminal(object):
         # group javascript in chunks for performance
         js = [[]]
         def js_flush():
-            #self.terminal_ui.execute(js[0])
-            self.execute(js[0])
+            self.terminal_ui.execute(js[0])
             js[0] = []
 
         def js_append(x):
@@ -320,57 +300,8 @@ class Terminal(object):
         js_flush()
 
     def request(self, req):
-        # dispatch to self.iframes depending on the current subdomain
-        if req.type == 'http':
-            if req.path.startswith('http://termframe.localhost'):
-                # terminal requests
-                # default static resources:
-                # - relative paths are looked up in schirm.resources module
-                #   using pkg_resources.
-                # - absolute paths are loaded from the filesystem (user.css)
-                static_resources = {# terminal emulator files
-                                    #'/term.html': 'term.html',
-                                    '/term.js': 'term.js',
-                                    '/term.css': 'term.css',
-                                    # user configurable stylesheets
-                                    '/user.css': '/home/timmy/.schirm/user.css' #get_config_file_path('user.css') or 'user.css',
-                                    }
-                not_found = set(["/favicon.ico"])
-
-                path = req.path[len('http://termframe.localhost'):]
-                if path in not_found:
-                    self.terminal_ui.respond(req.id)
-                elif path in static_resources:
-                    self.terminal_ui.respond_resource_file(req.id, static_resources[path])
-                elif path == '/term.html':
-                    data = pkg_resources.resource_string('schirm.resources', 'term.html')
-                    resp = self.terminal_ui.make_response('text/html', json.dumps(data % {'websocket_url': 'ws://localhost:%s' % req.proxy_port}))
-                    self.terminal_ui.respond(req.id, resp)
-
-            else:
-                # try to dispatch the request to the current iframe
-                self.iframes.request(req)
-
-        elif req.type == 'websocket':
-            if 'upgrade' in req and req.path == '/':
-                if not self.termframe_websocket_id:
-                    self.termframe_websocket_id = req.id
-                    self.terminal_ui.respond(req.id, True, close=False)
-                else:
-                    # deny
-                    self.terminal_ui.respond(req.id) # 404
-
-            elif req.id == self.termframe_websocket_id:
-                # main frame websocket connection:
-                # required for RPC
-                # todo: profile: is this faster than using webkit.execute and console.log for exchanging text??
-                self._dispatch_message(json.loads(req.data))
-
-            else:
-                self.iframes.request(req)
-
-        else:
-            assert False
+        # dispatch to the current iframe
+        self.iframes.request(req)
 
 # interfaces to talk to:
 #   the webkit rendering the terminal state, reflecting the
