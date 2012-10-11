@@ -33,13 +33,24 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
         };
         this.send = send;
     } else {
+        var preOpenQueue = [];
+        var send = function(cmd) {
+            // enqueue all messages sent before the websocket is ready
+            preOpenQueue.push(cmd);
+        };
+        self.send = send;
+
         var socket = new WebSocket(webSocketUrl);
         socket.onopen = function (event) {
-            console.log('socket opened');
-        };
+            // send enqueued messages
+            for (var i=0; i<preOpenQueue.length; i++) {
+                socket.send(JSON.stringify(preOpenQueue[i]));
+            }
+            preOpenQueue = undefined;
 
-        var send = function(cmd) { socket.send };
-        this.send = send;
+            send = function(cmd) { socket.send(JSON.stringify(cmd)); };
+            self.send = send;
+        };
 
         socket.onmessage = function (event) {
             eval(event.data);
