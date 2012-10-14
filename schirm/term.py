@@ -534,7 +534,3 @@ class Terminal(object):
 # # set line 2: X   --> line 2, changed
 # # appendline: Y
 # # set line 3: Z   --> line
-
-
-
-

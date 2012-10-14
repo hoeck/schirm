@@ -265,6 +265,8 @@ class Server(object):
         else:
             data = None
 
+        logger.info("%s - %s", req.command, req.path)
+
         if req.headers.get('Upgrade') == 'websocket':
             # prepare for an upgrade to a websocket connection
             msg = self._receive_websocket(req_id, req)
@@ -330,7 +332,7 @@ class Server(object):
                     # true indicates to only complete the handshake, without sending any data
                     pass
                 else:
-                    logger.info("websocket: send %r", data[:50])
+                    logger.debug("websocket: send %r", data[:50])
                     req['websocket'].send(data)
 
                 if close:

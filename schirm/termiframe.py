@@ -1,4 +1,5 @@
 import re
+import json
 import urlparse
 import logging
 import base64
@@ -33,7 +34,6 @@ class Iframes(object):
                          {'iframe_id':None,
                           'id':req.id,
                           'path':req.path})
-            print "responding!!!"
             self.terminal_ui.respond(req.id, 'testfoo')
 
     def _request_http(self, req):
@@ -108,9 +108,9 @@ class Iframe(object):
 
         # communication url
         # use to send execute_iframe commands
-        self.comm_path = '__comm__'
-        self.comm_req_id = None
-        self.comm_commands_pending = [] # queue up commands, send one at a time
+        self.comm_path = '/schirm'
+        #self.comm_req_id = None
+        #self.comm_commands_pending = [] # queue up commands, send one at a time
 
     def _command_send(self, command):
 
@@ -228,10 +228,17 @@ class Iframe(object):
             data = self.resources[req.path]
             self.terminal_ui.respond(req.id, data) # data in resources is already in http-request form
 
-        elif POST and req.path == self.comm_path and self.state == 'open':
-            if req.data:
-                self._command_respond(req.data)
-            self.comm_req_id = req.id # there may only be one open request at a time
+        elif POST and req.path == self.comm_path:
+            # receive commands from the iframe
+            try:
+                data = json.loads(req.data)
+            except ValueError:
+                data = {}
+
+            if isinstance(data, dict):
+                if data.get('command') == 'resize':
+                    # iframeresize
+                    self.iframe_resize(data.get('height'))
 
         else:
             if self.state == 'close':
