@@ -180,7 +180,6 @@ def read_list():
         else:
             current.append(ch)
 
-
 _request = namedtuple('Request', ('type', 'id', 'protocol', 'method', 'path', 'header', 'data'))
 class Request(_request):
     """
@@ -236,7 +235,6 @@ def read_next():
         else:
             # plain keypress
             return KeyPress('keypress', ch, False)
-
 
 def respond(requestid, response):
     """Write a response to requestid to the schirm terminal.

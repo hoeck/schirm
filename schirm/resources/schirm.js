@@ -3,32 +3,33 @@
 var schirm = (function(schirm) {
 
     // IPC
+    var webSocketUri = "%(websocket_uri)s";
     var preOpenQueue = [];
     var send = function(data) {
         // enqueue all messages sent before the websocket is ready
         preOpenQueue.push(data);
     };
-    self.send = send;
+    schirm.send = send;
 
-    // var socket = new WebSocket(webSocketUrl);
-    // socket.onopen = function (event) {
-    //     // send enqueued messages
-    //     for (var i=0; i<preOpenQueue.length; i++) {
-    //         socket.send(preOpenQueue[i]);
-    //     }
-    //     preOpenQueue = undefined;
-    //
-    //     send = function(data) { socket.send(data); };
-    //     self.send = send;
-    // };
-    //
-    // socket.onmessage = function (event) {
-    //     if (self.onmessage) {
-    //         self.onmessage(event.data);
-    //     }
-    // }
+    var socket = new WebSocket(webSocketUri);
+    socket.onopen = function (event) {
+        // send enqueued messages
+        for (var i=0; i<preOpenQueue.length; i++) {
+            socket.send(preOpenQueue[i]);
+        }
+        preOpenQueue = undefined;
 
-    self.onmessage = function(data) { };
+        schirm.send = function(data) { socket.send(data); };
+    };
+
+    socket.onmessage = function (event) {
+        if (schirm.onmessage) {
+            schirm.onmessage(event.data);
+        }
+    }
+
+    // default message handler
+    schirm.onmessage = function(data) { };
 
     // Determine and cache the height of a vertical scrollbar
     var __vscrollbarheight;
@@ -97,9 +98,7 @@ var schirm = (function(schirm) {
         if (vScrollbarRequired(document.body)) {
             vScrollbarHeight = getVScrollbarHeight()
         }
-        console.log(height);
-        console.log(bodyMargin);
-        console.log(vScrollbarHeight);
+
         var newHeight = height + bodyMargin + vScrollbarHeight;
 
         // either use console.log or POST to a special URL

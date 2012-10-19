@@ -338,10 +338,12 @@ class Server(object):
                 if close:
                     req['websocket'].close()
         else:
-            logger.debug("responding to %s with 404" % req_id)
-            client = req['client']
-            client.sendall(self.make_status404())
-            self._close_conn(client)
+            with self._requests_lock:
+                req = self.requests.get(int(req_id), None)
+                logger.debug("responding to %s with 404" % req_id)
+                client = req['client']
+                client.sendall(self.make_status404())
+                self._close_conn(client)
 
     def respond(self, req_id, data=None, close=True):
 

@@ -254,23 +254,16 @@ def table_test():
 
 def test_websocket():
     with frame():
+        register_resource("misc/jquery-1.6.2.js", "jquery.js")
         print """
+<script type="text/javascript" src="jquery.js"></script>
 <script type="text/javascript" src="schirm.js"></script>
-<script type="text/javascript" src="schirm-websocket-uri.js"></script>
 <script type="text/javascript">
-// websocket
-
-console.log('websocket-uri:', schirm.getWebSocketUri())
-var socket = new WebSocket(schirm.getWebSocketUri());
-socket.onopen = function (event) {
-  console.log('socket opened');
-  socket.send("test-payload");
-};
-
-socket.onmessage = function (event) {
-  console.log('websocket message:' + event.data);
-}
-
+$(function() {
+        schirm.resize(30);
+        // websocket
+        schirm.send('foo');
+});
 </script>
 <h2>WebSocket</h2>
 """

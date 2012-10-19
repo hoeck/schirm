@@ -79,6 +79,7 @@ var interactive = %(interactive)s;
 """
 
 js = """
+<script type="text/javascript" src="schirm.js"></script>
 <script type="text/javascript">
 var S = function(selector) { return document.querySelector(selector); };
 var image;
@@ -92,9 +93,7 @@ function rf(height) { // todo: move to schirm.js
   var bodyStyle = getComputedStyle(document.body);
   var bodyMargin = parseInt(bodyStyle.marginTop) + parseInt(bodyStyle.marginBottom);
   var newHeight = height + bodyMargin;
-
-  console.log("resizing to " + newHeight);
-  console.log("iframeresize" + newHeight);
+  schirm.resize(newHeight);
 }
 
 function setZoom(zoom, setSlider) {

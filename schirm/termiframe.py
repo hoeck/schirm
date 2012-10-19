@@ -3,6 +3,7 @@ import json
 import urlparse
 import logging
 import base64
+import pkg_resources
 
 import htmlterm
 
@@ -11,6 +12,7 @@ logger = logging.getLogger(__name__)
 ESC = "\033"
 SEP = ESC + ";"
 START_REQ = ESC + "R" + "request" + SEP
+START_MSG = ESC + "R" + "message" + SEP
 END = ESC + "Q"
 NEWLINE = "\n" # somehow required for 'flushing', tcflush and other ioctls didn't work :/
 
@@ -22,6 +24,7 @@ class Iframes(object):
 
     def __init__(self, terminal_io, terminal_ui):
         self.iframes = {}
+        self.iframe_websockets = {} # map request ids to iframe objects
         self.terminal_io = terminal_io
         self.terminal_ui = terminal_ui
 
@@ -29,12 +32,36 @@ class Iframes(object):
 
         if req.type == 'http':
             self._request_http(req)
-        else:
+        elif req.type == 'websocket' and 'upgrade' in req:
+            # upgrade requests
             logger.debug('iframe %(iframe_id)r websocket request %(id)r %(path)r ' %
                          {'iframe_id':None,
                           'id':req.id,
                           'path':req.path})
-            self.terminal_ui.respond(req.id, 'testfoo')
+
+            # extract path (iframe_id) from the websocket req path
+            # (hint: depends whether using an external browser or the non-websocket-proxy gtkwebview) - only the latter is implemented right now
+            m = re.match("/(?P<iframe_id>.+)", req.path)
+            iframe_id = m.groups('iframe_id')[0] if m else None
+
+            if iframe_id in self.iframes and req.get('path'):
+                # dispatch
+                should_update = self.iframes[iframe_id].websocket_upgrade(req)
+                if should_update:
+                    self.terminal_ui.respond(req.id, True, close=False)
+                    self.iframe_websockets[req.id] = self.iframes[iframe_id]
+                else:
+                    # 404
+                    self.terminal_ui.respond(req.id, close=True)
+            else:
+                # 404
+                self.terminal_ui.respond(req.id, close=True)
+
+        elif req.id in self.iframe_websockets:
+            self.iframe_websockets[req.id].websocket_request(req)
+
+        else:
+            assert False
 
     def _request_http(self, req):
 
@@ -42,18 +69,12 @@ class Iframes(object):
         (scheme, netloc, path, params, query, fragment) = urlparse.urlparse(req.path)
 
         # use the subdomain to sandbox iframes and separate requests
-        m = re.match("(.+)\.localhost", netloc)
-        if m:
-            try:
-                iframe_id = m.group(1)
-                # transform the iframe path from a proxy path to a normal one
-                root = "http://%s.localhost" % iframe_id
-                req['path'] = req['path'][len(root):]
-
-            except:
-                iframe_id = None
-        else:
-            iframe_id = None
+        m = re.match("(?P<iframe_id>.+)\.localhost", netloc)
+        iframe_id = m.group('iframe_id') if m else None
+        if iframe_id:
+            # transform the iframe path from a proxy path to a normal one
+            root = "http://%s.localhost" % iframe_id
+            req['path'] = req['path'][len(root):]
 
         logger.debug('iframe %(iframe_id)r request %(id)r: %(method)s %(path)r ' %
                      {'iframe_id':iframe_id,
@@ -93,7 +114,7 @@ class Iframes(object):
 class Iframe(object):
     """Represents an iframe line created inside a schirm terminal emulation."""
 
-    static_resources = {'/schirm.js': "schirm.js",   # schirm client lib
+    static_resources = {#'/schirm.js': "schirm.js",   # schirm client lib
                         '/schirm.css': "schirm.css", # schirm iframe mode styles
                        }
 
@@ -109,8 +130,7 @@ class Iframe(object):
         # communication url
         # use to send execute_iframe commands
         self.comm_path = '/schirm'
-        #self.comm_req_id = None
-        #self.comm_commands_pending = [] # queue up commands, send one at a time
+        self.websocket_req_id = None
 
     def _command_send(self, command):
 
@@ -155,15 +175,17 @@ class Iframe(object):
 
     def iframe_leave(self):
         # back to terminal mode:
+        # TODO: close open websockets
         self.state = None
 
-    def iframe_execute(self, script):
-        """Execute some javascript in the iframe document.
-
-        Requires the iframe to have loaded the terminal_ui.js lib.
-        """
-        self._command_send({'name':'execute',
-                            'value': script})
+    def iframe_send(self, data):
+        """Send data to the iframe using the iframes websocket connection."""
+        if self.websocket_req_id:
+            self.terminal_ui.respond(self.websocket_req_id,
+                                     data,
+                                     close=False)
+        else:
+            self.pre_open_queue.append(data)
 
     def iframe_register_resource(self, name, mimetype, data):
         """Add a static resource name to be served.
@@ -207,22 +229,20 @@ class Iframe(object):
                                                        data]),
                                      close=(self.state != 'document_requested'))
 
-        elif GET and req.path in self.static_resources:
-            # todo: write this function, should serve the file
-            # named in path from the internal terminal_ui.resources
-            # directory
-            logger.debug('serving static resource %r to iframe %r', req.path, self.id)
-            self.terminal_ui.respond_resource_file(req.id, self.static_resources[req.path])
-
-        elif GET and req.path == '/schirm-websocket-uri.js':
+        elif GET and req.path == '/schirm.js':
             # hack to get a websocket uri for embedded terminals as
             # proxying websocket connections does not work in the
             # current webkitgtk
+            # TODO: find a central place to define the websocket URIs
             uri = "ws://localhost:%(port)s/%(id)s" % {'port': req.proxy_port,
                                                       'id': self.id} # TODO: urlencode!
+            data = pkg_resources.resource_string('schirm.resources', 'schirm.js')
             self.terminal_ui.respond(req.id,
                                      self.terminal_ui.make_response('text/javascript',
-                                                                    "schirm.getWebSocketUri = function() { return '%s'; };" % uri))
+                                                                    data % {'websocket_uri':uri}))
+        elif GET and req.path in self.static_resources:
+            logger.debug('serving static resource %r to iframe %r', req.path, self.id)
+            self.terminal_ui.respond_resource_file(req.id, self.static_resources[req.path])
 
         elif GET and req.path in self.resources:
             data = self.resources[req.path]
@@ -238,7 +258,11 @@ class Iframe(object):
             if isinstance(data, dict):
                 if data.get('command') == 'resize':
                     # iframeresize
-                    self.iframe_resize(data.get('height'))
+                    try:
+                        height = int(data.get('height'))
+                    except:
+                        height = 25
+                    self.iframe_resize(height)
 
         else:
             if self.state == 'close':
@@ -259,3 +283,19 @@ class Iframe(object):
             else:
                 # return a 404
                 self.terminal_ui.respond(req.id)
+
+    def websocket_upgrade(self, req):
+        if self.state != None and not self.websocket_req_id:
+            self.websocket_req_id = req.id
+            return True
+        else:
+            return False
+
+    def websocket_request(self, req):
+        if req.id == self.websocket_req_id:
+            print "iframe websocket: %r" % req
+            self.terminal_io.write(''.join((START_MSG,
+                                            base64.b64encode(req.data),
+                                            END, NEWLINE)))
+        else:
+            self.terminal_ui.respond(req.id, close=True) # 404
