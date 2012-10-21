@@ -99,6 +99,9 @@ def put_nowait_sleep(queue, data):
 
 class Schirm(object):
 
+    # if True, use 'termframe.localhost' as the iframe domain
+    inspect_iframes = False
+
     def __init__(self, uiproxy):
         # pty, webview, webserver -> schirm communication
         # each message on output queue is a tuple of: (typename, attrdict-value)
@@ -118,7 +121,8 @@ class Schirm(object):
         # connect the terminal emulator with the pty and the ui
         self.emulator = term.Terminal(terminal_ui=self,
                                       terminal_io=self.terminal_io,
-                                      size=[80,24])
+                                      size=[80,24],
+                                      inspect_iframes=self.inspect_iframes)
 
         # websocket channel to communicate with the emulator document
         self.termframe_websocket_id = None
@@ -197,6 +201,7 @@ class Schirm(object):
         # load the ui here
         if req.type == 'http':
             if req.path.startswith('http://termframe.localhost'):
+
                 # terminal requests
                 # default static resources:
                 # - relative paths are looked up in schirm.resources module
@@ -222,6 +227,21 @@ class Schirm(object):
                                               data
                                               % {'websocket_url': json.dumps(self.emulator.get_websocket_url(port=req.proxy_port))})
                     self.respond(req.id, resp)
+                elif self.inspect_iframes and path.startswith('/iframe/'):
+                    # Ask for iframes content using the same domain
+                    # as the main terminal frame to be able to debug
+                    # iframe contents with the webkit-inspector.
+                    
+                    # modify the path into a iframe path
+                    frag = path[len('/iframe/'):]
+                    iframe_id = frag[:frag.index('/')]
+                    iframe_path = frag[frag.index('/'):]
+                    req['path'] = ('http://%(iframe_id)s.localhost%(iframe_path)s'
+                                   % {'iframe_id':iframe_id,
+                                      'iframe_path':iframe_path})
+                    self.input_queue.put(('request', req))
+                else:
+                    self.respond(req.id)
             else:
                 # dispatch the http request to the terminal emulator
                 self.input_queue.put(('request', req))
@@ -311,6 +331,7 @@ def main():
     parser = argparse.ArgumentParser(description="A linux compatible terminal emulator providing modes for rendering (interactive) html documents.")
     parser.add_argument("-v", "--verbose", help="be verbose, -v for info, -vv for debug log level", action="count")
     parser.add_argument("-c", "--console-log", help="write all console.log messages to stdout (use -cc to include document URL and linenumber, -ccc to include schirm-internal usages of console.log)", action="count")
+    parser.add_argument("-d", "--iframe-debug", help="Let iframes use the same domain as the main term frame to be able to access them with javascript from the webkit inspector", action="store_true")
     args = parser.parse_args()
 
     if args.verbose:
@@ -325,6 +346,9 @@ def main():
         h = logging.StreamHandler()
         h.setFormatter(logging.Formatter("%(name)s - %(message)s"))
         cl.addHandler(h)
+
+    if args.iframe_debug:
+        Schirm.inspect_iframes = True
 
     init_dotschirm()
     gtkui.PageProxy.start(Schirm)

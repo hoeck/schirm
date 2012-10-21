@@ -32,7 +32,7 @@
 """
 
 __all__ = ('enter', 'leave', 'close', 'frame', 'debug',
-           'register_resource', 'read_next', 'respond', 'execute', 'eval')
+           'register_resource', 'read_next', 'respond', 'send')
 
 import os
 import sys
@@ -246,27 +246,9 @@ def respond(requestid, response):
     out.write(base64.b64encode(response))
     out.write(END)
 
-
-def execute(src):
-    """Execute the given javascript string src in the current frames context.
-
-    Discard the result (use schirmlog("message"); to send strings to
-    the client from javascript).
-    """
+def send(data):
+    """Send the given data (a string) to the current iframe."""
     out = sys.stdout
-    out.write("".join((INTRO, "execute", SEP)))
-    out.write(base64.b64encode(src))
-    out.write(END)
-
-
-def eval(src):
-    """Execute the given javascript string src in the current frames context.
-
-    The result will be returned as a base64 encoded string over stdin
-    starting with '\033Rresult\033;' (see read_next). Results will be
-    delivered asynchronously but in the order of the evals.
-    """
-    out = sys.stdout
-    out.write("".join((INTRO, "eval", SEP)))
-    out.write(base64.b64encode(src))
+    out.write("".join((INTRO, "send", SEP)))
+    out.write(base64.b64encode(data))
     out.write(END)

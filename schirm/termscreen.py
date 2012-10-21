@@ -452,11 +452,8 @@ class LineContainer(): # lazy
     def iframe_leave(self, iframe_id):
         self.events.append(('iframe_leave', iframe_id))
 
-    def iframe_execute(self, iframe_id, source):
-        self.events.append(('iframe_execute', iframe_id, source))
-
-    def iframe_eval(self, iframe_id, source):
-        self.events.append(('iframe_eval', iframe_id, source))
+    def iframe_send(self, iframe_id, data):
+        self.events.append(('iframe_send', iframe_id, data))
 
     def iframe_resize(self, iframe_id, height):
         self.events.append(('iframe_resize', iframe_id, height))
@@ -1027,13 +1024,9 @@ class TermScreen(pyte.Screen):
         data = base64.b64decode(b64_debugmsg)
         self.linecontainer.iframe_debug(self.iframe_id, data)
 
-    def iframe_execute(self, b64_source):
-        source = base64.b64decode(b64_source)
-        self.linecontainer.iframe_execute(self.iframe_id, source)
-
-    def iframe_eval(self, b64_source):
-        source = base64.b64decode(b64_source)
-        self.linecontainer.iframe_eval(self.iframe_id, source)
+    def iframe_send(self, b64_data):
+        data = base64.b64decode(b64_data)
+        self.linecontainer.iframe_send(self.iframe_id, data)
 
     def close_stream(self):
         # just hand of the event to the linecontainer

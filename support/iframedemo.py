@@ -256,20 +256,29 @@ def test_websocket():
     with frame():
         register_resource("misc/jquery-1.6.2.js", "jquery.js")
         print """
-<script type="text/javascript" src="jquery.js"></script>
+<link rel="stylesheet" href="schirm.css" type="text/css">
 <script type="text/javascript" src="schirm.js"></script>
+
+<script type="text/javascript" src="jquery.js"></script>
 <script type="text/javascript">
+
+schirm.onmessage = function(data) { console.log(data); };
+
 $(function() {
-        schirm.resize(30);
+        schirm.onmessage = function(data) {
+            $('h2').text(data);
+            schirm.resize($('h2').get(0));
+        }
         // websocket
         schirm.send('foo');
 });
 </script>
-<h2>WebSocket</h2>
+<div><h2>WebSocket</h2></div>
 """
         close()
+        send('bar');
         req = read_next()
-    print req
+    print req, req
 
 if __name__ == '__main__':
     test_websocket()

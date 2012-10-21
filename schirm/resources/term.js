@@ -256,6 +256,7 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
         // scrollbar otherwise, artifacts show up when animating the
         // inital resize of an iframe with vertically scrolled content
         iframe.style.minHeight = getVScrollbarHeight();
+        iframe.style.height = getVScrollbarHeight();
 
         adjustTrailingSpace();
         window.iframe = iframe; // keep the current iframe around for debugging
@@ -291,7 +292,6 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
         //     fn.resize(state.size.lines, state.size.lines);
         // }
     };
-
 
     // init
     parentElement.innerHTML = termMarkup;

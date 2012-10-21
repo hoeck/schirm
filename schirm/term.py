@@ -82,7 +82,12 @@ class Terminal(object):
     # transitions to the next state - i.e. it completely disregards
     # iframe resources).
 
-    def __init__(self, terminal_io, terminal_ui, size=(80, 25), term_id='terminal0'):
+    def __init__(self,
+                 terminal_io,
+                 terminal_ui,
+                 size=(80, 25),
+                 term_id='terminal0',
+                 inspect_iframes=False):
 
         self.term_id = term_id
 
@@ -109,6 +114,8 @@ class Terminal(object):
         # request id of the terminal comm websocket if established
         self.termframe_websocket_id = None
         self._execute_queue = []
+
+        self.inspect_iframes = inspect_iframes
 
     def get_websocket_url(self, port=None):
         return ('ws://localhost%(port)s/%(term_id)s'
@@ -137,13 +144,6 @@ class Terminal(object):
 
     def remove_history(self, lines_to_remove):
         self.screen.remove_history(lines_to_remove)
-
-    def iframe_resize(self, height):
-        #iframe_id = self.screen.iframe_id
-        #self.screen.linecontainer.iframe_resize(iframe_id, height)
-
-        # todo: this has nothing todo with self.screen
-        pass
 
     def resize(self, size):
         self.screen.resize(size.height, size.width)
@@ -263,11 +263,13 @@ class Terminal(object):
         # group javascript in chunks for performance
         js = [[]]
         def js_flush():
-            self.terminal_ui.execute(js[0])
+            if js[0]:
+                self.terminal_ui.execute(js[0])
             js[0] = []
 
         def js_append(x):
-            js[0].append(x)
+            if x:
+                js[0].append(x)
 
         # issue the screen0 as the last event
         screen0 = None
@@ -288,6 +290,9 @@ class Terminal(object):
                 screen0 = args[0]
             elif name == 'close_stream':
                 raise Exception('terminal exit')
+            elif self.inspect_iframes and name == 'set_iframe':
+                # insert an iframe using the same domain as the main term frame
+                js_append(htmlterm.Events.set_iframe(*args, same_origin=True))
             elif name in htmlterm.Events.__dict__:
                 # sth. to be translated to js
                 js_append(getattr(htmlterm.Events,name)(*args))

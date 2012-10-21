@@ -46,13 +46,9 @@ class Iframes(object):
 
             if iframe_id in self.iframes and req.get('path'):
                 # dispatch
-                should_update = self.iframes[iframe_id].websocket_upgrade(req)
-                if should_update:
-                    self.terminal_ui.respond(req.id, True, close=False)
+                upgraded = self.iframes[iframe_id].websocket_upgrade(req)
+                if upgraded:
                     self.iframe_websockets[req.id] = self.iframes[iframe_id]
-                else:
-                    # 404
-                    self.terminal_ui.respond(req.id, close=True)
             else:
                 # 404
                 self.terminal_ui.respond(req.id, close=True)
@@ -131,6 +127,7 @@ class Iframe(object):
         # use to send execute_iframe commands
         self.comm_path = '/schirm'
         self.websocket_req_id = None
+        self.pre_open_queue = []
 
     def _command_send(self, command):
 
@@ -157,6 +154,7 @@ class Iframe(object):
     # iframe terminal methods
 
     def iframe_resize(self, height):
+        print "iframe_resize", height
         # send some js to the terminal hosting this iframe
         self.terminal_ui.execute(htmlterm.Events.iframe_resize(self.id, height))
 
@@ -263,6 +261,11 @@ class Iframe(object):
                     except:
                         height = 25
                     self.iframe_resize(height)
+                    self.terminal_ui.respond(req.id, 'HTTP/1.1 200 done\r\n\r\n')
+                else:
+                    self.terminal_ui.respond(req.id)
+            else:
+                self.terminal_ui.respond(req.id)
 
         else:
             if self.state == 'close':
@@ -286,9 +289,14 @@ class Iframe(object):
 
     def websocket_upgrade(self, req):
         if self.state != None and not self.websocket_req_id:
+            self.terminal_ui.respond(req.id, True, close=False) # upgrade
             self.websocket_req_id = req.id
+            # send queued data
+            for data in self.pre_open_queue:
+                self.terminal_ui.respond(req.id, data, close=False)
             return True
         else:
+            self.terminal_ui.respond(req.id, close=True) # 404
             return False
 
     def websocket_request(self, req):

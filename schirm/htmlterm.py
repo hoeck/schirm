@@ -140,9 +140,13 @@ class Events():
         return set_line_to(index, content)
 
     @staticmethod
-    def set_iframe(index, iframe_id):
+    def set_iframe(index, iframe_id, same_origin=False):
         # js to insert an iframe line
-        uri = "http://{iframe_id}.localhost/".format(iframe_id=iframe_id) # TODO: urlencode iframe_id
+        if same_origin:
+            uri = "http://termframe.localhost/iframe/{iframe_id}/".format(iframe_id=iframe_id) # TODO: urlencode iframe_id
+        else:
+            uri = "http://{iframe_id}.localhost/".format(iframe_id=iframe_id) # TODO: urlencode iframe_id
+
         js = "term.insertIframe({index}, {iframe_id}, {uri})".format(
             index=json.dumps(index),
             iframe_id=json.dumps(iframe_id),

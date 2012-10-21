@@ -89,6 +89,14 @@ var schirm = (function(schirm) {
     schirm.GET  = function (uri, data, success) { request('GET', uri, data, success); };
     schirm.POST = function (uri, data, success) { request('POST', uri, data, success); };
 
+
+    function getElementHeight(e) {
+        var style = getComputedStyle(e);
+        var margin = parseInt(style.marginTop) + parseInt(style.marginBottom);
+        console.log('clientHeight', e.clientHeight, 'margin', margin);
+        return e.clientHeight + margin;
+    }
+
     // ask the iframes parent to resize the current iframe
     schirm.resize = function(height) {
         var bodyStyle = getComputedStyle(document.body);
@@ -99,7 +107,14 @@ var schirm = (function(schirm) {
             vScrollbarHeight = getVScrollbarHeight()
         }
 
-        var newHeight = height + bodyMargin + vScrollbarHeight;
+        var heightInPx;
+        if ((typeof height) === 'number') {
+            heightInPx = height;
+        } else if ((typeof height) === 'object') {
+            heightInPx = getElementHeight(height);
+        }
+
+        var newHeight = heightInPx + bodyMargin + vScrollbarHeight;
 
         // either use console.log or POST to a special URL
         if (0) {

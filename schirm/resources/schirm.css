@@ -1,2 +1,6 @@
 
-/* default schirm styles */
+/* default schirm iframe styles */
+
+body {
+    margin: 0;
+}
