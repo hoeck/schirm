@@ -132,7 +132,7 @@ class Server(object):
                 current_time = time.time()
                 for rid in self.requests.keys():
                     req = self.requests.get(rid)
-                    if 'websocket' in req:
+                    if req['type'] == 'websocket':
                         # TODO: ignore connected websockets
                         pass
                     else:
