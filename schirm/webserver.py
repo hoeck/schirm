@@ -51,15 +51,24 @@ class HTTPRequest(BaseHTTPRequestHandler):
         self.error_code = code
         self.error_message = message
 
-class CallbackWebSocket(WebSocket):
+class AsyncWebSocket(WebSocket):
     """Websocket with a configurable receive callback function."""
 
     def __init__(self, *args, **kwargs):
+
         self.onreceive = kwargs.pop('onreceive', lambda _: None)
-        super(CallbackWebSocket, self).__init__(*args, **kwargs)
+        super(AsyncWebSocket, self).__init__(*args, **kwargs)
+
+        self.recv_thread = None
 
     def received_message(self, message):
         self.onreceive(message)
+
+    def run_in_bg(self):
+        # thread for reading from the websocket
+        self.recv_thread = threading.Thread(target=self.run)
+        self.recv_thread.setDaemon(True)
+        self.recv_thread.start()
 
 class Server(object):
     """
@@ -171,21 +180,16 @@ class Server(object):
                                     'data'            : str(msg)})
             self.schirm.request(req_message)
 
-        websocket = CallbackWebSocket(sock=req['client'],
-                                      protocols=req['ws_protocols'],
-                                      extensions=req['ws_extensions'],
-                                      environ=None,
-                                      onreceive=recv)
+        websocket = AsyncWebSocket(sock=req['client'],
+                                   protocols=req['ws_protocols'],
+                                   extensions=req['ws_extensions'],
+                                   environ=None,
+                                   onreceive=recv)
 
-        # thread for reading from the websocket
-        ws_thread = threading.Thread(target=websocket.run)
-        ws_thread.setDaemon(True)
-        ws_thread.start()
+        websocket.run_in_bg() # starts a thread, blocks a lot
 
         with self._requests_lock:
-            self.requests[int(req_id)].update({'websocket':websocket,
-                                               'ws_read_thread':ws_thread
-                                               })
+            self.requests[int(req_id)].update({'websocket':websocket})
 
     def make_status400(self, msg):
         return '\r\n'.join(["HTTP/1.1 400 Bad Handshake",
@@ -323,7 +327,7 @@ class Server(object):
                 req = self.requests.get(int(req_id), None)
 
                 if not req.get('opened'):
-                    logger.info("websocket: upgrade response")
+                    logger.debug("websocket %r: upgrade" % (req_id, ))
                     self.respond_websocket_upgrade(req_id)
                     req = self.requests.get(int(req_id), None)
                     req['opened'] = True
@@ -332,7 +336,7 @@ class Server(object):
                     # true indicates to only complete the handshake, without sending any data
                     pass
                 else:
-                    logger.debug("websocket: send %r", data[:50])
+                    logger.debug("websocket %r: send %r" % (req_id, data[:50]))
                     req['websocket'].send(data)
 
                 if close:

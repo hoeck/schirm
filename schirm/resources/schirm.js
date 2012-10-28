@@ -22,14 +22,39 @@ var schirm = (function(schirm) {
         schirm.send = function(data) { socket.send(data); };
     };
 
+    // socket.onerror =
+    // socket.onclose =
+
+    // receiving messages
+    var onmessageQueue = []
     socket.onmessage = function (event) {
         if (schirm.onmessage) {
             schirm.onmessage(event.data);
+        } else {
+            // queue all messages until an onmessage handler is set
+            onmessageQueue.push(event.data);
         }
     }
 
-    // default message handler
-    schirm.onmessage = function(data) { };
+    // message handler:
+    // watch on set-'events' of schirm.onmessage, and flush the queue
+    // of alread received messages before continuing
+    schirm._onmessage = undefined;
+    Object.defineProperty(schirm, 'onmessage', {
+        set: function(v) {
+            if (typeof(v) === "function") {
+                // flush the messagequeue
+                for (var i=0; i<onmessageQueue.length; i++) {
+                    v(onmessageQueue[i]);
+                }
+                onmessageQueue = [];
+                schirm._onmessage = v;
+            }
+        },
+        get: function() {
+            return schirm._onmessage;
+        }
+    });
 
     // Determine and cache the height of a vertical scrollbar
     var __vscrollbarheight;
