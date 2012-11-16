@@ -93,12 +93,16 @@ Similar Programs
 - shellinabox_: a complete browser terminal emulator with server
 - pyqonsole_: QT python terminal emulator
 - pyte_: beautiful VTXXX compatible terminal emulator library
+- GateOne_: HTML5 Terminal emulator
+- Terminology_: nextgen Terminal Emulator of the Enlightment Project
 
 .. _Terminus: https://github.com/breuleux/terminus
 .. _TermKit: https://github.com/unconed/TermKit
 .. _shellinabox: http://code.google.com/p/shellinabox/
 .. _pyqonsole: http://www.logilab.org/project/pyqonsole
 .. _pyte: https://github.com/selectel/pyte
+.. _GateOne: https://github.com/liftoff/GateOne
+.. _Terminology: http://www.enlightenment.org/p.php?p=about/terminology
 
 Licence
 =======
