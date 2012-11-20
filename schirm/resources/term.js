@@ -275,16 +275,17 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
     var autoscrollActivationAreaHeight = 10;
     var autoScroll = function() {
         if (autoScrollActive) {
+            // TODO: figure out scrolling in case the terminal is
+            //       embedded inside another iframe (term-in-term)
             window.onscroll = undefined;
 
             // scroll to the bottom
-            document.body.scrollTop = document.body.scrollHeight - document.body.clientHeight;
+            parentElement.scrollTop = parentElement.scrollHeight - parentElement.clientHeight;
 
             // listen to scroll events to deactivate autoScroll if
             // user scrolls manually
             window.onscroll = function() {
-                var body = document.body;
-                if ((body.scrollTop + body.clientHeight) > (body.scrollHeight - autoscrollActivationAreaHeight)) {
+                if ((parentElement.scrollTop + parentElement.clientHeight) > (parentElement.scrollHeight - autoscrollActivationAreaHeight)) {
                     autoScrollActive = true;
                 } else {
                     autoScrollActive = false;
