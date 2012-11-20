@@ -32,6 +32,12 @@ function termInit() {
   term = new SchirmTerminal(document.body, null, %(websocket_url)s);
   document.body.onresize = term.resize;
 };
+
+document.onreadystatechange = function () {
+    if (document.readyState == "complete") {
+        termInit();
+    }
+}
 </script>
 
 </head>

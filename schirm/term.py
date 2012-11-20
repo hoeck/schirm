@@ -117,10 +117,14 @@ class Terminal(object):
 
         self.inspect_iframes = inspect_iframes
 
-    def get_websocket_url(self, port=None):
-        return ('ws://localhost%(port)s/%(term_id)s'
-                % {'port': ':%s' % (port or ''),
-                   'term_id': self.term_id or ''})
+    def get_websocket_url(self, port=None, websocket_proxy_hack=True):
+        if websocket_proxy_hack:
+            return ('ws://localhost%(port)s/%(term_id)s'
+                    % {'port': ':%s' % (port or ''),
+                       'term_id': self.term_id or ''})
+        else:
+            return ('ws://termframe.localhost/%(term_id)s'
+                    % {'term_id': self.term_id})
 
     def get_websocket_path(self):
         return '/%(term_id)s' % {'term_id': self.term_id or ''}
@@ -183,6 +187,9 @@ class Terminal(object):
                 return False
             self.screen.linecontainer.remove_history(n)
 
+        elif msg['cmd'] == 'keypress':
+            x = self._keypress(msg['key'])
+            self.terminal_io.write(x)
         else:
             raise Exception("unknown command in message: %r" % msg)
 
@@ -194,22 +201,25 @@ class Terminal(object):
 
         Return a (possibly empty) string to feed into the terminal.
         """
+        key['string'] = key.get('string', '').encode('utf-8')
+
         # compute the terminal key
-        k = termkey.map_key(keyname=key.name,
-                            modifiers=(key.shift, key.alt, key.control),
+        k = termkey.map_key(keyname=key.get('name'),
+                            modifiers=(key.get('shift'), key.get('alt'), key.get('control')),
                             screen_mode=(pyte.mo.DECAPP in self.screen.mode))
+
         if not k:
-            if key.alt:
-                k = "\033%s" % key.string
+            if key.get('alt'):
+                k = "\033%s" % key['string']
             else:
-                k = key.string
+                k = key['string']
 
         if self.screen.iframe_mode:
             # in iframe mode, only write some ctrl-* events to the
             # terminal process
             if k and \
-                    key.control and \
-                    key.name in "dcz":
+                    key.get('control') and \
+                    key.get('name') in "dcz":
                 return k
         else:
             if k:
@@ -228,6 +238,7 @@ class Terminal(object):
                     name, data = i
                     if name == 'keypress':
                         x = self._keypress(data)
+                        print "writing key: %r" % (x,)
                         self.terminal_io.write(x)
                     elif name == 'pty_read_error':
                         self.stream.close()

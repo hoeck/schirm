@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 ## mapping keypresses to escape codes
 
 # VT100 Key    Standard    Applications     IBM Keypad
@@ -75,8 +76,25 @@ _keycodes = {
     # those need a mapping because gtk doesn't supply strings for
     # them:
     'BackSpace' : "\x08",
-    'Tab'       : "\t"
+    'Tab'       : "\t",
+
+    # keycodes generated in term.js
+    'Enter'     : chr(13),
+    'Esc'       : chr(27),
 }
+
+ASCII_A = 65
+ASCII_Z = 90
+
+def control_key_code(name):
+    if name and ord(name) >= ASCII_A and ord(name) <= ASCII_Z:
+        # 'A' -> '\x01'
+        # 'B' -> '\x02'
+        # 'X' -> '\x18'
+        # ...
+        return chr(abs(ASCII_A - ord(name.upper())) + 1)
+    else:
+        return None
 
 # see: http://rtfm.etla.org/xterm/ctlseq.html, xterm behaviour
 # append ';' and this id before the final character in the escseq
@@ -102,7 +120,7 @@ _mod_map = {
 def map_key(keyname, modifiers, screen_mode=False):
     """Map gtk keynames to vt100 keysequences.
 
-    Return None if there os no mapping for a given key, meaning
+    Return None if there is no mapping for a given key, meaning
     that the reported string value will work just fine.
     Modifiers should be a tuple of 3 booleans: (shift, alt,
     control) denoting the state of the modifier keys.
@@ -110,7 +128,7 @@ def map_key(keyname, modifiers, screen_mode=False):
     Depending on the terminals screen_mode (pyte.mo.DECAPP in
     screen.mode), return different sequences.
     """
-    
+
     def _add_modifier(esc_seq):
         if esc_seq and any(modifiers):
             return "".join((esc_seq[:-1],
@@ -120,10 +138,18 @@ def map_key(keyname, modifiers, screen_mode=False):
             return esc_seq
 
     keydef = _keycodes.get(keyname)
-    if isinstance(keydef, tuple):
-        if screen_mode:
-            return _add_modifier(keydef[1])
+    if keydef:
+        if isinstance(keydef, tuple):
+            if screen_mode:
+                return _add_modifier(keydef[1])
+            else:
+                return _add_modifier(keydef[0])
         else:
-            return _add_modifier(keydef[0])
+            return _add_modifier(keydef)
+
     else:
-        return _add_modifier(keydef)
+        shift, alt, control = modifiers
+        if control and keyname:
+            return control_key_code(keyname.upper())
+        else:
+            return keyname

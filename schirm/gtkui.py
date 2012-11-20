@@ -544,13 +544,6 @@ class PageProxy (object):
     def execute_script(self, src):
         self.input_queue.put(lambda: self._execute_script(src))
 
-    def execute_script_frame(self, frameid, src, discard_result=False):
-        # if frameid == None -> execute in last iframe.
-        # discard_result .. False: put the result as a console-log message onto the input_queue
-        #                   True: throw the result away
-        # TODO: implement discard result
-        self.input_queue.put(lambda : gtk_invoke_s(self.webview.execute_script_frame, frameid, src))
-
     def load_uri(self, uri):
         self.input_queue.put(lambda: self._load_uri(uri))
 

@@ -130,6 +130,7 @@ class Server(object):
 
     def listen(self):
         logger.debug("Schirm HTTP proxy server listening on localhost:%s" % (self.getport(),))
+        # todo: create a threaded server and fix logging!
         while 1:
             client, address = self.socket.accept()
             self.receive(client)
@@ -250,6 +251,16 @@ class Server(object):
 
         return req_message
 
+    def _proxy_connect(self, req_id, req):
+        # proxy connection established
+        if req.path == 'termframe.localhost:80': # TODO: proper path parsing!
+            # TODO: locking
+            client = self.requests[req_id]['client']
+            client.sendall("HTTP/1.1 200 Connection established\r\n\r\n")
+            # start reading the incoming data
+            self.requests.pop(req_id)
+            self.receive(client)
+
     def receive(self, client):
         """
         Receive a request and ignore, serve static files or ask the
@@ -270,12 +281,17 @@ class Server(object):
             data = None
 
         logger.info("%s - %s", req.command, req.path)
+        
+        if req.command == 'CONNECT':
+            # proxy connection (for websockets or https)
+            self._proxy_connect(req_id, req)
 
-        if req.headers.get('Upgrade') == 'websocket':
+        elif req.headers.get('Upgrade') == 'websocket':
             # prepare for an upgrade to a websocket connection
             msg = self._receive_websocket(req_id, req)
             if msg:
                 self.schirm.request(msg)
+
         else:
             # plain http
             req_message = attrdict({'id'              : req_id,
@@ -350,7 +366,6 @@ class Server(object):
                 self._close_conn(client)
 
     def respond(self, req_id, data=None, close=True):
-
         req = self.requests.get(int(req_id))
 
         if req:

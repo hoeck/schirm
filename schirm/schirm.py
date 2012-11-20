@@ -36,7 +36,6 @@ import Queue
 import json
 import traceback
 
-import gtkui
 import term
 import terminalio
 
@@ -102,7 +101,7 @@ class Schirm(object):
     # if True, use 'termframe.localhost' as the iframe domain
     inspect_iframes = False
 
-    def __init__(self, uiproxy):
+    def __init__(self, uiproxy, websocket_proxy_hack=True):
         # pty, webview, webserver -> schirm communication
         # each message on output queue is a tuple of: (typename, attrdict-value)
         # TODO: would be easier to directly enqueue functions + their arguments
@@ -113,7 +112,6 @@ class Schirm(object):
 
         # load the terminal ui
         self._term_uri = "http://termframe.localhost/term.html"
-        self.uiproxy.execute_script("termInit();") # first to be executed after document load
         self.uiproxy.load_uri(self._term_uri)
 
         self.terminal_io = terminalio.PseudoTerminal(size=[80,24])
@@ -126,6 +124,10 @@ class Schirm(object):
 
         # websocket channel to communicate with the emulator document
         self.termframe_websocket_id = None
+
+        # required to work with the gtk webview which doesn't send
+        # websocket requests throught the proxy
+        self.websocket_proxy_hack = websocket_proxy_hack
 
         # webview console logging (setup in main())
         self.console_logger = logging.getLogger('webview_console')
@@ -147,7 +149,7 @@ class Schirm(object):
         read_worker.setDaemon(True)
         read_worker.start()
 
-    # API required to respond to requests and execute javascript
+    # interface required to respond to requests and execute javascript
 
     def make_response(self, mimetype, data):
         """Return a string making up an HTML response."""
@@ -201,7 +203,6 @@ class Schirm(object):
         # load the ui here
         if req.type == 'http':
             if req.path.startswith('http://termframe.localhost'):
-
                 # terminal requests
                 # default static resources:
                 # - relative paths are looked up in schirm.resources module
@@ -225,7 +226,8 @@ class Schirm(object):
                     data = pkg_resources.resource_string('schirm.resources', 'term.html')
                     resp = self.make_response('text/html',
                                               data
-                                              % {'websocket_url': json.dumps(self.emulator.get_websocket_url(port=req.proxy_port))})
+                                              % {'websocket_url': json.dumps(self.emulator.get_websocket_url(port=req.proxy_port,
+                                                                                                             websocket_proxy_hack=self.websocket_proxy_hack))})
                     self.respond(req.id, resp)
                 elif self.inspect_iframes and path.startswith('/iframe/'):
                     # Ask for iframes content using the same domain
@@ -241,7 +243,7 @@ class Schirm(object):
                                       'iframe_path':iframe_path})
                     self.input_queue.put(('request', req))
                 else:
-                    self.respond(req.id)
+                    self.respond(req.id) # 404
             else:
                 # dispatch the http request to the terminal emulator
                 self.input_queue.put(('request', req))
@@ -328,6 +330,8 @@ def create_log_filter(filter=lambda record: True):
     return _Filter(filter)
 
 def main():
+    import gtkui # todo: move the instantiation to a different module: schirm.launch
+
     parser = argparse.ArgumentParser(description="A linux compatible terminal emulator providing modes for rendering (interactive) html documents.")
     parser.add_argument("-v", "--verbose", help="be verbose, -v for info, -vv for debug log level", action="count")
     parser.add_argument("-c", "--console-log", help="write all console.log messages to stdout (use -cc to include document URL and linenumber, -ccc to include schirm-internal usages of console.log)", action="count")

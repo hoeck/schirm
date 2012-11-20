@@ -57,6 +57,126 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
         }
     }
 
+    // key handling
+
+    // map browser key codes to Gtk key names used in schirm
+    // see termkey.py
+    var knownKeys = {
+        33: 'Page_Up',
+        34: 'Page_Down',
+        35: 'End',
+        36: 'Home',
+        45: 'Insert',
+        46: 'Delete',
+
+        37: 'Left',
+        38: 'Up',
+        39: 'Right',
+        40: 'Down',
+
+        8:  'BackSpace',
+        9:  'Tab',
+        13: 'Enter',
+        27: 'Esc',
+
+        112: 'F1',
+        113: 'F2',
+        114: 'F3',
+        115: 'F4',
+        116: 'F5',
+        117: 'F6',
+        118: 'F7',
+        119: 'F8',
+        120: 'F9',
+        121: 'F10',
+        122: 'F11',
+        123: 'F12'
+    };
+
+    var sendKeyFn = function(keyname) {
+        return function(key) {
+            key.name = keyname;
+            self.send({cmd:'keypress', key:key});
+        }
+    };
+
+    var getKeyChordString = function(key) {
+        var a = [];
+        if (key.shift) { a.push('shift'); }
+        if (key.control) { a.push('control'); }
+        if (key.alt) { a.push('alt'); }
+        if (key.name) { a.push(key.name.toLowerCase()); }
+        return a.join('-');
+    };
+
+    var todoFn = function() { return function() { return true }; };
+    var chords = {
+        // terminal shortcuts
+        'shift-pageup': todoFn(), // scroll one page up
+        'shift-pagedown': todoFn(), // scroll one page down
+        'shift-home': todoFn(), // scroll to top
+        'shift-end': todoFn(), // scroll to bottom
+        'shift-insert': todoFn(), // paste xselection
+        'shift-control-s': todoFn(), // search forward: TODO: chromium already has bound this feature to the F3 key??
+        'shift-control-r': todoFn(), // search backwards
+    }
+
+    var handleKeyDown = function(key) {
+        var keyChordString = getKeyChordString(key);
+        var handler = chords[keyChordString];
+        if (handler) {
+            return handler();
+        }
+
+        // catch control-* sequences
+        var asciiA = 65;
+        var asciiZ = 90;
+        if (key.control && (key.code >= asciiA) && (key.code <= asciiZ)) {
+            key.name = String.fromCharCode(key.code);
+            self.send({cmd:'keypress', key:key});
+            return true;
+        }
+
+        return false
+    }
+
+    // key events
+    if (true) {
+        var keyDownProcessed;
+        window.onkeydown = function(e) {
+            var key = {'name':knownKeys[e.keyCode],
+                       'code':e.keyCode,
+                       'string': '',
+                       'shift': e.shiftKey,
+                       'alt':e.altKey,
+                       'control':e.ctrlKey};
+            if (handleKeyDown(key)) {
+                keyDownProcessed = true;
+                return false;
+            } else {
+                keyDownProcessed = false;
+                return true;
+            }
+        };
+        window.onkeypress = function(e) {
+            var key = {'name':undefined,
+                       'string': String.fromCharCode(e.charCode),
+                       'shift': e.shiftKey,
+                       'alt':e.altKey,
+                       'control':e.controlKey};
+            if (key.string && !keyDownProcessed) {
+                self.send({cmd:'keypress', key:key});
+                return true;
+            } else {
+                return false;
+            }
+        };
+
+        window.onkeyup = function(e) {
+            keyDownProcessed = true;
+        };
+    }
+
     // terminal sizing
 
     // Return the size of a single character in the given PRE element

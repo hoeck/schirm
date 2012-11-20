@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import cgi
 import json
 
@@ -78,9 +79,9 @@ def unicode_escape_char(c):
 def create_span(group):
     def _span(cl, contents):
         if cl:
-            return '<span class="{0}">{1}</span>'.format(cl, contents)
+            return '<span class="{0}">{1}</span>'.format(cl, contents.encode('utf-8'))
         else:
-            return '<span>{0}</span>'.format(contents)
+            return '<span>{0}</span>'.format(contents.encode('utf-8'))
     if isinstance(group, list):
         cl = create_class_string(group[0])
         return _span(cl, cgi.escape("".join(map(lambda ch: ch.data, group))))
