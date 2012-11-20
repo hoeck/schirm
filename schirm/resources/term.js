@@ -29,6 +29,7 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
 
     if (false) {
         var send = function(cmd) {
+            // faster than websockets when using an embedded webview
             console.log("schirmcommand" + JSON.stringify(cmd));
         };
         this.send = send;
@@ -133,6 +134,12 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
         var asciiZ = 90;
         if (key.control && (key.code >= asciiA) && (key.code <= asciiZ)) {
             key.name = String.fromCharCode(key.code);
+            self.send({cmd:'keypress', key:key});
+            return true;
+        }
+
+        // special keys
+        if (key.name) {
             self.send({cmd:'keypress', key:key});
             return true;
         }
