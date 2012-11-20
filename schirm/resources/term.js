@@ -270,6 +270,30 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
 
     // terminal render functions
 
+    // automatically keep the bottom visible unless the user actively moves the scrollbar
+    var autoScrollActive = true;
+    var autoscrollActivationAreaHeight = 10;
+    var autoScroll = function() {
+        if (autoScrollActive) {
+            window.onscroll = undefined;
+
+            // scroll to the bottom
+            document.body.scrollTop = document.body.scrollHeight - document.body.clientHeight;
+
+            // listen to scroll events to deactivate autoScroll if
+            // user scrolls manually
+            window.onscroll = function() {
+                var body = document.body;
+                if ((body.scrollTop + body.clientHeight) > (body.scrollHeight - autoscrollActivationAreaHeight)) {
+                    autoScrollActive = true;
+                } else {
+                    autoScrollActive = false;
+                }
+            }
+        }
+    };
+    this.autoScroll = autoScroll;
+
     // adjust layout to 'render' empty lines at the bottom
     var adjustTrailingSpace = function() {
         if (linesElement.childNodes.length && ((linesElement.childNodes.length - screen0) <= self.size.lines)) {
@@ -279,6 +303,7 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
             // set the termscreen div margin-top so that it covers all history lines (lines before line[screen0])
             linesElement.parentElement.style.setProperty("margin-top", historyHeight);
         }
+        autoScroll();
     };
     this.adjustTrailingSpace = adjustTrailingSpace;
 
