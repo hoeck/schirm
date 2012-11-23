@@ -58,6 +58,12 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
         }
     }
 
+    // focus
+
+    self.setFocus = function(focus) {
+        self.send({cmd:'focus', focus:!!focus});
+    };
+
     // key handling
 
     // map browser key codes to Gtk key names used in schirm
@@ -451,4 +457,11 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
     linesElement = parentElement.getElementsByClassName('terminal-line-container')[0];
     appElement   = parentElement.getElementsByClassName('terminal-app-container')[0];
     self.resize();
+
+    // focus
+    window.onfocus = function() { self.setFocus(true); };
+    window.onblur  = function() { self.setFocus(false); };
+    if (document.hasFocus()) {
+        self.setFocus(true);
+    }
 };

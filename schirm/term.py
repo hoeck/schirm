@@ -190,6 +190,10 @@ class Terminal(object):
         elif msg['cmd'] == 'keypress':
             x = self._keypress(msg['key'])
             self.terminal_io.write(x)
+
+        elif msg['cmd'] == 'focus':
+            self.set_focus(msg['focus'])
+
         else:
             raise Exception("unknown command in message: %r" % msg)
 
