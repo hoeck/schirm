@@ -33,9 +33,10 @@ class UIProxy(object):
     def quit(self):
         print "QUIT"
 
+# TODO: sort this out
 ws = None
 
-def main():
+def start():
     global ws
     s = schirm.Schirm(UIProxy(), websocket_proxy_hack=False)
     ws = webserver.Server(s)

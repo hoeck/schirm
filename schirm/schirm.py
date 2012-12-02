@@ -329,13 +329,15 @@ def create_log_filter(filter=lambda record: True):
 
     return _Filter(filter)
 
-def main():
-    import gtkui # todo: move the instantiation to a different module: schirm.launch
+def main(use_gtk=False):
 
+    # configure logging and the Schirm class
     parser = argparse.ArgumentParser(description="A linux compatible terminal emulator providing modes for rendering (interactive) html documents.")
     parser.add_argument("-v", "--verbose", help="be verbose, -v for info, -vv for debug log level", action="count")
-    parser.add_argument("-c", "--console-log", help="write all console.log messages to stdout (use -cc to include document URL and linenumber, -ccc to include schirm-internal usages of console.log)", action="count")
     parser.add_argument("-d", "--iframe-debug", help="Let iframes use the same domain as the main term frame to be able to access them with javascript from the webkit inspector", action="store_true")
+    if use_gtk:
+        parser.add_argument("-c", "--console-log", help="write all console.log messages to stdout (use -cc to include document URL and linenumber, -ccc to include schirm-internal usages of console.log)", action="count")
+
     args = parser.parse_args()
 
     if args.verbose:
@@ -344,7 +346,7 @@ def main():
     if not (args.verbose and args.verbose > 1):
         warnings.simplefilter('ignore')
 
-    if args.console_log:
+    if use_gtk and args.console_log:
         cl = logging.getLogger('webview_console')
         cl.setLevel([None, logging.INFO, logging.DEBUG][max(0, min(2, args.console_log))])
         h = logging.StreamHandler()
@@ -355,8 +357,14 @@ def main():
         Schirm.inspect_iframes = True
 
     init_dotschirm()
-    gtkui.PageProxy.start(Schirm)
-    gtkui.PageProxy.new_tab()
+
+    if use_gtk:
+        import gtkui
+        gtkui.PageProxy.start(Schirm)
+        gtkui.PageProxy.new_tab()
+    else:
+        import termserver
+        termserver.start()
 
 if __name__ == '__main__':
     main()
