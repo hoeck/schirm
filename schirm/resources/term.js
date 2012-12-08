@@ -274,32 +274,42 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
               height:self.size.lines});
     };
 
-    // terminal render functions
-
-    // automatically keep the bottom visible unless the user actively moves the scrollbar
+    // AutoScroll
+    // automatically keep the bottom visible unless the user actively scrolls to the top
     var autoScrollActive = true;
-    var autoscrollActivationAreaHeight = 10;
+    var autoScrollActivationAreaHeight = 10;
+    var autoScrollLastHeight;
+
+    // should be bound to terminal scroll events to deactivate
+    // autoScroll if user scrolls manually
+    this.checkAutoScroll = function() {
+        if (autoScrollLastHeight == parentElement.scrollHeight) {
+            // Whenever the user scrolls withing
+            // autoScrollActivationAreaHeight pixels to the bottom,
+            // automatically keep bottom content visible (==
+            // scroll automatically)
+            if ((parentElement.scrollTop + parentElement.clientHeight) > (parentElement.scrollHeight - autoScrollActivationAreaHeight)) {
+                autoScrollActive = true;
+            } else {
+                autoScrollActive = false;
+            }
+        } else {
+            // scroll event had been fired as result of adding lines
+            // to the terminal and thus increasing its size, do not
+            // deactivate autoscroll in that case
+            autoScrollLastHeight = parentElement.scrollHeight;
+        }
+    }
+
     var autoScroll = function() {
         if (autoScrollActive) {
-            // TODO: figure out scrolling in case the terminal is
-            //       embedded inside another iframe (term-in-term)
-            window.onscroll = undefined;
-
             // scroll to the bottom
             parentElement.scrollTop = parentElement.scrollHeight - parentElement.clientHeight;
-
-            // listen to scroll events to deactivate autoScroll if
-            // user scrolls manually
-            window.onscroll = function() {
-                if ((parentElement.scrollTop + parentElement.clientHeight) > (parentElement.scrollHeight - autoscrollActivationAreaHeight)) {
-                    autoScrollActive = true;
-                } else {
-                    autoScrollActive = false;
-                }
-            }
         }
     };
     this.autoScroll = autoScroll;
+
+    // terminal render functions
 
     // adjust layout to 'render' empty lines at the bottom
     var adjustTrailingSpace = function() {
@@ -396,6 +406,8 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
         linesElement.replaceChild(div, linesElement.childNodes[index]);
 
         var iframe = document.createElement('iframe');
+        iframe.addEventListener('webkitTransitionEnd', autoScroll, false);
+
         // todo: add seamless & sandbox="allow-scripts allow-forms" attributes
         iframe.name = id;
         iframe.id = id;
@@ -438,6 +450,7 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
     this.iframeResize = function(frameId, height) {
         var iframe = document.getElementById(frameId);
         iframe.style.height = height;
+        autoScroll();
     };
 
     // begin to render lines in app mode (fullscreen without
@@ -464,4 +477,7 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
     if (document.hasFocus()) {
         self.setFocus(true);
     }
+
+    // adaptive autoScroll
+    window.onscroll = self.checkAutoScroll;
 };
