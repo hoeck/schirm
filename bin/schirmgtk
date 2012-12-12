@@ -1,5 +1,5 @@
 #!/usr/bin/env python
 
 if __name__ == '__main__':
-    from schirm import schirm
-    schirm.main(gtk=True)
+    from schirm.main import main
+    main(gtk=True)
