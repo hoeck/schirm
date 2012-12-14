@@ -178,6 +178,19 @@ def render_image(data, mimetype='', interactive=False):
 
 def render_text(text):
     print text
+    print """
+<script type="text/javascript" src="schirm.js"></script>
+<script type="text/javascript">
+document.onreadystatechange = function() {
+    if (document.readyState == "complete") {
+      console.log("complete", document.body.clientHeight);
+      var bodyStyle = getComputedStyle(document.body);
+      var height = parseInt(bodyStyle.marginTop) + parseInt(bodyStyle.marginBottom) + document.body.scrollHeight;
+      schirm.resize(height);
+  }
+}
+</script>
+"""
 
 def magicmime(s):
     cookie = magic.open(magic.MAGIC_MIME_TYPE)
