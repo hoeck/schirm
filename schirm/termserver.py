@@ -17,7 +17,7 @@ def start_chromium(proxy_port):
         except OSError:
             return False
 
-    commands = ['google-chrome', 'chromium-browser']
+    commands = ['chromium-browser', 'google-chrome']
     available = filter(is_available, commands)
 
     if available:
