@@ -269,6 +269,11 @@ class Server(object):
         rfile = client.makefile()
         req = HTTPRequest(rfile)
 
+        if not req.requestline:
+            # ignore 'empty' google chrome requests
+            # TODO: debug
+            return
+
         with self._requests_lock:
             req_id = self._getnextid()
             self.requests[req_id] = {'type':'http',
