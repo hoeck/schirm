@@ -67,4 +67,24 @@
     font-family: "DejaVu Sans Mono", "FreeMono", "Bitstream Vera Mono", monospaced;
     font-size: 12px;
 }
+
+/* min scrollbar */
+
+::-webkit-scrollbar {
+    width: 6px;
+}
+
+::-webkit-scrollbar-track {
+    -webkit-border-radius: 1px;
+    border-radius: 1px;
+    background: rgba(245,245,245,0.8);
+}
+
+::-webkit-scrollbar-thumb {
+    -webkit-border-radius: 1px;
+    border-radius: 1px;
+    background: rgba(180,180,180,0.8);
+
+::-webkit-scrollbar-thumb:window-inactive {
+    background: rgba(230,230,230,0.8);
 }
