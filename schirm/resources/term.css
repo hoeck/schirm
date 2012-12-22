@@ -16,14 +16,13 @@ div.terminal-screen {
 pre.terminal-line-container {
     position:relative;
     margin: 0px;
-    overflow: visible;
+    overflow-y: visible;
+    overflow-x: hidden;
+    padding: 1px;
+    width: 100%;
+
     /* two pixels to fit an inactive cursor on the last line */
     padding-bottom: 2px;
-}
-
-pre.terminal-line-container {
-    overflow-x:hidden;
-    width: 100%;
 }
 
 pre.terminal-app-container {
