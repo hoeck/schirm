@@ -32,8 +32,6 @@ def main(use_gtk=False):
     if args.iframe_debug:
         schirm.Schirm.inspect_iframes = True
 
-    schirm.init_dotschirm()
-
     if use_gtk:
         import gtkui
         gtkui.PageProxy.start(Schirm)

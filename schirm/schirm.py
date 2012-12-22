@@ -52,33 +52,14 @@ def init_logger(level=logging.ERROR):
 
 logger = init_logger()
 
-def init_dotschirm():
-    """Create ~/.schirm/ and or missing files in it."""
-    if not os.path.exists(os.path.expanduser('~')):
-        return
-
-    dotschirm = os.path.expanduser('~/.schirm/')
-    if not os.path.exists(dotschirm):
-        os.mkdir(dotschirm)
-
-    user_css = os.path.join(dotschirm, 'user.css')
-    if not os.path.exists(user_css):
-        with open(user_css, 'w') as f:
-            f.write(pkg_resources.resource_string("schirm.resources", "user.css"))
-
-def get_config_file_path(filename):
-    """Return the full path for a file in ~/.schirm/<filename>.
-
-    If it does not exist, return the one from resources.
-    """
+def get_config_file_contents(filename):
+    """Return the contents of ~/.schirm/<filename> or an empty string."""
     config = os.path.join(os.path.expanduser('~/.schirm'), filename)
     if os.path.exists(config):
-        return config
+        with open(config) as f:
+            return f.read()
     else:
-        resource = pkg_resources.resource_filename('schirm.resources', filename)
-        if not os.path.exists(resource):
-            raise Exception("Unknown resource: %r" % (filename, ))
-        return None
+        return ""
 
 def put_nowait_sleep(queue, data):
     """Given a limited queue and an object, try to put object on the queue.
@@ -170,20 +151,9 @@ class Schirm(object):
         self.uiproxy.respond(req_id, data, close)
 
     def respond_resource_file(self, req_id, path):
-        if os.path.isabs(path):
-            # external resource (e.g. user.css file in ~/.schirm/)
-            f = None
-            try:
-                with open(path, 'r') as f:
-                    data = f.read()
-                self.respond(req_id, self.make_response(self.guess_type(path), data))
-            except:
-                self.respond(req_id)
-
-        else:
-            # internal, packaged resource
-            data = pkg_resources.resource_string('schirm.resources', path)
-            self.respond(req_id, self.make_response(self.guess_type(path), data))
+        # internal, packaged resource
+        data = pkg_resources.resource_string('schirm.resources', path)
+        self.respond(req_id, self.make_response(self.guess_type(path), data))
 
     def execute(self, src):
         if isinstance(src, basestring):
@@ -212,8 +182,7 @@ class Schirm(object):
                                     #'/term.html': 'term.html',
                                     '/term.js': 'term.js',
                                     '/term.css': 'term.css',
-                                    # user configurable stylesheets
-                                    '/user.css': '/home/timmy/.schirm/user.css' #get_config_file_path('user.css') or 'user.css',
+                                    '/default-user.css': 'user.css',
                                     }
                 not_found = set(["/favicon.ico"])
 
@@ -222,6 +191,9 @@ class Schirm(object):
                     self.respond(req.id)
                 elif path in static_resources:
                     self.respond_resource_file(req.id, static_resources[path])
+                elif path == '/user.css':
+                    data = get_config_file_contents('user.css')
+                    self.respond(req.id, self.make_response(self.guess_type(path), data))
                 elif path == '/term.html':
                     data = pkg_resources.resource_string('schirm.resources', 'term.html')
                     resp = self.make_response('text/html',
@@ -233,7 +205,7 @@ class Schirm(object):
                     # Ask for iframes content using the same domain
                     # as the main terminal frame to be able to debug
                     # iframe contents with the webkit-inspector.
-                    
+
                     # modify the path into a iframe path
                     frag = path[len('/iframe/'):]
                     iframe_id = frag[:frag.index('/')]
