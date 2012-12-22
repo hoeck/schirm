@@ -61,14 +61,14 @@ var schirm = (function(schirm) {
     var getVScrollbarHeight = function() {
         var compute = function() {
             var div = document.createElement("div");
-            div.style.width = 100;
-            div.style.height = 100;
+            div.style.width = "100px";
+            div.style.height = "100px";
             div.style.overflowX = "scroll";
             div.style.overflowY = "scroll";
 
             var content = document.createElement("div");
-            content.style.width = 200;
-            content.style.height = 200;
+            content.style.width = "200px";
+            content.style.height = "200px";
 
             div.appendChild(content);
             document.body.appendChild(div);
@@ -89,10 +89,11 @@ var schirm = (function(schirm) {
         }
         return __vscrollbarheight;
     }
+    schirm.getVScrollbarHeight = getVScrollbarHeight;
 
     // return true if el will render with a vertical scrollbar
-    var vScrollbarRequired = function(el) {
-        return el.scrollWidth > el.clientWidth;
+    var vScrollbarRequired = function(el, bodyMargin) {
+        return el.scrollWidth > (el.clientWidth + bodyMargin);
     }
 
     // simple get and post
@@ -103,7 +104,7 @@ var schirm = (function(schirm) {
         req.onreadystatechange = function (oEvent) {
             if (req.readyState === 4) {
                 if (req.status === 200) {
-                    success(req.responseText);
+                    (success || function() {})(req.responseText);
                 } else {
                     // nothing
                 }
@@ -118,39 +119,53 @@ var schirm = (function(schirm) {
     function getElementHeight(e) {
         var style = getComputedStyle(e);
         var margin = parseInt(style.marginTop) + parseInt(style.marginBottom);
-        console.log('clientHeight', e.clientHeight, 'margin', margin);
         return e.clientHeight + margin;
     }
 
     // ask the iframes parent to resize the current iframe
+    var resizePrevHeight;
     schirm.resize = function(height) {
+        // todo: what happens if the style is not using px?
         var bodyStyle = getComputedStyle(document.body);
         var bodyMargin = parseInt(bodyStyle.marginTop) + parseInt(bodyStyle.marginBottom);
 
         var vScrollbarHeight = 0;
-        if (vScrollbarRequired(document.body)) {
-            vScrollbarHeight = getVScrollbarHeight()
+        if (vScrollbarRequired(document.body, bodyMargin)) {
+            vScrollbarHeight = getVScrollbarHeight();
         }
 
-        var heightInPx;
+        var newHeight;
         if ((typeof height) === 'number') {
-            heightInPx = height;
+            newHeight = height + vScrollbarHeight + bodyMargin;
         } else if ((typeof height) === 'object') {
-            heightInPx = getElementHeight(height);
+            newHeight = getElementHeight(height) + vScrollbarHeight + bodyMargin;
+        } else if (height === undefined) {
+            // auto-resize the body
+            newHeight = document.body.clientHeight + vScrollbarHeight + bodyMargin;
+        } else if (height === 'fullscreen') {
+            // todo
         }
 
-        var newHeight = heightInPx + bodyMargin + vScrollbarHeight;
-
-        // either use console.log or POST to a special URL
-        if (0) {
-            console.log("iframeresize"+newHeight); // IPC
-        } else {
-            console.log('posting');
-            schirm.POST('schirm',
-                        JSON.stringify({command:"resize",
-                                        height:newHeight}),
-                        function() { console.log('done posting'); });
+        if (resizePrevHeight !== newHeight) {
+            resizePrevHeight = newHeight;
+            // either use console.log or POST to a special URL
+            if (0) {
+                console.log("iframeresize"+newHeight); // IPC
+            } else {
+                schirm.POST('schirm',
+                            JSON.stringify({command:"resize",
+                                            height:newHeight}));
+            }
         }
+    }
+
+    // Resize the iframe to have enough space for height using schirm.resize.
+    // Listen to window resize events to adjust the height accordingly.
+    schirm.resizing = function(height) {
+        schirm.resize(height);
+        window.addEventListener('resize', function() {
+            schirm.resize(height);
+        });
     }
 
     // TODO:
