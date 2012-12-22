@@ -248,8 +248,8 @@ class LineContainer(): # lazy
         self.events = []
         self._create_line_fn = create_line_fn
 
-    def _create_line(self):
-        return self._create_line_fn()
+    def _create_line(self, default_char=None):
+        return self._create_line_fn(default_char)
 
     def _ensure_lines(self, _linenumber=None):
         """Ensure that all lines up to linenumber are present."""
@@ -526,8 +526,8 @@ class TermScreen(pyte.Screen):
         pass
 
     _default_char = Char(data=" ", fg="default", bg="default")
-    def _create_line(self):
-        return Line(self.columns, self._default_char)
+    def _create_line(self, default_char=None):
+        return Line(self.columns, default_char or self._default_char)
 
     def _is_empty_line(self, line):
         return line.is_empty()
