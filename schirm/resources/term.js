@@ -480,6 +480,45 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
         autoScroll();
     };
 
+
+    // select a substring on a line
+    var selectSubLine = function(lineSpan, startIdx, endIdx) {
+        var s = document.getSelection();
+        var r = document.createRange();
+
+        var spanStart = 0;
+        var spanEnd = undefined;
+        for (var i=0; i<lineSpan.children.length; i++) {
+            var currentChild = lineSpan.children[i];
+            spanEnd = spanStart + currentChild.childNodes[0].length;
+
+            if ((spanStart <= startIdx) && (startIdx < spanEnd)) {
+                r.setStart(currentChild.childNodes[0], startIdx - spanStart);
+            }
+            if ((spanStart <= startIdx) && (endIdx <= spanEnd)) {
+                r.setEnd(currentChild.childNodes[0], endIdx - spanStart);
+            }
+            spanStart = spanEnd;
+        }
+        s.removeAllRanges();
+        s.addRange(r);
+    };
+
+    // compute the boundaries of the word at idx
+    var wordBoundaries = function(string, idx) {
+        var wordCharsRegex = /[-,.\/?%&#:_~A-Za-z0-9]/;
+        // find the beginning of the 'word'
+        for (var wordStart=idx;
+             wordStart>=0 && wordCharsRegex.test(string[wordStart]);
+             wordStart--) { };
+
+        for (var wordEnd=idx;
+             wordEnd<string.length && wordCharsRegex.test(string[wordEnd]);
+             wordEnd++) { };
+
+        return {start:wordStart+1, end:wordEnd};
+    }
+
     // begin to render lines in app mode (fullscreen without
     // scrollback)
     var applicationMode = function(enable) {
@@ -510,4 +549,17 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
 
     // adaptive autoScroll
     window.onscroll = self.checkAutoScroll;
+
+    // click handler to select words
+    linesElement.addEventListener('dblclick', function(e) {
+            if (e.target.tagName === 'SPAN' || e.target.parentElement === 'SPAN') {
+                var line = e.target.parentElement;
+                var relPos = e.clientX / line.offsetWidth;
+                var text = line.innerText;
+                var idx = Math.round(text.length * relPos);
+                var boundaries = wordBoundaries(text, idx);
+                selectSubLine(line, boundaries.start, boundaries.end);
+            }
+            return true;
+        });
 };
