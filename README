@@ -11,18 +11,23 @@ Installing
 
 Requires Python 2.7.
 
+
 Get the source:
 
     $ git clone https://github.com/hoeck/schirm.git
 
-Run without install:
+Optionally, install xsel (<https://github.com/kfish/xsel> or `apt-get install xsel`)
+to be able to paste the current X selection using Shift-Insert.
+
+Run:
 
     $ cd schirm
     $ python -m schirm
 
-or Install it:
+or Install and then run it:
 
     $ python setup.py install
+    $ schirm
 
 Runs all your favorite commandline applications, including:
 

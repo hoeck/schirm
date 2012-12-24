@@ -127,27 +127,31 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
         if (key.shift) { a.push('shift'); }
         if (key.control) { a.push('control'); }
         if (key.alt) { a.push('alt'); }
-        if (key.name) { a.push(key.name.toLowerCase()); }
+        if (key.name) {
+            a.push(key.name.toLowerCase());
+        } else {
+            a.push(String.fromCharCode(key.code).toLowerCase());
+        }
         return a.join('-');
     };
 
     var todoFn = function() { return function() { return true }; };
     var chords = {
         // essential shortcuts
-        'shift-page_up':   function() { self.scroll('page-up'); },
-        'shift-page_down': function() { self.scroll('page-down'); },
-        'shift-home':     function() { self.scroll('top'); },
-        'shift-end':      function() { self.scroll('bottom'); },
+        'shift-page_up':   function() { self.scroll('page-up');   return True; },
+        'shift-page_down': function() { self.scroll('page-down'); return True; },
+        'shift-home':      function() { self.scroll('top');       return True; },
+        'shift-end':       function() { self.scroll('bottom');    return True; },
 
-        'shift-insert': todoFn(), // paste xselection
-        'shift-control-s': todoFn(), // search forward: TODO: chromium already has bound this feature to the F3 key??
-        'shift-control-r': todoFn(), // search backwards
+        // paste xselection
+        'shift-insert': function() { send({cmd:'paste_xsel'}); },
+
+        // use the browser search
+        'control-f':  function() { return false; },
     }
 
     var handleKeyDown = function(key) {
         var keyChordString = getKeyChordString(key);
-
-        console.log('keychordstring', keyChordString);
 
         var handler = chords[keyChordString];
         if (handler) {

@@ -32,6 +32,7 @@ import pwd
 import types
 import time
 import pkg_resources
+import subprocess
 from warnings import warn
 from UserList import UserList
 
@@ -194,6 +195,9 @@ class Terminal(object):
         elif msg['cmd'] == 'focus':
             self.set_focus(msg['focus'])
 
+        elif msg['cmd'] == 'paste_xsel':
+            self.terminal_io.write(self.paste_xsel())
+
         else:
             raise Exception("unknown command in message: %r" % msg)
 
@@ -230,6 +234,16 @@ class Terminal(object):
                 return k
 
         return ''
+
+    def paste_xsel(self):
+        try:
+            return subprocess.check_output(['xsel', '-o'])
+        except OSError, e:
+            if e.errno == 2:
+                logger.info("Install xsel to use the 'paste x selection' feature")
+                return ""
+            else:
+                raise e
 
     def _feed(self, input):
         # input is a list of strings or tuples
