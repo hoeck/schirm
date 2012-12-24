@@ -66,6 +66,19 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
         self.send({cmd:'focus', focus:!!focus});
     };
 
+    // scroll
+    self.scroll = function(how) {
+        if (how === 'page-up') {
+            window.scrollBy(0, window.innerHeight * -0.95);
+        } else if (how === 'page-down') {
+            window.scrollBy(0, window.innerHeight * 0.95);
+        } else if (how === 'top') {
+            window.scrollTo(0, 0);
+        } else if (how === 'bottom') {
+            window.scrollTo(0, 9999999999999);
+        }
+    };
+
     // key handling
 
     // map browser key codes to Gtk key names used in schirm
@@ -120,11 +133,12 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
 
     var todoFn = function() { return function() { return true }; };
     var chords = {
-        // terminal shortcuts
-        'shift-pageup': todoFn(), // scroll one page up
-        'shift-pagedown': todoFn(), // scroll one page down
-        'shift-home': todoFn(), // scroll to top
-        'shift-end': todoFn(), // scroll to bottom
+        // essential shortcuts
+        'shift-page_up':   function() { self.scroll('page-up'); },
+        'shift-page_down': function() { self.scroll('page-down'); },
+        'shift-home':     function() { self.scroll('top'); },
+        'shift-end':      function() { self.scroll('bottom'); },
+
         'shift-insert': todoFn(), // paste xselection
         'shift-control-s': todoFn(), // search forward: TODO: chromium already has bound this feature to the F3 key??
         'shift-control-r': todoFn(), // search backwards
@@ -132,6 +146,9 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
 
     var handleKeyDown = function(key) {
         var keyChordString = getKeyChordString(key);
+
+        console.log('keychordstring', keyChordString);
+
         var handler = chords[keyChordString];
         if (handler) {
             return handler();
@@ -476,6 +493,9 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
     linesElement = parentElement.getElementsByClassName('terminal-line-container')[0];
     appElement   = parentElement.getElementsByClassName('terminal-app-container')[0];
     self.resize();
+
+    // debug
+    this.linesElement = linesElement;
 
     // focus
     window.onfocus = function() { self.setFocus(true); };
