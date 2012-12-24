@@ -1,0 +1,36 @@
+<script type="text/javascript">
+(function() {
+
+    var request = function(method, uri, data, success) {
+        var req = new XMLHttpRequest();
+        req.open(method, uri, true);
+        req.send(data);
+        req.onreadystatechange = function (oEvent) {
+            if (req.readyState === 4) {
+                if (req.status === 200) {
+                    (success || function() {})(req.responseText);
+                } else {
+                    // nothing
+                }
+            }
+        };
+    };
+
+    // register a global key listener
+    window.addEventListener('keydown', function(e) {
+        if (e.ctrlKey) {
+            var keyName = String.fromCharCode(e.keyCode);
+            if (keyName === 'C') {
+                request('POST', 'schirm', JSON.stringify({command:'control-c'}))
+                return true;
+            } else if (keyName === 'D') {
+                request('POST', 'schirm', JSON.stringify({command:'control-d'}))
+                return true;
+            } else if (keyName === 'Z') {
+                request('POST', 'schirm', JSON.stringify({command:'control-z'}))
+                return true;
+            }
+        }
+    });
+}());
+</script>
