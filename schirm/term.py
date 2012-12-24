@@ -223,7 +223,7 @@ class Terminal(object):
             # terminal process
             if k and \
                     key.get('control') and \
-                    key.get('name') in "dcz":
+                    (key.get('name') or '').lower() in "dcz":
                 return k
         else:
             if k:
@@ -242,7 +242,6 @@ class Terminal(object):
                     name, data = i
                     if name == 'keypress':
                         x = self._keypress(data)
-                        print "writing key: %r" % (x,)
                         self.terminal_io.write(x)
                     elif name == 'pty_read_error':
                         self.stream.close()
@@ -297,7 +296,7 @@ class Terminal(object):
             if name.startswith('iframe_'):
                 # iframes:
                 js_flush()
-                self.iframes.dispatch(e)
+                js_append(self.iframes.dispatch(e))
             elif name == 'set_title':
                 js_flush()
                 self.terminal_ui.set_title(args[0])

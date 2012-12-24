@@ -21,6 +21,7 @@ from StringIO import StringIO
 import codecs
 import base64
 import logging
+import pkg_resources
 
 import pyte
 from pyte.screens import Char, Margins, Cursor
@@ -999,6 +1000,10 @@ class TermScreen(pyte.Screen):
             pass
 
     def iframe_close(self):
+        # add some html to the iframe document for registering ctr-c and ctrl-d key handlers
+        iframe_close_snippet = pkg_resources.resource_string('schirm.resources', 'iframe_close_snippet.html')
+        self.linecontainer.iframe_write(self.iframe_id, iframe_close_snippet)
+
         self.linecontainer.iframe_close(self.iframe_id)
         self.iframe_mode = 'closed'
 

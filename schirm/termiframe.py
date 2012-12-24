@@ -87,8 +87,9 @@ class Iframes(object):
 
     # dispatch events produced by the termscreen state machine
     def dispatch(self, event):
-        # create iframes and relay the iframe events to each iframe
-        # object using the iframe_id
+        # Create iframes and relay the iframe events to each iframe
+        # object using the iframe_id.
+        # Return a javascript snippet just like methods in htmlterm.Events or None.
 
         name, iframe_id = event[:2]
         args = event[2:]
@@ -101,7 +102,7 @@ class Iframes(object):
             if f:
                 event_method = getattr(f, name)
                 if event_method:
-                    event_method(*args)
+                    return event_method(*args)
                 else:
                     logger.error('Unknown iframe event method: %r', name)
             else:
@@ -175,6 +176,7 @@ class Iframe(object):
         # back to terminal mode:
         # TODO: close open websockets
         self.state = None
+        return "term.iframeLeave();"
 
     def iframe_send(self, data):
         """Send data to the iframe using the iframes websocket connection."""
@@ -254,7 +256,8 @@ class Iframe(object):
                 data = {}
 
             if isinstance(data, dict):
-                if data.get('command') == 'resize':
+                cmd = data.get('command')
+                if cmd == 'resize':
                     # iframeresize
                     try:
                         height = int(data.get('height'))
@@ -262,6 +265,12 @@ class Iframe(object):
                         height = 25
                     self.iframe_resize(height)
                     self.terminal_ui.respond(req.id, 'HTTP/1.1 200 done\r\n\r\n')
+                elif cmd == 'control-c':
+                    self.terminal_ui.keypress({'name': 'C', 'control': True})
+                elif cmd == 'control-d':
+                    self.terminal_ui.keypress({'name': 'D', 'control': True})
+                elif cmd == 'control-z':
+                    self.terminal_ui.keypress({'name': 'Z', 'control': True})
                 else:
                     self.terminal_ui.respond(req.id)
             else:
@@ -301,6 +310,9 @@ class Iframe(object):
 
     def websocket_request(self, req):
         if req.id == self.websocket_req_id:
+            # todo: instead of terminal_io, use terminal_ui and the
+            # input_queue to keep data written to the PTYs in stream
+            # in sync !!!
             print "iframe websocket: %r" % req
             self.terminal_io.write(''.join((START_MSG,
                                             base64.b64encode(req.data),

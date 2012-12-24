@@ -21,9 +21,11 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
 
     var screen0 = 0; // offset from the first line to the current terminal line 0
     var appMode = false;
-    var currentIframe;
 
     this.size = { lines: 0, cols: 0 };
+
+    // keep the current iframe around for debugging
+    this.iframe = undefined;
 
     // IPC
 
@@ -417,7 +419,7 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
         newline.innerHTML = "\n";
         div.appendChild(newline);
 
-        term.currentIframe = iframe;
+        term.iframe = iframe; // keep the current iframe around for debugging
 
         // linemode: iframe grows vertically with content
         //           iframe is as wide as the terminal window
@@ -430,10 +432,14 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
         iframe.style.height = getVScrollbarHeight();
 
         adjustTrailingSpace();
-        window.iframe = iframe; // keep the current iframe around for debugging
 
         // load the frame document
         iframe.src = uri;
+
+        iframe.focus();
+
+        // keep the current iframe around for debugging
+        self.iframe = iframe;
     };
 
     // call .close on the iframe document.
@@ -441,12 +447,12 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
         // todo delete
     };
 
-    // set the the current iframe document to null
-    // so that we know whether we're in iframe mode or not
+    // called when entering plain terminal mode
     this.iframeLeave = function() {
-        currentIframe = null;
+        window.focus();
     };
 
+    //
     this.iframeResize = function(frameId, height) {
         var iframe = document.getElementById(frameId);
         iframe.style.height = height;

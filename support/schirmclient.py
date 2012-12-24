@@ -145,7 +145,6 @@ def set_block(fd, block=True):
     else:
         fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
 
-
 def read_list():
     """Read a list of strings from stdin and return it.
     
@@ -218,23 +217,26 @@ def read_next():
     Returns a namedtuple of type Request or Message.
     """
     while 1:
-        ch = sys.stdin.read(1)
-        if ch == ESC:
+        try:
             ch = sys.stdin.read(1)
-            if ch == 'R':
-                args = read_list()
-                if args[0] == 'request':
-                    # ('request', requestid, protocol, method, path, header-key*, header-value*, [post-data])
-                    headers = dict((args[i], args[i+1]) for i in range(5, len(args)-1, 2))
-                    return Request('request', args[1], args[2], args[3], args[4], headers, args[-1] if len(args)%2 else None)
+            if ch == ESC:
+                ch = sys.stdin.read(1)
+                if ch == 'R':
+                    args = read_list()
+                    if args[0] == 'request':
+                        # ('request', requestid, protocol, method, path, header-key*, header-value*, [post-data])
+                        headers = dict((args[i], args[i+1]) for i in range(5, len(args)-1, 2))
+                        return Request('request', args[1], args[2], args[3], args[4], headers, args[-1] if len(args)%2 else None)
+                    else:
+                        return Message(*args)
                 else:
-                    return Message(*args)
+                    # some keycombo
+                    return KeyPress('keypress', ch, True)
             else:
-                # some keycombo
-                return KeyPress('keypress', ch, True)
-        else:
-            # plain keypress
-            return KeyPress('keypress', ch, False)
+                # plain keypress
+                return KeyPress('keypress', ch, False)
+        except KeyboardInterrupt, e:
+            pass
 
 def respond(requestid, response):
     """Write a response to requestid to the schirm terminal.

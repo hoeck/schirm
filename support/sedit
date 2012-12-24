@@ -29,7 +29,7 @@ overflow-y: hidden;
 </style>
 <script src="codemirror.js" type="text/javascript" charset="utf-8"></script>
 <script src="schirm.js" type="text/javascript" charset="utf-8"></script>
-<script>
+<script type="text/javascript">
 
 document.onreadystatechange = function () {
   if (document.readyState == "complete") {
@@ -70,7 +70,7 @@ def ace_edit(s=''):
         schirm.register_resource(os.path.join(os.path.abspath(os.path.dirname(__file__)), 'codemirror-full.min.js'), name='codemirror.js')
         print html % {'text':json.dumps(str(s))}
         schirm.close()
-        #req = schirm.read_next()
+        req = schirm.read_next()
 
 def edit(filename=None):
     if filename:
