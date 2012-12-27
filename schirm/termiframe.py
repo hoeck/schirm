@@ -34,15 +34,16 @@ class Iframes(object):
             self._request_http(req)
         elif req.type == 'websocket' and 'upgrade' in req:
             # upgrade requests
-            logger.debug('iframe %(iframe_id)r websocket request %(id)r %(path)r ' %
-                         {'iframe_id':None,
-                          'id':req.id,
-                          'path':req.path})
 
             # extract path (iframe_id) from the websocket req path
             # (hint: depends whether using an external browser or the non-websocket-proxy gtkwebview) - only the latter is implemented right now
             m = re.match("/(?P<iframe_id>.+)", req.path)
             iframe_id = m.groups('iframe_id')[0] if m else None
+
+            logger.debug('iframe %(iframe_id)r websocket request %(id)r %(path)r ' %
+                         {'iframe_id':iframe_id,
+                          'id':req.id,
+                          'path':req.path})
 
             if iframe_id in self.iframes and req.get('path'):
                 # dispatch
@@ -57,7 +58,7 @@ class Iframes(object):
             self.iframe_websockets[req.id].websocket_request(req)
 
         else:
-            assert False
+            assert False # dont know how to deal with req
 
     def _request_http(self, req):
 
@@ -173,9 +174,17 @@ class Iframe(object):
         self.state = 'close'
 
     def iframe_leave(self):
-        # back to terminal mode:
-        # TODO: close open websockets
+        # back to terminal mode
+
+        # ensure the iframes document is closed (TODO: this rule
+        # should be implemented in the terminal emulator statemachine
+        # instead)
+        self.iframe_close()
+
         self.state = None
+        if self.websocket_req_id:
+            # close open websockets
+            self.terminal_ui.respond(self.websocket_req_id)
         return "term.iframeLeave();"
 
     def iframe_send(self, data):
