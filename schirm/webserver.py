@@ -156,7 +156,12 @@ class Server(object):
 
     @staticmethod
     def _close_conn(client):
-        client._sock.close()
+        try:
+            sock = client._sock
+            sock.shutdown(socket.SHUT_RDWR)
+            sock.close()
+        except:
+            pass
 
     # websockets
 
@@ -253,13 +258,17 @@ class Server(object):
 
     def _proxy_connect(self, req_id, req):
         # proxy connection established
-        if req.path == 'termframe.localhost:80': # TODO: proper path parsing!
+        # TODO: proper path parsing!
+        if (req.path in 'termframe.localhost:80' or
+            req.path in 'localhost:%s' % self.getport()):
             # TODO: locking
             client = self.requests[req_id]['client']
             client.sendall("HTTP/1.1 200 Connection established\r\n\r\n")
             # start reading the incoming data
             self.requests.pop(req_id)
             self.receive(client)
+        else:
+            logger.info('invalid connect path: %r' % req.path)
 
     def receive(self, client):
         """
@@ -286,7 +295,7 @@ class Server(object):
             data = None
 
         logger.info("%s - %s", req.command, req.path)
-        
+
         if req.command == 'CONNECT':
             # proxy connection (for websockets or https)
             self._proxy_connect(req_id, req)
@@ -362,13 +371,20 @@ class Server(object):
 
                 if close:
                     req['websocket'].close()
-        else:
+                    self.requests.pop(int(req.id))
+        elif close:
             with self._requests_lock:
                 req = self.requests.get(int(req_id), None)
-                logger.debug("responding to %s with 404" % req_id)
-                client = req['client']
-                client.sendall(self.make_status404())
-                self._close_conn(client)
+
+                if not req.get('opened'):
+                    self.respond_websocket_upgrade(req_id)
+                    req = self.requests.get(int(req_id), None)
+                    req['opened'] = True
+
+                req['websocket'].close()
+                self.requests.pop(int(req_id))
+        else:
+            pass
 
     def respond(self, req_id, data=None, close=True):
         req = self.requests.get(int(req_id))
