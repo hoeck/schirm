@@ -155,6 +155,15 @@ class Schirm(object):
         data = pkg_resources.resource_string('schirm.resources', path)
         self.respond(req_id, self.make_response(self.guess_type(path), data))
 
+    def respond_file(self, req_id, path):
+        if os.path.exists(path):
+            with open(path) as f:
+                data = f.read()
+            self.respond(req_id, self.make_response(self.guess_type(path), data))
+        else:
+            logger.warn('Cannot serve non-existing file: %r!' % path)
+            self.respond(req_id)
+
     def execute(self, src):
         if isinstance(src, basestring):
             js = [src]
@@ -201,6 +210,10 @@ class Schirm(object):
                                               % {'websocket_url': json.dumps(self.emulator.get_websocket_url(port=req.proxy_port,
                                                                                                              websocket_proxy_hack=self.websocket_proxy_hack))})
                     self.respond(req.id, resp)
+                elif path.startswith('/localfont/') and path.endswith('.ttf') or path.endswith('otf'):
+                    # serve font files to allow using any font in user.css via @font-face
+                    fontfile = path[len('/localfont'):]
+                    self.respond_file(req.id, fontfile)
                 elif self.inspect_iframes and path.startswith('/iframe/'):
                     # Ask for iframes content using the same domain
                     # as the main terminal frame to be able to debug

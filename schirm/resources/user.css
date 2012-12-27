@@ -88,3 +88,22 @@
 ::-webkit-scrollbar-thumb:window-inactive {
     background: rgba(230,230,230,0.8);
 }
+
+/* Example: using different fonts:
+@font-face {
+	font-family: BitstreamVeraSansMono;
+	src: url('localfont/usr/share/fonts/truetype/ttf-bitstream-vera/VeraMono.ttf');
+}
+
+@font-face {
+	font-family: BitstreamVeraSansMono;
+        font-weight: bold;
+	src: url('localfont/usr/share/fonts/truetype/ttf-bitstream-vera/VeraMoBd.ttf');
+}
+
+body {
+    font-family: BitstreamVeraSansMono;
+    color: #181818;
+    background-color: #F9FFE9
+}
+*/
