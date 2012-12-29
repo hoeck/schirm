@@ -218,8 +218,14 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
     // Return the size of a single character in the given PRE element
     var getCharSize = function(preElement) {
         var specimen = document.createElement("span");
-        specimen.innerHTML = "x";
+        specimen.innerHTML = "X";
         preElement.appendChild(specimen);
+
+        // gapsize between lines, required for an accurate lines
+        // computation, seems to depend on the selected font.
+        var gapSpecimen = document.createElement("span");
+        gapSpecimen.innerHTML = "X<br>X";
+        preElement.appendChild(gapSpecimen);
 
         var marginBorderHeight =
                 (window.getComputedStyle(specimen, 'margin-top').value || 0) +
@@ -233,22 +239,21 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
                 (window.getComputedStyle(specimen, 'border-right').value || 0) +
                 (window.getComputedStyle(specimen, 'margin-right').value || 0);
 
-        var size = {width: specimen.offsetWidth + marginBorderWidth,
-                    height: specimen.offsetHeight + marginBorderHeight};
+        var width = specimen.offsetWidth + marginBorderWidth;
+        var height = specimen.offsetHeight + marginBorderHeight;
+        var gap = gapSpecimen.offsetHeight + marginBorderHeight - (height * 2);
+
         preElement.removeChild(specimen);
-        return size;
+        preElement.removeChild(gapSpecimen);
+
+        return {width: width, height: height, gap: gap};
     };
 
     // Return the size in lines and columns of the terminals PRE element
     var getTermSize = function(preElement) {
         var blockSize = getCharSize(preElement);
         var cols  = Math.floor(document.body.clientWidth/blockSize.width);
-        // No idea why but the size reported by using offsetHeight in
-        // getCharSize needs to be decremented by one to get the *real* size
-        // of a char block in a pre element. Without this, the line
-        // calculation will be inaccurate for large windows and will lead to
-        // a few lines of trailing whitespace.
-        var lines = Math.floor(document.body.clientHeight/(blockSize.height - 1));
+        var lines = Math.floor(document.body.clientHeight/(blockSize.height + blockSize.gap));
 
         return { lines: lines, cols: cols };
     };
