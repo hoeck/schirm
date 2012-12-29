@@ -61,13 +61,6 @@
     border: solid 1px #ff00b0;
 }
 
-/* terminal appearance */
-
-.terminal-screen {
-    font-family: "DejaVu Sans Mono", "FreeMono", "Bitstream Vera Mono", monospaced;
-    font-size: 12px;
-}
-
 /* min scrollbar */
 
 body::-webkit-scrollbar {
