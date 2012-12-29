@@ -115,11 +115,10 @@ var schirm = (function(schirm) {
     schirm.GET  = function (uri, data, success) { request('GET', uri, data, success); };
     schirm.POST = function (uri, data, success) { request('POST', uri, data, success); };
 
-
     function getElementHeight(e) {
         var style = getComputedStyle(e);
         var margin = parseInt(style.marginTop) + parseInt(style.marginBottom);
-        return e.clientHeight + margin;
+        return Math.max(e.scrollHeight + e.clientHeight) + margin;
     }
 
     // ask the iframes parent to resize the current iframe
@@ -166,7 +165,15 @@ var schirm = (function(schirm) {
         window.addEventListener('resize', function() {
             schirm.resize(height);
         });
-    }
+    };
+
+    schirm.ready = function(f) {
+        document.addEventListener('readystatechange', function() {
+            if (document.readyState == "complete") {
+                f();
+            }
+        });
+    };
 
     // TODO:
     // websocket to communicate with the schirm process:

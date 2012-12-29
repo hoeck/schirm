@@ -7,10 +7,6 @@ import schirmclient as schirm
 
 style = """
 <style type="text/css">
-body {
-  overflow-y:hidden;
-  overflow-x:auto;
-}
 
 #content-img {
   -webkit-transition-property: all;
@@ -181,14 +177,7 @@ def render_text(text):
     print """
 <script type="text/javascript" src="schirm.js"></script>
 <script type="text/javascript">
-document.onreadystatechange = function() {
-    if (document.readyState == "complete") {
-      console.log("complete", document.body.clientHeight);
-      var bodyStyle = getComputedStyle(document.body);
-      var height = parseInt(bodyStyle.marginTop) + parseInt(bodyStyle.marginBottom) + document.body.scrollHeight;
-      schirm.resize(height);
-  }
-}
+schirm.ready(function() { schirm.resize(document.body); });
 </script>
 """
 
@@ -235,7 +224,6 @@ def main():
             schirm.close()
             if args.interactive:
                 wait_for_quit()
-                schirm.execute("quit()");
         else:
             render_text(buf)
 
