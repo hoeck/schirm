@@ -84,6 +84,7 @@ Missing Features/Defects
 Similar Programs
 ================
 
+- <https://github.com/mitotic/graphterm>: terminal emulator supporting HTML iframes and serving files, server written in Python
 - <https://github.com/breuleux/terminus>: terminal emulator allowing inline HTML and javascript
 - <https://github.com/unconed/TermKit>: not an emulator but a completely new terminal, built on WebKit and Node.js
 - <https://github.com/liftoff/GateOne>: HTML5 Terminal emulator
