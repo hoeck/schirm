@@ -70,22 +70,22 @@
 
 /* min scrollbar */
 
-::-webkit-scrollbar {
+body::-webkit-scrollbar {
     width: 6px;
 }
 
-::-webkit-scrollbar-track {
+body::-webkit-scrollbar-track {
     -webkit-border-radius: 1px;
     border-radius: 1px;
     background: rgba(245,245,245,0.8);
 }
 
-::-webkit-scrollbar-thumb {
+body::-webkit-scrollbar-thumb {
     -webkit-border-radius: 1px;
     border-radius: 1px;
     background: rgba(180,180,180,0.8);
 
-::-webkit-scrollbar-thumb:window-inactive {
+body::-webkit-scrollbar-thumb:window-inactive {
     background: rgba(230,230,230,0.8);
 }
 
