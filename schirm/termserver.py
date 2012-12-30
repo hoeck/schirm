@@ -20,16 +20,16 @@ def start_chromium(proxy_port):
     commands = ['chromium-browser', 'google-chrome']
     available = filter(is_available, commands)
 
+    # use a process group to kill all the browsers processes at
+    # once on exit
+    os.setpgid(os.getpid(), os.getpid())
+
     if available:
         cmd = available[0]
         args = ['--temp-profile', # temp-profile must come first!
                 '--proxy-server=localhost:%s' % proxy_port,
                 '--app=http://termframe.localhost/term.html']
-        p = subprocess.Popen([cmd] + args)
-        # use a process group to kill all the browsers processes at
-        # once on exit
-        os.setpgid(p.pid, os.getpid())
-        return p
+        return subprocess.Popen([cmd] + args)
     else:
         raise Exception("No suitable browser found!")
 
