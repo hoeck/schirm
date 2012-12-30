@@ -96,6 +96,7 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
         39: 'Right',
         40: 'Down',
 
+        32: 'Space',
         8:  'BackSpace',
         9:  'Tab',
         13: 'Enter',
@@ -148,6 +149,10 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
 
         // use the browser search
         'control-f':  function() { return false; },
+
+        // browsers have space and shift-space bound to scroll page down/up
+        'space': function() { self.send({cmd:'keypress', key:{string: ' '}}); return true; },
+        'shift-space': function() { self.send({cmd:'keypress', key:{string:' ', shift:true}}); return true; }
     }
 
     var handleKeyDown = function(key) {
