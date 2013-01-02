@@ -163,10 +163,10 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
             return handler();
         }
 
-        // catch control-* sequences
+        // catch (control|alt)-* sequences
         var asciiA = 65;
         var asciiZ = 90;
-        if (key.control && (key.code >= asciiA) && (key.code <= asciiZ)) {
+        if ((key.control || key.alt) && (key.code >= asciiA) && (key.code <= asciiZ)) {
             key.name = String.fromCharCode(key.code);
             self.send({cmd:'keypress', key:key});
             return true;

@@ -149,7 +149,13 @@ def map_key(keyname, modifiers, screen_mode=False):
 
     else:
         shift, alt, control = modifiers
+
         if control and keyname:
-            return control_key_code(keyname.upper())
+            key = control_key_code(keyname.upper())
         else:
-            return keyname
+            key = keyname
+
+        if alt and key:
+            return '\x1b' + key
+        else:
+            return key
