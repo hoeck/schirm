@@ -19,15 +19,22 @@
 from UserList import UserList
 from StringIO import StringIO
 import codecs
-import base64
 import logging
 import pkg_resources
+import re
 
 import pyte
 from pyte.screens import Char, Margins, Cursor
 from pyte import modes as mo, graphics as g, charsets as cs, control as ctrl
 
 logger = logging.getLogger(__name__)
+
+# id for the iframe modes:
+# ``ESC [ ?`` <mode-id> ( ``;`` <arg> )* ``h``
+# all writes go to an iframe
+IFRAME_DOCUMENT_MODE_ID = 5151
+# cgi-like interface to respond to a previous iframes http requests
+IFRAME_RESPONSE_MODE_ID = 5152
 
 # create an explicit interface to Lines and the seq of Lines to be
 # able to create better js dom-update instructions
@@ -432,47 +439,62 @@ class LineContainer(): # lazy
 
     ## iframe events, not directly line-based
 
-    def iframe_write(self, iframe_id, data):
-        self.events.append(('iframe_write', iframe_id, data))
+    # mode messages
 
-    def iframe_register_resource(self, iframe_id, name, mimetype, data):
-        self.events.append(('iframe_register_resource', iframe_id, name, mimetype, data))
-
-    def iframe_respond(self, iframe_id, req_id, data):
-        self.events.append(('iframe_respond', iframe_id, req_id, data))
-
-    def iframe_debug(self, iframe_id, data):
-        self.events.append(('iframe_debug', iframe_id, data))
-
-    def iframe_close(self, iframe_id):
-        self.events.append(('iframe_close', iframe_id))
+    #   <plain terminal mode>
+    # enter -> 'document'
+    #   <write document>
+    #   <provide static resources>
+    # close -> 'response'
+    #   <responses>
+    # leave -> None
+    #   <plain terminal mode>
 
     def iframe_enter(self, iframe_id):
         self.events.append(('iframe_enter', iframe_id))
 
+    def iframe_close(self, iframe_id):
+        self.events.append(('iframe_close', iframe_id))
+
     def iframe_leave(self, iframe_id):
         self.events.append(('iframe_leave', iframe_id))
 
-    def iframe_send(self, iframe_id, data):
+    # sending data
+
+    def iframe_write(self, iframe_id, data):
+        self.events.append(('iframe_write', iframe_id, data))
+
+    def iframe_string(self, iframe_id, data):
         self.events.append(('iframe_send', iframe_id, data))
 
     def iframe_resize(self, iframe_id, height):
         self.events.append(('iframe_resize', iframe_id, height))
 
-    # embedded terminals
+    # obsolete:
 
-    def iframe_terminal_create(self, iframe_id, terminal_id):
-        # Create an embedded terminal for the given iframe using the
-        # given terminal_id as a handle in terminal_writes and
-        # terminal_responses.
-        # Free the used terminal responses when the iframe closes.
+    # def iframe_register_resource(self, iframe_id, name, mimetype, data):
+    #     self.events.append(('iframe_register_resource', iframe_id, name, mimetype, data))
+    #
+    # def iframe_respond(self, iframe_id, req_id, data):
+    #     self.events.append(('iframe_respond', iframe_id, req_id, data))
+    #
+    # def iframe_debug(self, iframe_id, data):
+    #     self.events.append(('iframe_debug', iframe_id, data))
 
-        # self._iframe_id()
-        # self._embedded_terminals = self.__init__
-        self.events.append(('iframe_terminal_create', iframe_id, terminal_id))
+    # embedded terminals: TODO
 
-    def iframe_terminal_write(self, iframe_id, terminal_id, data):
-        self.events.append(('iframe_terminal_write', iframe_id, terminal_id, data))
+    # def iframe_terminal_create(self, iframe_id, terminal_id):
+    #     # Create an embedded terminal for the given iframe using the
+    #     # given terminal_id as a handle in terminal_writes and
+    #     # terminal_responses.
+    #     # Free the used terminal responses when the iframe closes.
+    #
+    #     # self._iframe_id()
+    #     # self._embedded_terminals = self.__init__
+    #     self.events.append(('iframe_terminal_create', iframe_id, terminal_id))
+    #
+    # def iframe_terminal_write(self, iframe_id, terminal_id, data):
+    #     self.events.append(('iframe_terminal_write', iframe_id, terminal_id, data))
 
     # example usage
     # with schirmclient.iframe():
@@ -609,6 +631,18 @@ class TermScreen(pyte.Screen):
         :param list modes: modes to set, where each mode is a constant
                            from :mod:`pyte.modes`.
         """
+
+        mode_id = (modes[:1] or [None])[0]
+        if mode_id in (IFRAME_DOCUMENT_MODE_ID, IFRAME_RESPONSE_MODE_ID) \
+                and kwargs.get('private'):
+            cookie = ';'.join(map(str,modes[1:]))
+            # Need the cookie to prove that the request comes from a
+            # real program, an not just by 'cat'-ing some file.
+            # Javascript in iframes will only be activated with a
+            # valid cookie.
+            self.iframe_set_mode(mode_id, cookie)
+            return
+
         # Private mode codes are shifted, to be distingiushed from non
         # private ones.
         if kwargs.get("private"):
@@ -654,7 +688,19 @@ class TermScreen(pyte.Screen):
         :param list modes: modes to reset -- hopefully, each mode is a
                            constant from :mod:`pyte.modes`.
         """
-        # Private mode codes are shifted, to be distingiushed from non
+
+        mode_id = (modes[:1] or [None])[0]
+        if mode_id in (IFRAME_DOCUMENT_MODE_ID, IFRAME_RESPONSE_MODE_ID) \
+                and kwargs.get('private'):
+            cookie = ';'.join(map(str,modes[1:]))
+            # Need the cookie to prove that the request comes from a
+            # real program, an not just by 'cat'-ing some file.
+            # Javascript in iframes will only be activated with a
+            # valid cookie.
+            self.iframe_reset_mode(mode_id, cookie)
+            return
+
+        # Private mode codes aree shifted, to be distingiushed from non
         # private ones.
         if kwargs.get("private"):
             modes = [mode << 5 for mode in modes]
@@ -682,46 +728,48 @@ class TermScreen(pyte.Screen):
         if mo.DECTCEM in modes:
             self.cursor.hidden = True
 
-    def draw(self, char):
-        """Display a character at the current cursor position and advance
-        the cursor if :data:`~pyte.modes.DECAWM` is set.
-
-        :param unicode char: a character to display.
-        """
-        # Translating a given character.
-        if self.charset != 0 and 0: # commented out
-            # somehow, the latin 1 encoding done here is wrong,
-            # json.dumps does not correctly convert the resulting
-            # string
-            char = char.translate([self.g0_charset,
-                                   self.g1_charset][self.charset])
-
-        # If this was the last column in a line and auto wrap mode is
-        # enabled, move the cursor to the next line. Otherwise replace
-        # characters already displayed with newly entered.
-        if self.cursor.x == self.columns:
-            if mo.DECAWM in self.mode:
-                self.linefeed()
-            else:
-                self.cursor.x -= 1
-
-        # Drawing on an IframeLine reverts it to a plain text Line.
-        if isinstance(self.linecontainer[self.cursor.y], IframeLine):
-            self.linecontainer[self.cursor.y] = self._create_line()
-
-        # If Insert mode is set, new characters move old characters to
-        # the right, otherwise terminal is in Replace mode and new
-        # characters replace old characters at cursor position.
-        if mo.IRM in self.mode:
-            self.insert_characters(1)
-
-        self.linecontainer[self.cursor.y] \
-            .replace_character(self.cursor.x,
-                               self.cursor.attrs._replace(data=char))
-
-        # .. note:: We can't use :meth:`cursor_forward()`, because that
-        #           way, we'll never know when to linefeed.
-        self.cursor.x += 1
+    # def draw(self, char):
+    #     """Display a character at the current cursor position and advance
+    #     the cursor if :data:`~pyte.modes.DECAWM` is set.
+    #
+    #     :param unicode char: a single character or string to display.
+    #     """
+    #
+    #
+    #     # Translating a given character.
+    #     if self.charset != 0 and 0: # commented out
+    #         # somehow, the latin 1 encoding done here is wrong,
+    #         # json.dumps does not correctly convert the resulting
+    #         # string
+    #         char = char.translate([self.g0_charset,
+    #                                self.g1_charset][self.charset])
+    #
+    #     # If this was the last column in a line and auto wrap mode is
+    #     # enabled, move the cursor to the next line. Otherwise replace
+    #     # characters already displayed with newly entered.
+    #     if self.cursor.x == self.columns:
+    #         if mo.DECAWM in self.mode:
+    #             self.linefeed()
+    #         else:
+    #             self.cursor.x -= 1
+    #
+    #     # Drawing on an IframeLine reverts it to a plain text Line.
+    #     if isinstance(self.linecontainer[self.cursor.y], IframeLine):
+    #         self.linecontainer[self.cursor.y] = self._create_line()
+    #
+    #     # If Insert mode is set, new characters move old characters to
+    #     # the right, otherwise terminal is in Replace mode and new
+    #     # characters replace old characters at cursor position.
+    #     if mo.IRM in self.mode:
+    #         self.insert_characters(1)
+    #
+    #     self.linecontainer[self.cursor.y] \
+    #         .replace_character(self.cursor.x,
+    #                            self.cursor.attrs._replace(data=char))
+    #
+    #     # .. note:: We can't use :meth:`cursor_forward()`, because that
+    #     #           way, we'll never know when to linefeed.
+    #     self.cursor.x += 1
 
     def draw_string(self, string):
         """Like draw, but for a whole string at once."""
@@ -733,38 +781,47 @@ class TermScreen(pyte.Screen):
                                     #[self.cursor.attrs._replace(data=ch) for ch in s])
                                     [Char(ch, *cur_attrs) for ch in s])
 
-        if mo.IRM in self.mode:
-            # move existing chars to the right before inserting string
-            # (no wrapping)
-            self.insert_characters(len(string))
-            _write_string(reversed(string[-(self.columns - self.cursor.x):]))
+        # iframe mode? just write the string
+        if self.iframe_mode:
+            if self.iframe_mode == 'document':
+                self.linecontainer.iframe_write(self.iframe_id, s)
+            else:
+                # ignore all writes to closed documents:
+                # those are echo writes of input to the terminal
+                pass
+        else:
+            if mo.IRM in self.mode:
+                # move existing chars to the right before inserting string
+                # (no wrapping)
+                self.insert_characters(len(string))
+                _write_string(reversed(string[-(self.columns - self.cursor.x):]))
 
-        elif mo.DECAWM in self.mode:
-            # Auto Wrap Mode
-            # all chars up to the end of the current line
-            line_end = self.columns-self.cursor.x
-            s = string[:line_end]
-            _write_string(s)
-            self.cursor.x += len(s)
-            # remaining chars will be written on subsequent lines
-            i = 0
-            while len(string) > (line_end+(i*self.columns)):
-                self.linefeed()
-                s = string[line_end+(i*self.columns):line_end+((i+1)*self.columns)]
+            elif mo.DECAWM in self.mode:
+                # Auto Wrap Mode
+                # all chars up to the end of the current line
+                line_end = self.columns-self.cursor.x
+                s = string[:line_end]
                 _write_string(s)
                 self.cursor.x += len(s)
-                i += 1
+                # remaining chars will be written on subsequent lines
+                i = 0
+                while len(string) > (line_end+(i*self.columns)):
+                    self.linefeed()
+                    s = string[line_end+(i*self.columns):line_end+((i+1)*self.columns)]
+                    _write_string(s)
+                    self.cursor.x += len(s)
+                    i += 1
 
-        else:
-            # no overwrap, just replace the last old char if string
-            # will draw over the end of the current line
-            line_end = self.columns-self.cursor.x
-            if len(string) > line_end:
-                s = string[:line_end-1] + string[-1]
             else:
-                s = string
-            _write_string(s)
-            self.cursor.x += len(s)
+                # no overwrap, just replace the last old char if string
+                # will draw over the end of the current line
+                line_end = self.columns-self.cursor.x
+                if len(string) > line_end:
+                    s = string[:line_end-1] + string[-1]
+                else:
+                    s = string
+                _write_string(s)
+                self.cursor.x += len(s)
 
     def index(self):
         """Move the cursor down one line in the same column. If the
@@ -948,6 +1005,16 @@ class TermScreen(pyte.Screen):
 
         self.linecontainer.purge_empty_lines()
 
+    def string(self, string):
+        if self.iframe_mode:
+            header, body = self.parse_string_request(string)
+            self.linecontainer.iframe_request(header, body)
+            # in document mode -> 'register resource'
+            # in request mode -> response
+        else:
+            # ignore strings (xterm behaviour) in plain terminal mode
+            self.draw_string(string)
+
     ## cutting the terminal scrollback
 
     def remove_history(self, lines):
@@ -956,82 +1023,76 @@ class TermScreen(pyte.Screen):
 
     ## xterm title hack
 
-    def os_command(self, command_id, data):
-        if command_id == 0:
-            self.linecontainer.set_title(data)
+    def os_command(self, string):
+        res = (string or '').split(';', 1)
+        if len(res) == 2:
+            command_id, data = res
+            if command_id == '0':
+                self.linecontainer.set_title(data)
 
     ## iframe extensions
 
-    def next_iframe_id(self):
+    def _next_iframe_id(self):
         self.iframe_id = str(int(self.iframe_id or 0) + 1)
         return self.iframe_id
 
-    def iframe_enter(self, *args):
-        # replace the current line with an iframe line at the current
-        # cursor position (like self.index())
-        # all following chars are written to that frame via
-        # iframe.document.write
-        # TODO: replace document.open/write/close by writing all chars
-        #       to this iframe using an http connection
-        # For arguments, see IframeLine
+    def _insert_iframe_line(self):
+        iframe_id = self.next_iframe_id()
+        self.linecontainer.iframe_enter(iframe_id)
+        self.linecontainer[self.cursor.y] = IframeLine(iframe_id, None)
 
-        if self.iframe_mode == None:
-            iframe_id = self.next_iframe_id()
-            self.linecontainer.iframe_enter(iframe_id)
-            self.linecontainer[self.cursor.y] = IframeLine(iframe_id, args)
-            self.iframe_mode = 'open' # iframe document opened
-        elif self.iframe_mode == 'closed':
-            self.iframe_mode = 'open'
-        elif self.iframe_mode == 'open':
-            pass
-        else:
-            raise Exception("Illegal iframe_mode: '{}'".format(self.iframe_mode))
-
-    def iframe_leave(self):
-        self.linecontainer.iframe_leave(self.iframe_id)
-        self.iframe_mode = None
-
-    def iframe_write(self, s):
-        if self.iframe_mode == 'open':
-            self.linecontainer.iframe_write(self.iframe_id, s)
-        else:
-            # ignore all writes to closed documents:
-            # those are echo writes of input to the terminal
-            pass
-
-    def iframe_close(self):
+    def _iframe_close_document(self):
         # add some html to the iframe document for registering ctr-c and ctrl-d key handlers
         iframe_close_snippet = pkg_resources.resource_string('schirm.resources', 'iframe_close_snippet.html')
         self.linecontainer.iframe_write(self.iframe_id, iframe_close_snippet)
-
         self.linecontainer.iframe_close(self.iframe_id)
-        self.iframe_mode = 'closed'
 
-    def iframe_register_resource(self, name_b64, mimetype_b64, data_b64):
-        name = base64.b64decode(name_b64)
-        data = base64.b64decode(data_b64)
-        mimetype = base64.b64decode(mimetype_b64)
-        self.linecontainer.iframe_register_resource(self.iframe_id, name, mimetype, data)
+    def iframe_set_mode(self, mode_id, cookie):
+        if mode_id == IFRAME_DOCUMENT_MODE_ID:
+            # replace the current line with an iframe line at the current
+            # cursor position (like self.index())
+            # all following chars are written to the iframes root document connection
+            if self.iframe_mode == None:
+                self.iframe_mode = 'document'
+                self._insert_iframe_line()
+            elif self.iframe_mode == 'response':
+                self.iframe_mode = 'document'
+            elif self.iframe_mode == 'document':
+                pass
+            else:
+                assert False # Illegal Iframe Mode
 
-    def iframe_respond(self, request_id, data_b64):
-        """Respond to the request identified by request_id.
+        elif mode_id == IFRAME_RESPONSE_MODE_ID:
+            if self.iframe_mode == 'document':
+                self.iframe_mode = 'response'
+                self._iframe_close_document()
+            elif self.iframe_mode == 'response':
+                pass
+            elif self.iframe_mode == None:
+                # TODO: insert the iframe and directly switch into
+                # response mode, use '/' as the path for the iframe.
+                assert False # TODO
+            else:
+                assert False # unknown iframe mode
 
-        data_b64 is the full, base64 encoded response data, including
-        HTTP status line, headers and data.
-        """
-        data = base64.b64decode(data_b64)
-        self.linecontainer.iframe_respond(self.iframe_id, request_id, data)
+        else:
+            assert False # unknown mode_id
 
-    def iframe_debug(self, b64_debugmsg):
-        """
-        Write a string to sys stdout of the emulator process.
-        """
-        data = base64.b64decode(b64_debugmsg)
-        self.linecontainer.iframe_debug(self.iframe_id, data)
-
-    def iframe_send(self, b64_data):
-        data = base64.b64decode(b64_data)
-        self.linecontainer.iframe_send(self.iframe_id, data)
+    def iframe_reset_mode(self, mode_id, cookie):
+        if mode_id in (IFRAME_DOCUMENT_MODE_ID, IFRAME_RESPONSE_MODE_ID):
+            # always reset the iframe mode, regardless of the exact mode id
+            if self.iframe_mode == 'document':
+                self._iframe_close_document()
+                self.linecontainer.iframe_leave(self.iframe_id)
+                self.iframe_mode = None
+            elif self.iframe_mode == 'response':
+                self.linecontainer.iframe_leave(self.iframe_id)
+                self.iframe_mode = None
+            else:
+                # not in iframe mode - ignore
+                pass
+        else:
+            assert False # unknown mode_id
 
     def close_stream(self):
         # just hand of the event to the linecontainer
@@ -1040,16 +1101,7 @@ class TermScreen(pyte.Screen):
 
 class SchirmStream(pyte.Stream):
 
-    def __init__(self, *args, **kwargs):
-        super(SchirmStream, self).__init__(*args, **kwargs)
-        self.handlers.update({
-                'iframe_write': self._iframe_write,
-                'iframe_data': self._iframe_data,
-                'iframe_data_esc': self._iframe_data_esc,
-                'iframe_esc': self._iframe_esc,
-                'escape': self._escape,
-                })
-        self._draw_buffer = []
+    """An optimized (for the usage in this project) verison pyte.Stream."""
 
     def close(self):
         """Mark the stream as closed.
@@ -1059,44 +1111,51 @@ class SchirmStream(pyte.Stream):
         """
         self.dispatch('close_stream')
 
+    stream_esc_pattern = re.compile('|'.join(re.escape(chr(x)) for x in range(32)))
     def feed(self, bytes):
-        """
+        """Perf-optimized feed function.
+
         Like feed() but directly use a stream and do not return until
         everything has been read.
+
+        Work in chunks and try to use python functions to capture
+        huge, escape-less substrings without having to go through the
+        state-machinery (avoiding the function call overhead).
         """
-        chunksize = 8192
+        string_chunksize = 8192
+        stream_chunksize = 128
         src = bytes.decode('utf-8', 'ignore')
         i = 0
         l = len(src)
         while i < l:
-            if self.state == 'iframe_data':
-                # shortcut for iframe data to be able to
-                # transmit large requests faster
-                chunk = src[i:i+chunksize]
-                esc_idx = chunk.find("\033")
+            if self.state == 'string':
+                # read data fast
+                # TODO: call find directly on src and do not create a chunk
+                chunk = src[i:i+string_chunksize]
+                esc_idx = chunk.find(ctrl.ESC)
                 if esc_idx == -1:
-                    # no escape commands in chunk, just lots of b64 data
+                    # fast route: chunk is clean and can be appended
+                    # to the current string immediately
                     self.current.append(chunk)
-                    i += chunksize
+                    i += string_chunksize
                 else:
-                    # fallback to normal state machine
+                    # fallback: only the first chars up to esc_idx are clean
+                    # use the to normal state machine to parse the remaining string
                     self.current.append(chunk[:esc_idx])
                     i += esc_idx
                     self.consume(src[i])
                     i += 1
-            elif self.state == 'iframe_write':
-                # short-circuit the state machine for iframe_writes
-                chunk = src[i:i+chunksize]
-                esc_idx = chunk.find("\033")
-                if esc_idx == -1:
-                    # no escape commands in chunk
-                    self._iframe_write(chunk)
-                    i += chunksize
+            elif self.state == 'stream':
+                chunk = src[i:i+stream_chunksize]
+                # TODO: do not create a chunk and call search directly on src
+                m = self.stream_esc_pattern.search(chunk)
+                if not m:
+                    # fast route
+                    self.dispatch("draw_string", chunk)
+                    i += stream_chunksize
                 else:
-                    # write the escape-free chars
-                    self._iframe_write(chunk[:esc_idx])
-                    # and continue parsing the rest
-                    i += esc_idx
+                    self.dispatch("draw_string", chunk[:m.start()])
+                    i += m.start()
                     self.consume(src[i])
                     i += 1
             else:
@@ -1106,10 +1165,10 @@ class SchirmStream(pyte.Stream):
                     i += 1
                 else:
                     break
-        self._flush_draw()
+        #self._flush_draw()
 
     def consume(self, char):
-        # same as super(SchirmStream, self).consume(char) bit without
+        # same as super(SchirmStream, self).consume(char) but without
         # the unicode enforcement
         try:
             self.handlers.get(self.state)(char)
@@ -1139,106 +1198,5 @@ class SchirmStream(pyte.Stream):
                     listener.__after__(event)
 
             if kwargs.get("reset", True): self.reset()
-            if kwargs.get("iframe", False): self.state = 'iframe_write'
         else:
             logger.error("no listener set")
-
-
-    # State transformers.
-    # ...................
-
-    def _flush_draw(self):
-        if self._draw_buffer:
-            self.dispatch('draw_string', "".join(self._draw_buffer))
-            self._draw_buffer = []
-
-    def _buf_draw(self, char):
-        self._draw_buffer.append(char)
-
-    def _stream(self, char):
-        """Process a character when in the default ``"stream"`` state."""
-        if char in self.basic:
-            self._flush_draw()
-            self.dispatch(self.basic[char])
-        elif char == ctrl.ESC:
-            self._flush_draw()
-            self.state = "escape"
-        elif char == ctrl.CSI:
-            self._flush_draw()
-            self.state = "arguments"
-        elif char not in [ctrl.NUL, ctrl.DEL]:
-            #self.dispatch("draw", char)
-            self._buf_draw(char)
-
-    # - ESC x leave iframe mode, interpreted at any time, ignored when
-    #   not in iframe mode
-    # - ESC R register-resource ESC ; <base64-encoded-resource-name> ESC ; <b64-encoded-mimetype> ESC ; <b64-encoded-data> ESC Q
-    #   Register a given resource to be served to the webkit view upon
-    #   request. Content-Type is determined by examining name (a file name).
-    def _escape(self, char, **kwargs):
-        """Like pyte.Stream._escape, but additionally capture all
-        iframe commands: ESC R *args.
-        """
-        if char == "R":
-            self.state = "iframe_data" # go read a list of strings
-            self.current = []
-        elif char == 'x':
-            # leave iframe mode immediately/ignore this command
-            self.dispatch('iframe_leave')
-        else:
-            super(SchirmStream, self)._escape(char)
-
-    def _iframe_esc(self, char):
-        if char == "R": # read a command
-            self.state = 'iframe_data'
-            self.current = []
-        elif char == 'x':
-            self.dispatch('iframe_leave')
-        elif char == "\033":
-            self.dispatch('iframe_write', "\033", iframe=True)
-        else:
-            # leave the iframe mode on invalid commands
-            logger.debug("Invalid Iframe Mode Command: ESC {} ({})".format(char, ord(char)))
-            self.dispatch('iframe_leave')
-
-    def _iframe_data(self, char):
-        """Decode an iframe command. These start with ESC R followed
-           by a name followed by b64 argument data (may be empty)
-           followed by ESC ; for more arguments or ESC Q to end the
-           iframe command.
-        """
-        if char == '\033':
-            self.state = "iframe_data_esc"
-        else:
-            self.current.append(char)
-
-    def _iframe_data_esc(self, char):
-        if char == ";":
-            # read another argument
-            self.params.append("".join(self.current))
-            self.current = []
-            self.state = 'iframe_data'
-        elif char == "x":
-            # immediately leave iframe mode and ignore the current
-            # command
-            self.dispatch('iframe_leave')
-        elif char == "Q":
-            # end parameter transmission and dispatch
-            self.params.append("".join(self.current))
-            # todo: check for valid commands
-            cmd = "iframe_{}".format(self.params[0])
-            args = self.params[1:]
-            self.current = []
-            self.dispatch(cmd, *args, iframe=True)
-        else:
-            logger.debug("Unknown escape sequence in iframe data: ESC-{}".format(repr(char)))
-
-    def _iframe_write(self, char):
-        """Read a normal char or string and write it to an iframe
-        using document.write().  Advance state to 'escape' if an ESC
-        is found.
-        """
-        if char == "\033":
-            self.state = 'iframe_esc'
-        else:
-            self.dispatch('iframe_write', char, iframe=True)

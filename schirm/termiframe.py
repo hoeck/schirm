@@ -4,6 +4,7 @@ import urlparse
 import logging
 import base64
 import pkg_resources
+import email.parser
 
 import htmlterm
 
@@ -96,6 +97,7 @@ class Iframes(object):
         args = event[2:]
 
         if name == 'iframe_enter':
+            # create a new iframe, switch terminal into 'iframe_document_mode'
             logger.debug("iframe_enter %r", event)
             self.iframes[iframe_id] = Iframe(iframe_id, self.terminal_io, self.terminal_ui)
         else:
@@ -156,7 +158,7 @@ class Iframe(object):
     # iframe terminal methods
 
     def iframe_resize(self, height):
-        print "iframe_resize", height
+        logger.debug("iframe_resize", height)
         # send some js to the terminal hosting this iframe
         self.terminal_ui.execute(htmlterm.Events.iframe_resize(self.id, height))
 
@@ -196,23 +198,77 @@ class Iframe(object):
         else:
             self.pre_open_queue.append(data)
 
-    def iframe_register_resource(self, name, mimetype, data):
+    def _register_resource(self, name, mimetype, data):
         """Add a static resource name to be served.
 
         Use the resources name to guess an appropriate Content-Type if
         no mimetype is provided.
         """
-        if not name.startswith("/"):
+        if not name.strip().startswith("/"):
             name = "/" + name
+
         self.resources[name] = self.terminal_ui.make_response(mimetype or self.terminal_ui.guess_type(name), data)
 
-    def iframe_respond(self, req_id, data):
+    def _respond(self, header, body):
         # todo: test that req_id indeed belongs to a request
-        # originating from ths iframe
-        self.terminal_ui.respond(req_id, data)
+        # originating from this iframe
 
-    def iframe_debug(self, msg):
+        m = Message()
+        for k,v in header:
+            m[k] = v
+        m.set_payload(body)
+        self.terminal_ui.respond(header.get('x-schirm-request-id'), m.as_string())
+
+    def _debug(self, msg):
+        # todo: this should go directly somewhere into the terminal
+        # window like other schirm error messages
         print msg
+
+    def _parse_string_request(self, data):
+        # the request
+        if data.lstrip().startswith("{"):
+            # JSON + body string
+            header_end_pos = data.find("\n\n")
+            if header_end_pos > 0:
+                try:
+                    header = json.loads(data[:header_end_pos])
+                except ValueError, e:
+                    logger.debug("Error while parsing JSON header in iframe %s:\n%s" % (self.iframe_id, str(e)))
+                    header = {}
+            else:
+                header = {}
+
+            return header, data[header_end_pos+1:]
+
+        else:
+            # RFC 821 Message
+            fp = email.parser.FeedParser()
+            fp.parse(data)
+            m = fp.close()
+            return dict(m.items()), m.get_payload()
+
+    def iframe_string(self, data):
+        # decode a string request, interpret it according to the current state
+        header, raw_body = self._parse_string_request(data)
+        body = base64.b64decode(raw_body)
+
+        # valid headers:
+        # x-schirm-url .. url for static resources
+        # x-schirm-request-id .. request id to identify the response
+        # x-schirm-send .. send this string or the body via the schirm websocket
+        # x-schirm-debug .. write this string or the body to the emulators process stdout
+        if 'x-schirm-url' in header:
+            self._register_resource(name=header['x-schirm-url'],
+                                    mimetype=header.get('content-type'),
+                                    data=body)
+        elif 'x-schirm-request-id' in header:
+            self._respond(header, body)
+        elif 'x-schirm-send' in header:
+            self._send(header['x-schirm-send'] or body)
+        elif 'x-schirm-debug' in header:
+            self._debug(header['x-schirm-debug'] or body)
+        else:
+            self._unknown(data)
 
     # methods called by terminal_ui to respond to http requests to the iframes subdomain ???
     def request(self, req):
