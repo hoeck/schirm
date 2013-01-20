@@ -60,5 +60,15 @@ ESC = "\u001b"
 #: *Delete*: Is ingored.
 DEL = "\u007f"
 
-#: *Control sequence introducer*: An equavalent for ``ESC [``.
-CSI = "\u009b"
+## 8 bit
+# #: *Control sequence introducer*: An equivalent for ``ESC [``.
+# CSI = "\u009b"
+#
+# #: *Operating System Command*: An equivalent for ``ESC ]``.
+# OSC = "\u009d"
+#
+# #: *String Terminator*: An equivalent for ``ESC \``
+# ST = "\u009c"
+#
+# #: *Start Of String*: An equivalent for ``ESC X``
+# SOS = "\u0098"

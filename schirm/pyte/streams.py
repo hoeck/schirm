@@ -108,8 +108,6 @@ class Stream(object):
         esc.SGR: "select_graphic_rendition",
         esc.DECSTBM: "set_margins",
         esc.HPA: "cursor_to_column",
-        esc.ST: "os_command",
-        esc.BEL: "os_command",
         esc.DECSTR: "soft_reset",
     }
 
@@ -120,7 +118,8 @@ class Stream(object):
             "arguments": self._arguments,
             "sharp": self._sharp,
             "charset": self._charset,
-            "oscommand": self._oscommand
+            "oscommand": self._oscommand,
+            "string": self._string,
         }
 
         self.listeners = []
@@ -231,8 +230,8 @@ class Stream(object):
             self.dispatch(self.basic[char])
         elif char == ctrl.ESC:
             self.state = "escape"
-        elif char == ctrl.CSI:
-            self.state = "arguments"
+        elif char == ctrl.OSC:
+            self.state = "oscommand"
         elif char not in [ctrl.NUL, ctrl.DEL]:
             self.dispatch("draw", char)
 
@@ -253,6 +252,8 @@ class Stream(object):
             self.flags["mode"] = char
         elif char == "]":
             self.state = "oscommand"
+        elif char == "X":
+            self.state = "string"
         else:
             self.dispatch(self.escape[char])
 
@@ -307,23 +308,29 @@ class Stream(object):
                 self.dispatch(self.csi[char], *self.params)
 
     def _oscommand(self, char):
-        """Parse arguments of an Operating System Command.
-        ESC ] n ; <txt> <ST or BEL>
-        """
-        numparam = len(self.params) and isinstance(self.params[0], int)
-        if numparam:
-            if char == esc.ST or char == esc.BEL:
-                self.params.append(self.current)
-                self.dispatch(self.csi[char], *self.params)
-            else:
-                self.current += char
-        else:
-            if char == ";":
-                self.params.append(min(int(self.current or 0), 9999))
-                self.current = ""
-            else:
-                self.current += char
+        """Parse the string of an Operating System Command.
 
+        OSC starts with ``ESC ]``, followed by a string, terminated with ST or BEL.
+
+        For xterm and compatible terminal emulators, the string
+        contains: <number>;<string> and use used to set the title and
+        icon of the xterm window.
+        """
+        # TODO: obey CAN & SUB to abort the os command sequence?
+        if char == ctrl.BEL:
+            self.dispatch('os_command', self.current)
+        elif self.current and self.current[-1] == ctrl.ESC and char == '\\': # ST
+            self.dispatch('os_command', self.current)
+        else:
+            self.current += char
+
+    def _string(self, char):
+        """Parse the string of a SOS - ST escape sequence."""
+        # TODO: obey CAN & SUB to abort the string sequence?
+        if self.current[-1] == ctrl.ESC and char == '\\': # ST
+            self.dispatch('string', ''.join(self.current))
+        else:
+            self.current.append(char)
 
 class ByteStream(Stream):
     """A stream, which takes bytes strings (instead of unicode) as input
