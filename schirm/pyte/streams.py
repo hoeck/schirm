@@ -120,6 +120,7 @@ class Stream(object):
             "charset": self._charset,
             "oscommand": self._oscommand,
             "string": self._string,
+            "string_escape": self._string_escape,
         }
 
         self.listeners = []
@@ -254,6 +255,7 @@ class Stream(object):
             self.state = "oscommand"
         elif char == "X":
             self.state = "string"
+            self.current = [] # list of characters
         else:
             self.dispatch(self.escape[char])
 
@@ -326,11 +328,19 @@ class Stream(object):
 
     def _string(self, char):
         """Parse the string of a SOS - ST escape sequence."""
-        # TODO: obey CAN & SUB to abort the string sequence?
-        if self.current[-1] == ctrl.ESC and char == '\\': # ST
-            self.dispatch('string', ''.join(self.current))
+        if char == ctrl.ESC:
+            self.state = 'string_escape'
         else:
             self.current.append(char)
+
+    def _string_escape(self, char):
+        """Process char in string escape mode."""
+        # TODO: obey CAN & SUB to abort the string sequence?
+        if char == '\\': # ST
+            self.dispatch('string', ''.join(self.current), reset=True)
+        else:
+            self.current.append(char)
+            self.state == 'string'
 
 class ByteStream(Stream):
     """A stream, which takes bytes strings (instead of unicode) as input
