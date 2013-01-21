@@ -46,6 +46,12 @@ document.onreadystatechange = function () {
   };
 
   schirm.resizing();
+  schirm.onmessage = function(_msg) {
+    var msg = JSON.parse(_msg);
+    if (msg["setReadOnly"]) {
+      codeMirror.setOption("readOnly", "nocursor");
+    }
+  }
 };
 
 </script>
@@ -56,15 +62,6 @@ document.onreadystatechange = function () {
 </html>
 """
 
-# css = """
-# @font-face {
-#   font-family: 'Droid Sans Mono';
-#   font-style: normal;
-#   font-weight: normal;
-#   src: local('Droid Sans Mono'), local('DroidSansMono'), format('woff');
-# }
-# """
-
 def codemirror_edit(s='', mode=''):
     with schirm.frame():
         schirm.resource_data(codemirror_css, 'codemirror.css')
@@ -74,21 +71,26 @@ def codemirror_edit(s='', mode=''):
             'mode': json.dumps(mode),
         }
         schirm.close()
-        req = schirm.read_next()
+        try:
+            req = schirm.read_next()
+        except KeyboardInterrupt:
+            # set readOnly mode, exit
+            schirm.send({'setReadOnly':True})
 
 def edit(filename=None):
     if filename:
         with open(filename) as f:
             s = f.read()
-    try:
-        mime, _ = mimetypes.guess_type(filename, strict=False)
-        codemirror_edit(s, mode=mime)
-    except KeyboardInterrupt:
-        pass
+            mime, _ = mimetypes.guess_type(filename, strict=False)
+    else:
+        s = ""
+        mime = ""
+
+    codemirror_edit(s, mode=mime)
 
 def parse_args():
     p = argparse.ArgumentParser("Use the codemirror javascript editor to edit a file from the commandline")
-    p.add_argument('file', metavar='FILE', help="The file to edit")
+    p.add_argument('file', metavar='FILE', help="The file to edit", nargs="?")
     return p.parse_args()
 
 if __name__ == '__main__':

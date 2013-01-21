@@ -201,5 +201,9 @@ def respond(requestid, header, body):
     _write_request(h, body)
 
 def send(data):
-    """Send the given data (a string) to the current iframe."""
-    _write_request({'x-schirm-message':None}, data)
+    """Send the given data to the current iframe.
+
+    If data is a Python dict, json-encode it before sending.
+    """
+    _write_request({'x-schirm-message':None},
+                   json.dumps(data) if isinstance(data, dict) else data)
