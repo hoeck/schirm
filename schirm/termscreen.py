@@ -183,7 +183,7 @@ class Line(UserList):
 
 class IframeLine(Line):
 
-    def __init__(self, id, args):
+    def __init__(self, id):
         """
         Create an IframeLine.
         Id must be a unique identifier to be able to map webview requests to iframes.
@@ -194,8 +194,6 @@ class IframeLine(Line):
               '100%': make the iframe as large as the schirm window in this dimension
               'auto': resize the iframe whenever its content changes
         """
-        self.args = {'width':'100%', 'height':'auto'} # OBSOLETE: does not work as intended, would only work anyway if iframes have the same origin as termframe (which they should not!), use a schirm.js lib and a iframe-resize command instead.
-        self.args.update(dict(args[i:i+2] for i in range(0, len(args), 2)))
         self.id = id
         self.changed = False
         self.cursorpos = None
@@ -465,7 +463,7 @@ class LineContainer(): # lazy
         self.events.append(('iframe_write', iframe_id, data))
 
     def iframe_string(self, iframe_id, data):
-        self.events.append(('iframe_send', iframe_id, data))
+        self.events.append(('iframe_string', iframe_id, data))
 
     def iframe_resize(self, iframe_id, height):
         self.events.append(('iframe_resize', iframe_id, height))
@@ -784,7 +782,7 @@ class TermScreen(pyte.Screen):
         # iframe mode? just write the string
         if self.iframe_mode:
             if self.iframe_mode == 'document':
-                self.linecontainer.iframe_write(self.iframe_id, s)
+                self.linecontainer.iframe_write(self.iframe_id, string)
             else:
                 # ignore all writes to closed documents:
                 # those are echo writes of input to the terminal
@@ -828,6 +826,7 @@ class TermScreen(pyte.Screen):
         cursor is at the last line, create a new line at the bottom.
         """
         if self.iframe_mode:
+            self.linecontainer.iframe_write(self.iframe_id, "\n")
             return
 
         top, bottom = self.margins
@@ -861,7 +860,7 @@ class TermScreen(pyte.Screen):
         """
         count = count or 1
         top, bottom = self.margins
-        print 'insert_lines'
+
         # If cursor is outside scrolling margins it -- do nothin'.
         if top <= self.cursor.y <= bottom:
             #                           v +1, because range() is exclusive.
@@ -1007,10 +1006,9 @@ class TermScreen(pyte.Screen):
 
     def string(self, string):
         if self.iframe_mode:
-            header, body = self.parse_string_request(string)
-            self.linecontainer.iframe_request(header, body)
-            # in document mode -> 'register resource'
-            # in request mode -> response
+            # in document mode -> 'register resource', debug-message, ...
+            # in request mode -> response, send-message, debug-message, ...
+            self.linecontainer.iframe_string(self.iframe_id, string)
         else:
             # ignore strings (xterm behaviour) in plain terminal mode
             self.draw_string(string)
@@ -1037,9 +1035,9 @@ class TermScreen(pyte.Screen):
         return self.iframe_id
 
     def _insert_iframe_line(self):
-        iframe_id = self.next_iframe_id()
+        iframe_id = self._next_iframe_id()
         self.linecontainer.iframe_enter(iframe_id)
-        self.linecontainer[self.cursor.y] = IframeLine(iframe_id, None)
+        self.linecontainer[self.cursor.y] = IframeLine(iframe_id)
 
     def _iframe_close_document(self):
         # add some html to the iframe document for registering ctr-c and ctrl-d key handlers

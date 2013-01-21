@@ -10,11 +10,8 @@ import htmlterm
 
 logger = logging.getLogger(__name__)
 
-ESC = "\033"
-SEP = ESC + ";"
-START_REQ = ESC + "R" + "request" + SEP
-START_MSG = ESC + "R" + "message" + SEP
-END = ESC + "Q"
+STR_START = "\x1bX"
+STR_END = "\x1b\\"
 NEWLINE = "\n" # somehow required for 'flushing', tcflush and other ioctls didn't work :/
 
 class Iframes(object):
@@ -189,7 +186,7 @@ class Iframe(object):
             self.terminal_ui.respond(self.websocket_req_id)
         return "term.iframeLeave();"
 
-    def iframe_send(self, data):
+    def _send_message(self, data):
         """Send data to the iframe using the iframes websocket connection."""
         if self.websocket_req_id:
             self.terminal_ui.respond(self.websocket_req_id,
@@ -224,11 +221,22 @@ class Iframe(object):
         # window like other schirm error messages
         print msg
 
+    def _unknown(self, data):
+        logger.error("unknown iframe request: %r" % (data,))
+
     def _parse_string_request(self, data):
         # the request
         if data.lstrip().startswith("{"):
             # JSON + body string
-            header_end_pos = data.find("\n\n")
+            header_end_pos = 0
+            _p = data.find("\n\n")
+            if _p > 0:
+                header_end_pos = _p
+            else:
+                _p = data.find('\r\n\r\n')
+                if _p > 0:
+                    header_end_pos = _p
+
             if header_end_pos > 0:
                 try:
                     header = json.loads(data[:header_end_pos])
@@ -253,18 +261,18 @@ class Iframe(object):
         body = base64.b64decode(raw_body)
 
         # valid headers:
-        # x-schirm-url .. url for static resources
+        # x-schirm-path .. path for static resources
         # x-schirm-request-id .. request id to identify the response
         # x-schirm-send .. send this string or the body via the schirm websocket
         # x-schirm-debug .. write this string or the body to the emulators process stdout
-        if 'x-schirm-url' in header:
-            self._register_resource(name=header['x-schirm-url'],
+        if 'x-schirm-path' in header:
+            self._register_resource(name=header['x-schirm-path'],
                                     mimetype=header.get('content-type'),
                                     data=body)
         elif 'x-schirm-request-id' in header:
             self._respond(header, body)
-        elif 'x-schirm-send' in header:
-            self._send(header['x-schirm-send'] or body)
+        elif 'x-schirm-message' in header:
+            self._send(header['x-schirm-message'] or body)
         elif 'x-schirm-debug' in header:
             self._debug(header['x-schirm-debug'] or body)
         else:
@@ -343,20 +351,21 @@ class Iframe(object):
 
         else:
             if self.state == 'close':
-                # write the response back to the terminal
+                # write the response wrapped as an ECMA-48 string back
+                # to the terminal
 
-                # transmitting: req_id, method, path, (k, v)*, data
-                data = [str(req.id),
-                        req.request_version,
-                        req.method,
-                        req.path]
+                header = dict(req.headers)
+                header.update({'x-schirm-request-id': str(req.id),
+                               'x-schirm-request-path': req.path,
+                               'x-schirm-request-method': req.method})
 
-                for k in req.headers.keys():
-                    data.append(k)
-                    data.append(req.headers[k])
-                data.append(req.data or "")
-                term_req = START_REQ + SEP.join(base64.encodestring(x) for x in data) + END + NEWLINE
+                term_req = ''.join([STR_START,
+                                    json.dumps(header),
+                                    NEWLINE, NEWLINE,
+                                    req.data or "",
+                                    STR_END])
                 self.terminal_io.write(term_req)
+
             else:
                 # return a 404
                 self.terminal_ui.respond(req.id)
@@ -378,7 +387,6 @@ class Iframe(object):
             # todo: instead of terminal_io, use terminal_ui and the
             # input_queue to keep data written to the PTYs in stream
             # in sync !!!
-            print "iframe websocket: %r" % req
             self.terminal_io.write(''.join((START_MSG,
                                             base64.b64encode(req.data),
                                             END, NEWLINE)))
