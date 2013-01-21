@@ -67,8 +67,8 @@ document.onreadystatechange = function () {
 
 def codemirror_edit(s='', mode=''):
     with schirm.frame():
-        schirm.register_resource_data(codemirror_css, 'codemirror.css')
-        schirm.register_resource(os.path.join(os.path.abspath(os.path.dirname(__file__)), 'codemirror-full.js'), name='codemirror.js')
+        schirm.resource_data(codemirror_css, 'codemirror.css')
+        schirm.resource(os.path.join(os.path.abspath(os.path.dirname(__file__)), 'codemirror-full.js'), name='codemirror.js')
         print html % {
             'text':json.dumps(str(s)),
             'mode': json.dumps(mode),

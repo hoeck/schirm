@@ -149,11 +149,11 @@ def show_tree(tree):
         # schirm.register_resource('../misc/d3.min.js')
         # schirm.register_resource('../misc/d3.layout.min.js')
         # schirm.register_resource('../misc/nodeLinkTree.js')
-        schirm.register_resource_data(jquery_1_7_min_js, 'jquery.js')
-        schirm.register_resource_data(d3_min_js, 'd3.min.js')
-        schirm.register_resource_data(d3_layout_min_js, 'd3.layout.min.js')
-        schirm.register_resource_data(node_link_tree_js, 'nodeLinkTree.js')
-        schirm.register_resource_data(json.dumps(tree), 'tree.json', 'application/json')
+        schirm.resource_data(jquery_1_7_min_js, 'jquery.js')
+        schirm.resource_data(d3_min_js, 'd3.min.js')
+        schirm.resource_data(d3_layout_min_js, 'd3.layout.min.js')
+        schirm.resource_data(node_link_tree_js, 'nodeLinkTree.js')
+        schirm.resource_data(json.dumps(tree), 'tree.json', 'application/json')
         print html
         schirm.close()
         # wait for the 'done' get request

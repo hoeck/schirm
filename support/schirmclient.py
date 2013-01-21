@@ -32,20 +32,42 @@
 """
 
 __all__ = ('enter', 'leave', 'close', 'frame', 'debug',
-           'register_resource', 'read_next', 'respond', 'send')
+           'resource', 'resource_data', 'read_next', 'respond', 'send')
 
 import os
 import sys
 import fcntl
+import json
 import base64
 from collections import namedtuple
 from contextlib import contextmanager
 
-ESC   = "\033"
-INTRO = ESC + "R"
-END   = ESC + "Q"
-SEP   = ESC + ";"
-EXIT  = ESC + "x"
+ESC = "\x1b"
+CSI = ESC + "["
+MODE_PRIV = CSI + "?"
+DOCUMENT_MODE = "5151"
+RESPONSE_MODE = "5152"
+STR_START = ESC + "X"
+STR_END = ESC + "\\"
+
+# primitives
+def _set_mode_str(mode_id, cookie=None):
+    return ''.join([MODE_PRIV, mode_id] +
+                   [';' + s[i:i+4] for i in range(0, len(cookie or ''), 4)] +
+                   ['h'])
+
+def _reset_mode_str(mode_id):
+    return ''.join([MODE_PRIV, mode_id, 'l'])
+
+def _write_request(header, body, out=sys.stdout):
+    try:
+        out.write(STR_START)
+        out.write(json.dumps(header))
+        out.write("\n\n")
+        out.write(base64.b64encode(body))
+    finally:
+        out.write(STR_END)
+        out.flush()
 
 def enter():
     """Enter the frame mode.
@@ -60,8 +82,21 @@ def enter():
 
     See also the frame() contextmanager.
     """
-    sys.stdout.write("".join((INTRO, 'enter', END)))
-    sys.stdout.flush()
+    out = sys.stdout
+    out.write(_set_mode_str(mode_id=DOCUMENT_MODE,
+                            cookie=os.environ.get('SCHIRM_COOKIE')))
+    out.flush()
+
+def close():
+    """If in frame mode, close the current iframe document (triggering document.load events).
+
+    Any subsequent writes to stdout reopen (and therefor clear) the
+    current document again.
+    """
+    out = sys.stdout
+    out.write(_set_mode_str(mode_id=RESPONSE_MODE,
+                            cookie=os.environ.get('SCHIRM_COOKIE')))
+    out.flush()
 
 def leave(newline=True):
     """Get back to normal terminal emulation mode.
@@ -74,19 +109,11 @@ def leave(newline=True):
     False, the cursor is left on the current iframe line and any
     following output may replace the iframe.
     """
-    sys.stdout.write(EXIT)
+    out = sys.stdout
+    out.write(_reset_mode_str(DOCUMENT_MODE))
     if newline:
-        sys.stdout.write("\n")
-    sys.stdout.flush()
-
-def close():
-    """If in frame mode, close the current iframe document (triggering document.load events).
-
-    Any subsequent writes to stdout reopen (and therefor clear) the
-    current document again.
-    """
-    sys.stdout.write("".join((INTRO, 'close', END)))
-    sys.stdout.flush()
+        out.write("\n")
+    out.flush()
 
 @contextmanager
 def frame(newline=True):
@@ -97,34 +124,32 @@ def frame(newline=True):
     finally:
         leave(newline=newline)
 
-def register_resource(path, name=None, mimetype=''):
+def resource(path, name=None, mimetype=''):
     """Make the resource name available to the current iframe.
-    
+
     Name defaults to the filename.
 
     If no mimetype is given, uses names file-ending to determine the
     content type or text/plain.
     """
-    out = sys.stdout
     if not name:
         _, name = os.path.split(path)
-    out.write("".join((INTRO, "register_resource", SEP,
-                       base64.b64encode(name), SEP,
-                       base64.b64encode(mimetype), SEP)))
-    with open(path, "rb") as f:
-        out.write(base64.b64encode(f.read()))
-    out.write(END)
 
-def register_resource_data(data, name, mimetype=''):
+    header = {'x-schirm-path': name}
+    if mimetype:
+        header['ContentType'] = mimetype
+
+    with open(path) as f:
+        _write_request(header, f.read())
+
+def resource_data(data, name, mimetype=''):
     """Make the given data available as resource 'name' to the current iframe."""
-    out = sys.stdout
-    if not name:
-        _, name = os.path.split(path)
-    out.write("".join((INTRO, "register_resource", SEP,
-                       base64.b64encode(name), SEP,
-                       base64.b64encode(mimetype), SEP)))
-    out.write(base64.b64encode(data))
-    out.write(END)
+
+    header = {'x-schirm-path': name}
+    if mimetype:
+        header['ContentType'] = mimetype
+
+    _write_request(header, data)
 
 def debug(*msg):
     """Write a message to the schirm terminal process stdout.
@@ -132,10 +157,7 @@ def debug(*msg):
     Use this instead of print to print-debug running frame mode
     programms.
     """
-    out = sys.stdout
-    out.write("".join((INTRO, "debug", SEP)))
-    out.write(base64.b64encode(" ".join(map(str, msg))))
-    out.write(END)
+    _write_request({'x-schirm-debug':''}, ' '.join(msg))
 
 def set_block(fd, block=True):
     """Make fd a blocking or non-blocking file"""
@@ -145,112 +167,39 @@ def set_block(fd, block=True):
     else:
         fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
 
-def read_list():
-    """Read a list of strings from stdin and return it.
-    
-    All arguments are separated by '\033;', terminated with '\033Q'.
-    The first element is plain text, the following elements are base64
-    encoded.
+def read_next():
+    """Read characters off sys.stdin until a full request has been read.
+
+    Returns a header dict and a message body.
     """
+    state = None
     current = []
-    args = []
-
-    def append_arg(a):
-        if args:
-            # all subsequent args are b64 encoded
-            args.append(base64.decodestring(a))
-        else:
-            # the first arg is the request type name
-            args.append(a)
-
     while 1:
         ch = sys.stdin.read(1)
-        if ch == ESC:
-            ch = sys.stdin.read(1)
-            if ch == ';':
-                # read another arg, store the current one
-                append_arg("".join(current))
-                current = []
-            elif ch == 'Q':
-                append_arg("".join(current))
-                return args
-            else:
-                pass
-        else:
-            current.append(ch)
-
-_request = namedtuple('Request', ('type', 'id', 'protocol', 'method', 'path', 'header', 'data'))
-class Request(_request):
-    """
-    Represents HTTP request data.
-
-    The type field is always 'request'.
-
-    Note: Use the returned id and the schirmclient.response() function to
-    send a response to the schirm terminal emulator.
-    """
-    pass
-
-
-_message = namedtuple('Message', ('type', 'data'))
-class Message(_message):
-    """
-    Represents schirmlog messages (type='message') or js evaluation
-    results (type='result').
-    
-    The data slot contains the result as a string.
-    """
-    pass
-
-
-_keypress = namedtuple('KeyPress', ('type', 'data', 'esc'))
-class KeyPress(_keypress):
-    """
-    Represents single characters read from stdin
-    (type='keypress', data=<char>, esc=<bool>).
-    """
-
-
-def read_next():
-    """Read characters off sys.stdin until a full request, a message or result has been read.
-
-    Returns a namedtuple of type Request or Message.
-    """
-    while 1:
-        try:
-            ch = sys.stdin.read(1)
+        if state == None:
             if ch == ESC:
-                ch = sys.stdin.read(1)
-                if ch == 'R':
-                    args = read_list()
-                    if args[0] == 'request':
-                        # ('request', requestid, protocol, method, path, header-key*, header-value*, [post-data])
-                        headers = dict((args[i], args[i+1]) for i in range(5, len(args)-1, 2))
-                        return Request('request', args[1], args[2], args[3], args[4], headers, args[-1] if len(args)%2 else None)
-                    else:
-                        return Message(*args)
-                else:
-                    # some keycombo
-                    return KeyPress('keypress', ch, True)
+                ch += sys.stdin.read(1)
+                if ch == STR_START:
+                    # STR START
+                    current = []
+                    state = 'string'
+        elif state == 'string':
+            if ch == ESC:
+                ch += sys.stdin.read(1)
+                if ch == STR_END:
+                    return "".join(current)
             else:
-                # plain keypress
-                return KeyPress('keypress', ch, False)
-        except KeyboardInterrupt, e:
-            pass
+                current.append(ch)
 
-def respond(requestid, response):
+def respond(requestid, header, body):
     """Write a response to requestid to the schirm terminal.
 
     Response must be a http response.
     """
-    out = sys.stdout
-    out.write("".join((INTRO, "respond", SEP, requestid, SEP)))
-    out.write(base64.b64encode(response))
-    out.write(END)
+    h = dict(header)
+    h['x-schirm-requestid'] = requestid
+    _write_request(h, body)
 
 def send(data):
     """Send the given data (a string) to the current iframe."""
-    out = sys.stdout
-    out.write("".join((INTRO, "send", SEP)))
-    out.write(base64.b64encode(data))
-    out.write(END)
+    _write_request({'x-schirm-message':None}, data)
