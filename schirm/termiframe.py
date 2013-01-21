@@ -272,7 +272,7 @@ class Iframe(object):
         elif 'x-schirm-request-id' in header:
             self._respond(header, body)
         elif 'x-schirm-message' in header:
-            self._send(header['x-schirm-message'] or body)
+            self._send_message(header['x-schirm-message'] or body)
         elif 'x-schirm-debug' in header:
             self._debug(header['x-schirm-debug'] or body)
         else:
