@@ -165,7 +165,7 @@ class Iframe(object):
         elif self.state == 'document_requested':
             self.resources.setdefault(None, []).append(data)
             # write more data
-            self.terminal_ui.respond(self.root_document_req_id, data, close=False)
+            self.terminal_ui.respond(self.root_document_req_id, data.encode('utf-8'), close=False)
 
     def iframe_close(self):
         if self.state == 'document_requested':
@@ -297,9 +297,9 @@ class Iframe(object):
             self.terminal_ui.respond(req.id,
                                      data="\r\n".join(["HTTP/1.1 200 OK",
                                                        "Cache-Control: no-cache",
-                                                       "Content-Type: text/html",
+                                                       "Content-Type: text/html; charset=utf-8",
                                                        "",
-                                                       data]),
+                                                       data.encode('utf-8')]),
                                      close=(self.state != 'document_requested'))
 
         elif GET and req.path == '/schirm.js':
