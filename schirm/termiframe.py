@@ -331,11 +331,14 @@ class Iframe(object):
             if isinstance(data, dict):
                 cmd = data.get('command')
                 if cmd == 'resize':
-                    # iframeresize
-                    try:
-                        height = int(data.get('height'))
-                    except:
-                        height = 25
+                    if data.get('height') == 'fullscreen':
+                        height = 'fullscreen'
+                    else:
+                        # resize iframe to height
+                        try:
+                            height = int(data.get('height'))
+                        except:
+                            height = 'fullscreen'
                     self.iframe_resize(height)
                     self.terminal_ui.respond(req.id, 'HTTP/1.1 200 done\r\n\r\n')
                 elif cmd == 'control-c':

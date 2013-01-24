@@ -486,10 +486,14 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
     //
     this.iframeResize = function(frameId, height) {
         var iframe = document.getElementById(frameId);
-        iframe.style.height = height;
+        console.log("iframeResize", height);
+        if (height === 'fullscreen') {
+            iframe.style.height = "100%";
+        } else {
+            iframe.style.height = height;
+        }
         autoScroll();
     };
-
 
     // select a substring on a line
     var selectSubLine = function(lineSpan, startIdx, endIdx) {

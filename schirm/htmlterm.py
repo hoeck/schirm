@@ -169,4 +169,6 @@ class Events():
 
     @staticmethod
     def iframe_resize(iframe_id, height):
-        return "term.iframeResize(\"%s\", %s);" % (iframe_id, int(height))
+        assert isinstance(height, (int, long)) or height == 'fullscreen'
+        return "term.iframeResize(%s, %s);" % (json.dumps(iframe_id),
+                                               json.dumps(height))
