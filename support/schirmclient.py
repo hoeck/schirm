@@ -157,7 +157,7 @@ def debug(*msg):
     Use this instead of print to print-debug running frame mode
     programms.
     """
-    _write_request({'x-schirm-debug':''}, ' '.join(msg))
+    _write_request({'x-schirm-debug':''}, ' '.join(map(str,msg)))
 
 def set_block(fd, block=True):
     """Make fd a blocking or non-blocking file"""
