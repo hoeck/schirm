@@ -145,10 +145,10 @@ def create_tree(root=".", filter_f=lambda x: True):
 
 def show_tree(tree):
     with schirm.frame():
-        # schirm.register_resource('../misc/jquery-1.6.2.js')
-        # schirm.register_resource('../misc/d3.min.js')
-        # schirm.register_resource('../misc/d3.layout.min.js')
-        # schirm.register_resource('../misc/nodeLinkTree.js')
+        # schirm.resource('../misc/jquery-1.6.2.js')
+        # schirm.resource('../misc/d3.min.js')
+        # schirm.resource('../misc/d3.layout.min.js')
+        # schirm.resource('../misc/nodeLinkTree.js')
         schirm.resource_data(jquery_1_7_min_js, 'jquery.js')
         schirm.resource_data(d3_min_js, 'd3.min.js')
         schirm.resource_data(d3_layout_min_js, 'd3.layout.min.js')
