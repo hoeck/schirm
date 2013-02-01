@@ -117,7 +117,7 @@ _mod_map = {
     (True,  True,  True ): 8,
 }
 
-def map_key(keyname, modifiers, screen_mode=False):
+def map_key(keyname, modifiers, app_key_mode=False):
     """Map gtk keynames to vt100 keysequences.
 
     Return None if there is no mapping for a given key, meaning
@@ -125,7 +125,7 @@ def map_key(keyname, modifiers, screen_mode=False):
     Modifiers should be a tuple of 3 booleans: (shift, alt,
     control) denoting the state of the modifier keys.
 
-    Depending on the terminals screen_mode (pyte.mo.DECAPP in
+    Depending on the terminals screen_mode (pyte.mo.DECAPPKEY in
     screen.mode), return different sequences.
     """
 
@@ -140,7 +140,7 @@ def map_key(keyname, modifiers, screen_mode=False):
     keydef = _keycodes.get(keyname)
     if keydef:
         if isinstance(keydef, tuple):
-            if screen_mode:
+            if app_key_mode:
                 return _add_modifier(keydef[1])
             else:
                 return _add_modifier(keydef[0])

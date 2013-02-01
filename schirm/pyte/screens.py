@@ -327,7 +327,7 @@ class Screen(list):
         # Private mode codes are shifted, to be distingiushed from non
         # private ones.
         if kwargs.get("private"):
-            modes = [mode << 5 for mode in modes]
+            modes = [mode << 16 for mode in modes]
 
         self.mode.update(modes)
 
@@ -362,7 +362,7 @@ class Screen(list):
         # Private mode codes are shifted, to be distingiushed from non
         # private ones.
         if kwargs.get("private"):
-            modes = [mode << 5 for mode in modes]
+            modes = [mode << mo.PRIVATE_MODE_SHIFT for mode in modes]
 
         self.mode.difference_update(modes)
 

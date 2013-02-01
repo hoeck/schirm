@@ -214,7 +214,7 @@ class Terminal(object):
         # compute the terminal key
         k = termkey.map_key(keyname=key.get('name'),
                             modifiers=(key.get('shift'), key.get('alt'), key.get('control')),
-                            screen_mode=(pyte.mo.DECAPP in self.screen.mode))
+                            app_key_mode=(pyte.mo.DECAPPKEYS in self.screen.mode))
 
         if not k:
             if key.get('alt'):

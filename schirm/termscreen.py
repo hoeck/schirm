@@ -631,8 +631,7 @@ class TermScreen(pyte.Screen):
         """
 
         mode_id = (modes[:1] or [None])[0]
-        if mode_id in (IFRAME_DOCUMENT_MODE_ID, IFRAME_RESPONSE_MODE_ID) \
-                and kwargs.get('private'):
+        if mode_id in (IFRAME_DOCUMENT_MODE_ID, IFRAME_RESPONSE_MODE_ID):
             cookie = ';'.join(map(str,modes[1:]))
             # Need the cookie to prove that the request comes from a
             # real program, an not just by 'cat'-ing some file.
@@ -641,17 +640,26 @@ class TermScreen(pyte.Screen):
             self.iframe_set_mode(mode_id, cookie)
             return
 
+
         # Private mode codes are shifted, to be distingiushed from non
         # private ones.
         if kwargs.get("private"):
-            modes = [mode << 5 for mode in modes]
+            modes = [mode << mo.PRIVATE_MODE_SHIFT for mode in modes]
+
+        # translate mode shortcuts and aliases
+        if mo.DECAPPMODE in modes:
+            # DECAPP is a combination of DECALTBUF and DECSAVECUR
+            modes.remove(mo.DECAPPMODE)
+            modes.update([mo.DECALTBUF, mo.DECSAVECUR])
+
+        if mo.DECALTBUF_ALT in modes:
+            modes.remove(mo.DECALTBUF_ALT)
+            modes.add(mo.DECALTBUF)
 
         self.mode.update(modes)
 
-        if mo.DECAPP in modes:
-            # application mode set
-            # todo: implement event so that we can switch to/from appmode
-            # in term.html
+        if mo.DECAPPKEYS in modes:
+            # use application mode keys, see termkey.py (app_key_mode arg)
             pass
 
         # When DECOLM mode is set, the screen is erased and the cursor
@@ -677,9 +685,6 @@ class TermScreen(pyte.Screen):
         if mo.DECTCEM in modes:
             self.cursor.hidden = False
 
-    def _application_mode(self):
-        return mo.DECAPP in self.modes
-
     def reset_mode(self, *modes, **kwargs):
         """Resets (disables) a given list of modes.
 
@@ -701,12 +706,19 @@ class TermScreen(pyte.Screen):
         # Private mode codes aree shifted, to be distingiushed from non
         # private ones.
         if kwargs.get("private"):
-            modes = [mode << 5 for mode in modes]
+            modes = [mode << mo.PRIVATE_MODE_SHIFT for mode in modes]
+
+        # translate mode shortcuts and aliases
+        if mo.DECAPPMODE in modes:
+            # DECAPP is a combination of DECALTBUF and DECSAVECUR
+            modes.remove(mo.DECAPPMODE)
+            modes.update([mo.DECALTBUF, mo.DECSAVECUR])
+
+        if mo.DECALTBUF_ALT in modes:
+            modes.remove(mo.DECALTBUF_ALT)
+            modes.add(mo.DECALTBUF)
 
         self.mode.difference_update(modes)
-
-        if mo.DECAPP in modes:
-            pass
 
         # Lines below follow the logic in :meth:`set_mode`.
         if mo.DECCOLM in modes:

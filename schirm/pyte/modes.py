@@ -37,26 +37,46 @@ IRM = 4
 # Private modes.
 # ..............
 
+# Private mode codes are shifted, to be distingiushed from non
+# private ones.
+PRIVATE_MODE_SHIFT = 5
+
 #: *Text Cursor Enable Mode*: determines if the text cursor is
 #: visible.
-DECTCEM = 25 << 5
+DECTCEM = 25 << PRIVATE_MODE_SHIFT
 
 #: *Screen Mode*: toggles screen-wide reverse-video mode.
-DECSCNM = 5 << 5
+DECSCNM = 5 << PRIVATE_MODE_SHIFT
 
 #: *Origin Mode*: allows cursor addressing relative to a user-defined
 #: origin. This mode resets when the terminal is powered up or reset.
 #: It does not affect the erase in display (ED) function.
-DECOM = 6 << 5
+DECOM = 6 << PRIVATE_MODE_SHIFT
 
 #: *Auto Wrap Mode*: selects where received graphic characters appear
 #: when the cursor is at the right margin.
-DECAWM = 7 << 5
+DECAWM = 7 << PRIVATE_MODE_SHIFT
 
 #: *Column Mode*: selects the number of columns per line (80 or 132)
 #: on the screen.
-DECCOLM = 3 << 5
+DECCOLM = 3 << PRIVATE_MODE_SHIFT
 
-#: *Applications Mode*: Use slightly different keysequences for
+#: *Application Cursor Keys Mode*: Use slightly different keysequences for
 #: function, numpad and arrow keys
-DECAPP = 1 << 5
+#: (see also ESC + ``=`` and ESC + ``>`` sequences, which seem to do
+#   the same as setting and resetting this mode)
+DECAPPKEYS = 1 << PRIVATE_MODE_SHIFT
+
+#: *Alternate Buffer Mode*: Use a different draw buffer when this mode
+#: is activated. Fullscreen terminal applications such as less, htop
+#: and the Midnight Commander use this mode.
+#: see also: http://www.xfree86.org/4.8.0/ctlseqs.html
+DECALTBUF = 47 << PRIVATE_MODE_SHIFT
+DECALTBUF_ALT = 1047 << PRIVATE_MODE_SHIFT
+
+#: *Save Cursor Mode*: Save cursor as in DECSC.
+DECSAVECUR = 1048 << PRIVATE_MODE_SHIFT
+
+#: *Save Cursor And Use Alternate Buffer Mode*:
+#: Combination of two DECALTBUF and DECSAVECUR modes.
+DECAPPMODE = 1049 << PRIVATE_MODE_SHIFT
