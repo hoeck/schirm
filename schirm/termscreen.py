@@ -240,6 +240,11 @@ class IframeLine(Line):
 
 class LineContainer(): # lazy
 
+    """The LineContainer provides an array-like interface for the TermScreen
+    and translates calls to it into a stream of events digestible by the
+    browser interface implemented in term.js.
+    """
+
     def __init__(self, create_line_fn):
         # the real initialization happens in self.reset()
         self.height = 0
@@ -279,6 +284,9 @@ class LineContainer(): # lazy
         self.events = []
         return ret
 
+    def alt_buffer_mode(self, enable=False):
+        self.events.append(('alt_buffer_mode', enable))
+
     def reset(self, height):
         self.height = height # height of the terminal screen in lines
         self.set_screen0(0)
@@ -286,7 +294,7 @@ class LineContainer(): # lazy
         self.events.append(('reset',))
 
     def pop(self, index):
-        """Remove the line at terminal screen linumber index."""
+        """Remove the line at terminal screen lineumber index."""
         self._ensure_lines(index)
         ri = self.real_line_index(index)
         if self.screen0 > 0:
@@ -361,6 +369,7 @@ class LineContainer(): # lazy
         # stick them at the top of the terminal window
         grow = bool((len(self.lines) - self.screen0) == self.height)
 
+        # todo: check if this works for arbitrary height resizes!
         if (len(self.lines) > newheight) and grow:
             screen_delta = len(self.lines) - newheight - self.screen0
         else:
@@ -392,23 +401,16 @@ class LineContainer(): # lazy
                     and i >= self.screen0:
                 self.lines.pop()
                 # remove at most self.height lines
-                # do not remove empty lines from the history!
+                # do not remove empty lines from the history
                 i += 1
             else:
                 return
-
-    def last_nonempty_line(self):
-        """Return the linenumber of the last nonempty line of the current screen."""
-        for i, l in enumerate(reversed(self.lines[self.screen0:])):
-            if not l.is_empty():
-                return self.height - i
-        return 0
 
     def set_screen0(self, screen0):
         self.screen0 = screen0
         self.events.append(('set_screen0', self.screen0))
 
-    def erase_in_display(self, cursor_line, cursor_column):
+    def erase_in_display(self, cursor_attrs):
         """Implements marginless erase_in_display type 2 preserving the history."""
         # push the current terminal contents to the history
         self.set_screen0(len(self.lines))
@@ -523,12 +525,99 @@ class LineContainer(): # lazy
     #     # ESC R 'terminal_response' ESC ; <term-id> ESC ; <b64-encoded data> ESC Q
 
 
+class AltContainer(LineContainer):
+    """A simplified Line Container implementation for the DECALTBUF mode."""
+
+    # In this mode, there is no scrollback which simplifies some of
+    # the operations.
+
+    # no-scrollback
+    #  -> screen0 is always 0
+    #  -> real_line_index is not needed
+    #  -> rendering is still lazy, so _ensure_lines must be called
+    #     prior to each line-array operation
+
+    def pop(self, index):
+        """Remove the line at terminal screen lineumber index."""
+        self._ensure_lines(index)
+        line = self.lines.pop(index)
+        self.events.append(('pop', index, line))
+        return line
+
+    def pop_bottom(self):
+        """Remove a line from the bottom of the terminal screen."""
+        self._ensure_lines()
+        line = self.lines.pop(len(self.lines)-1)
+        self.events.append(('pop_bottom',))
+        return line
+
+    def append(self, line):
+        """Append an empty line to the bottom of the terminal screen."""
+        # is line always empty?
+        self._ensure_lines()
+        if len(self.lines) >= self.height:
+            # remove the topmost line to have space to append one line
+            self.pop(0)
+        self._append(line)
+
+    def insert(self, index, line):
+        self._ensure_lines(index)
+        if len(self.lines) >= self.height:
+            # remove the topmost line to have space to insert one line
+            self.pop(0)
+        self.lines.insert(index, line)
+        line.changed = False
+        self.events.append(('insert', index, line))
+
+    def resize(self, newheight, newwidth):
+        """Resize this container to newheight and all lines to newwidth.
+
+        Return the cursor line change.
+        """
+        # height
+        if self.height > newheight:
+            unneeded_lines = max(0, len(self.lines) - newheight)
+            if unneeded_lines:
+                # remove excessive lines from the top
+                for i in range(unneeded_lines):
+                    self.pop(0)
+
+        else:
+            # increasing the height works 'automatically' through lazy
+            # line rendering (additional lines are created on demand)
+            pass
+
+        self.height = newheight
+
+        # set width for all lines
+        for l in self.lines:
+            l.set_size(newwidth)
+
+        return 0
+
+    def erase_in_display(self, cursor_attrs):
+        # clear the whole display
+        for line in self.lines:
+            # erase the whole line
+            line.erase_in_line(2, 0, cursor_attrs)
+
+    def remove_history(self, lines_to_remove=None):
+        pass
+
+
 class TermScreen(pyte.Screen):
 
     def __init__(self, columns, lines):
         self.savepoints = []
+        # terminal dimensions in characters
         self.lines, self.columns = lines, columns
-        self.linecontainer = LineContainer(self._create_line)
+
+        # switch container implementations in self.set_mode and
+        # self.reset_mode when the DECALTBUF mode is requested
+        self._line_mode_container = LineContainer(self._create_line)
+        self._alt_mode_container = AltContainer(self._create_line)
+        self.linecontainer = self._line_mode_container
+
         # current iframe_mode,
         # one of None, 'open' or 'closed'
         # None     .. no active iframe
@@ -644,7 +733,7 @@ class TermScreen(pyte.Screen):
         # Private mode codes are shifted, to be distingiushed from non
         # private ones.
         if kwargs.get("private"):
-            modes = [mode << mo.PRIVATE_MODE_SHIFT for mode in modes]
+            modes = set([mode << mo.PRIVATE_MODE_SHIFT for mode in modes])
 
         # translate mode shortcuts and aliases
         if mo.DECAPPMODE in modes:
@@ -685,6 +774,15 @@ class TermScreen(pyte.Screen):
         if mo.DECTCEM in modes:
             self.cursor.hidden = False
 
+        if mo.DECSAVECUR in modes:
+            # save cursor position and restore it on mode reset
+            self.save_cursor()
+
+        if mo.DECALTBUF in modes:
+            # enable alternative buffer
+            self.linecontainer = self._alt_mode_container
+            self.linecontainer.alt_buffer_mode(True)
+
     def reset_mode(self, *modes, **kwargs):
         """Resets (disables) a given list of modes.
 
@@ -706,7 +804,7 @@ class TermScreen(pyte.Screen):
         # Private mode codes aree shifted, to be distingiushed from non
         # private ones.
         if kwargs.get("private"):
-            modes = [mode << mo.PRIVATE_MODE_SHIFT for mode in modes]
+            modes = set([mode << mo.PRIVATE_MODE_SHIFT for mode in modes])
 
         # translate mode shortcuts and aliases
         if mo.DECAPPMODE in modes:
@@ -737,6 +835,15 @@ class TermScreen(pyte.Screen):
         # Hide the cursor.
         if mo.DECTCEM in modes:
             self.cursor.hidden = True
+
+        if mo.DECSAVECUR in modes:
+            # save cursor position and restore it on mode reset
+            self.save_cursor()
+
+        if mo.DECALTBUF in modes:
+            # disable alternative draw buffer
+            self.linecontainer.alt_buffer_mode(False)
+            self.linecontainer = self._line_mode_container
 
     # def draw(self, char):
     #     """Display a character at the current cursor position and advance
@@ -1010,7 +1117,7 @@ class TermScreen(pyte.Screen):
             # happens to the history)
             top, bottom = self.margins # where to use them?: ans: in linecontainer as an argument to insert, pop and append
             if top == 0 and bottom == self.lines - 1:
-                self.linecontainer.erase_in_display(self.cursor.y, self.cursor.x)
+                self.linecontainer.erase_in_display(self.cursor.attrs)
             else:
                 assert False, "erase_in_display not implemented for margins"
 

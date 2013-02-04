@@ -101,31 +101,35 @@ def wrap_in_span(s):
     return '<span>{0}</span>'.format(s)
 
 def set_line_to(i, content):
-    return """term.setLine({0}, {1});""".format(i, json.dumps(content))
+    return """term.screen.setLine({0}, {1});""".format(i, json.dumps(content))
 
 # screen events, return a js string
 class Events():
 
     @staticmethod
     def reset():
-        return "term.reset();"
+        return "term.screen.reset();"
+
+    @staticmethod
+    def alt_buffer_mode(enable):
+        return "term.altBufferMode(%s);" % json.dumps(bool(enable))
 
     @staticmethod
     def set_screen0(screen0):
-        return "term.setScreen0({})".format(screen0)
+        return "term.screen.setScreen0({})".format(screen0)
 
     @staticmethod
     def pop(index, line):
-        return "term.removeLine({});".format(index)
+        return "term.screen.removeLine({});".format(index)
 
     @staticmethod
     def pop_bottom():
-        return "term.removeLastLine();"
+        return "term.screen.removeLastLine();"
 
     @staticmethod
     def append(line):
         content = renderline(line)
-        return "term.appendLine({});".format(json.dumps(content))
+        return "term.screen.appendLine({});".format(json.dumps(content))
 
     @staticmethod
     def insert(index, line):
@@ -133,7 +137,7 @@ class Events():
         #     assert False, "Insert line semantics are only defined for plain lines!"
         # else:
         content = renderline(line)
-        return "term.insertLine({}, {});".format(index, json.dumps(content))
+        return "term.screen.insertLine({}, {});".format(index, json.dumps(content))
 
     @staticmethod
     def set(index, line):
@@ -148,7 +152,7 @@ class Events():
         else:
             uri = "http://{iframe_id}.localhost/".format(iframe_id=iframe_id) # TODO: urlencode iframe_id
 
-        js = "term.insertIframe({index}, {iframe_id}, {uri})".format(
+        js = "term.screen.insertIframe({index}, {iframe_id}, {uri})".format(
             index=json.dumps(index),
             iframe_id=json.dumps(iframe_id),
             uri=json.dumps(uri))
@@ -161,14 +165,14 @@ class Events():
 
     @staticmethod
     def remove_history_lines(n):
-        return "term.removeHistoryLines(%s);" % n
+        return "term.screen.removeHistoryLines(%s);" % n
 
     @staticmethod
     def check_history_size():
-        return "term.checkHistorySize();"
+        return "term.screen.checkHistorySize();"
 
     @staticmethod
     def iframe_resize(iframe_id, height):
         assert isinstance(height, (int, long)) or height == 'fullscreen'
-        return "term.iframeResize(%s, %s);" % (json.dumps(iframe_id),
+        return "term.screen.iframeResize(%s, %s);" % (json.dumps(iframe_id),
                                                json.dumps(height))

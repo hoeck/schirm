@@ -10,17 +10,20 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
     <div class=\"terminal-screen\">\
         <pre class=\"terminal-line-container\"></pre>\
     </div>\
-    <pre class=\"terminal-app-container\"></pre>\
+    <pre class=\"terminal-alt-container\"></pre>\
+    <div class=\"terminal-alt-iframe-container\"></div>\
 </div>\
 ";
 
     var self = this;
 
     var linesElement; // PRE element to render the terminal in line mode
-    var appElement;   // PRE element to render the application mode
+    var altElement;   // PRE element to render the alternative buffer
+    var altIframeContainer; // DIV element to render fullscreen iframes in the alternative buffer mode
 
     var screen0 = 0; // offset from the first line to the current terminal line 0
-    var appMode = false;
+    var altBufEnabled = false;
+    this.screen; // the current screen object which implements drawing methods for alt or line mode
 
     this.size = { lines: 0, cols: 0 };
 
@@ -297,202 +300,282 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
         return vScrollBarHeight;
     };
 
-    // Determine the new size of the currently active screen and
-    // return it by sending JSON encoded mapping of the size to the
-    // terminal emulator process
-    this.resize = function() {
-        self.size = getTermSize(linesElement);
-        send({cmd:'resize',
-              width:self.size.cols,
-              height:self.size.lines});
-    };
+    var LineScreen = function() {
+        // Determine the new size of the currently active screen and
+        // return it by sending JSON encoded mapping of the size to the
+        // terminal emulator process
+        this.resize = function() {
+            self.size = getTermSize(linesElement);
+            send({cmd:'resize',
+                  width:self.size.cols,
+                  height:self.size.lines});
+        };
 
-    // AutoScroll
-    // automatically keep the bottom visible unless the user actively scrolls to the top
-    var autoScrollActive = true;
-    var autoScrollActivationAreaHeight = 10;
-    var autoScrollLastHeight;
+        // AutoScroll
+        // automatically keep the bottom visible unless the user actively scrolls to the top
+        var autoScrollActive = true;
+        var autoScrollActivationAreaHeight = 10;
+        var autoScrollLastHeight;
 
-    // should be bound to terminal scroll events to deactivate
-    // autoScroll if user scrolls manually
-    this.checkAutoScroll = function() {
-        if (autoScrollLastHeight == parentElement.scrollHeight) {
-            // Whenever the user scrolls withing
-            // autoScrollActivationAreaHeight pixels to the bottom,
-            // automatically keep bottom content visible (==
-            // scroll automatically)
-            if ((parentElement.scrollTop + parentElement.clientHeight) > (parentElement.scrollHeight - autoScrollActivationAreaHeight)) {
-                autoScrollActive = true;
+        // should be bound to terminal scroll events to deactivate
+        // autoScroll if user scrolls manually
+        this.checkAutoScroll = function() {
+            if (autoScrollLastHeight == parentElement.scrollHeight) {
+                // Whenever the user scrolls withing
+                // autoScrollActivationAreaHeight pixels to the bottom,
+                // automatically keep bottom content visible (==
+                // scroll automatically)
+                if ((parentElement.scrollTop + parentElement.clientHeight) > (parentElement.scrollHeight - autoScrollActivationAreaHeight)) {
+                    autoScrollActive = true;
+                } else {
+                    autoScrollActive = false;
+                }
             } else {
-                autoScrollActive = false;
+                // scroll event had been fired as result of adding lines
+                // to the terminal and thus increasing its size, do not
+                // deactivate autoscroll in that case
+                autoScrollLastHeight = parentElement.scrollHeight;
             }
-        } else {
-            // scroll event had been fired as result of adding lines
-            // to the terminal and thus increasing its size, do not
-            // deactivate autoscroll in that case
-            autoScrollLastHeight = parentElement.scrollHeight;
         }
-    }
 
-    var autoScroll = function() {
-        if (autoScrollActive) {
-            // scroll to the bottom
-            parentElement.scrollTop = parentElement.scrollHeight - parentElement.clientHeight;
-        }
-    };
-    this.autoScroll = autoScroll;
+        var autoScroll = function() {
+            if (autoScrollActive) {
+                // scroll to the bottom
+                parentElement.scrollTop = parentElement.scrollHeight - parentElement.clientHeight;
+            }
+        };
+        this.autoScroll = autoScroll;
 
-    // terminal render functions
+        // terminal render functions
 
-    // adjust layout to 'render' empty lines at the bottom
-    var adjustTrailingSpace = function() {
-        if (linesElement.childNodes.length && ((linesElement.childNodes.length - screen0) <= self.size.lines)) {
-            var historyHeight = linesElement.childNodes[screen0].offsetTop;
-            // position the <pre> so that anything above the screen0 line is outside the termscreen client area
-            linesElement.style.setProperty("top", -historyHeight);
-            // set the termscreen div margin-top so that it covers all history lines (lines before line[screen0])
-            linesElement.parentElement.style.setProperty("margin-top", historyHeight);
-        }
-        autoScroll();
-    };
-    this.adjustTrailingSpace = adjustTrailingSpace;
+        // adjust layout to 'render' empty lines at the bottom
+        var adjustTrailingSpace = function() {
+            if (linesElement.childNodes.length && ((linesElement.childNodes.length - screen0) <= self.size.lines)) {
+                var historyHeight = linesElement.childNodes[screen0].offsetTop;
+                // position the <pre> so that anything above the screen0 line is outside the termscreen client area
+                linesElement.style.setProperty("top", -historyHeight);
+                // set the termscreen div margin-top so that it covers all history lines (lines before line[screen0])
+                linesElement.parentElement.style.setProperty("margin-top", historyHeight);
+            }
+            autoScroll();
+        };
+        this.adjustTrailingSpace = adjustTrailingSpace;
 
-    var checkHistorySizePending = false;
-    this.checkHistorySize = function() {
-        // generate an remove_history event if necessary
+        var checkHistorySizePending = false;
+        this.checkHistorySize = function() {
+            // generate an remove_history event if necessary
 
-        // only check and generate the remove_history event if there is
-        // no event waiting to be processed
-        if (!checkHistorySizePending) {
-            var maxHistoryHeight = 10000; // in pixels
-            var start = screen0;
-            var historyHeight = linesElement.childNodes[start].offsetTop;
+            // only check and generate the remove_history event if there is
+            // no event waiting to be processed
+            if (!checkHistorySizePending) {
+                var maxHistoryHeight = 10000; // in pixels
+                var start = screen0;
+                var historyHeight = linesElement.childNodes[start].offsetTop;
 
-            if (historyHeight > maxHistoryHeight) {
-                for (var i=0; i<start; i++) {
-                    if ((historyHeight - linesElement.childNodes[i].offsetTop) < maxHistoryHeight) {
-                        send({cmd:'removehistory',
-                              n:i});
-                        checkHistorySizePending = true; // change state: wait for the removeHistory response
-                        return
+                if (historyHeight > maxHistoryHeight) {
+                    for (var i=0; i<start; i++) {
+                        if ((historyHeight - linesElement.childNodes[i].offsetTop) < maxHistoryHeight) {
+                            send({cmd:'removehistory',
+                                  n:i});
+                            checkHistorySizePending = true; // change state: wait for the removeHistory response
+                            return
+                        }
                     }
                 }
             }
-        }
-    };
+        };
 
-    // remove all history lines from 0..n
-    this.removeHistoryLines = function(n) {
-        for (var i=0; i<n; i++) {
-            linesElement.removeChild(linesElement.firstChild);
-        }
-        checkHistorySizePending = false;
-    };
+        // remove all history lines from 0..n
+        this.removeHistoryLines = function(n) {
+            for (var i=0; i<n; i++) {
+                linesElement.removeChild(linesElement.firstChild);
+            }
+            checkHistorySizePending = false;
+        };
 
-    this.setScreen0 = function(s0) {
-        screen0 = s0;
-        adjustTrailingSpace();
-    };
+        this.setScreen0 = function(s0) {
+            screen0 = s0;
+            adjustTrailingSpace();
+        };
 
-    this.setLine = function(index, content) {
-        linesElement.childNodes[index].innerHTML = content + "\n";
-    };
+        this.setLine = function(index, content) {
+            linesElement.childNodes[index].innerHTML = content + "\n";
+        };
 
-    this.insertLine = function(index, content) {
-        var span = document.createElement('span');
-        span.innerHTML = content + "\n";
-        if ((linesElement.children.length) <= index) {
+        this.insertLine = function(index, content) {
+            var span = document.createElement('span');
+            span.innerHTML = content + "\n";
+            if ((linesElement.children.length) <= index) {
+                linesElement.appendChild(span);
+            } else {
+                linesElement.insertBefore(span, linesElement.childNodes[index]);
+            }
+            adjustTrailingSpace();
+        };
+
+        this.appendLine = function(content) {
+            var span = document.createElement("span");
+            span.innerHTML = content + "\n";
             linesElement.appendChild(span);
-        } else {
-            linesElement.insertBefore(span, linesElement.childNodes[index]);
-        }
-        adjustTrailingSpace();
-    };
+            adjustTrailingSpace();
+        };
 
-    this.appendLine = function(content) {
-        var span = document.createElement("span");
-        span.innerHTML = content + "\n";
-        linesElement.appendChild(span);
-        adjustTrailingSpace();
-    };
+        this.removeLine = function(index) {
+            linesElement.removeChild(linesElement.childNodes[index]);
+            adjustTrailingSpace();
+        };
 
-    this.removeLine = function(index) {
-        linesElement.removeChild(linesElement.childNodes[index]);
-        adjustTrailingSpace();
-    };
+        this.removeLastLine = function() {
+          linesElement.removeChild(linesElement.lastChild);
+          adjustTrailingSpace();
+        };
 
-    this.removeLastLine = function() {
-      linesElement.removeChild(linesElement.lastChild);
-      adjustTrailingSpace();
-    };
+        // clear all a lines and the history
+        this.reset = function() {
+            linesElement.innerHTML = "";
+            adjustTrailingSpace();
+        };
 
-    // clear all a lines and the history
-    this.reset = function() {
-        linesElement.innerHTML = "";
-    };
+        // iframe functions
 
-    // iframe functions
+        // insert an iframe 'line' before linenumber
+        this.insertIframe = function(index, id, uri) {
+            var div = document.createElement('div');
+            linesElement.replaceChild(div, linesElement.childNodes[index]);
 
-    // insert an iframe 'line' before linenumber
-    this.insertIframe = function(index, id, uri) {
-        var div = document.createElement('div');
-        linesElement.replaceChild(div, linesElement.childNodes[index]);
+            var iframe = document.createElement('iframe');
+            iframe.addEventListener('webkitTransitionEnd', autoScroll, false);
 
-        var iframe = document.createElement('iframe');
-        iframe.addEventListener('webkitTransitionEnd', autoScroll, false);
+            // todo: add seamless & sandbox="allow-scripts allow-forms" attributes
+            iframe.name = id;
+            iframe.id = id;
+            div.appendChild(iframe);
 
-        // todo: add seamless & sandbox="allow-scripts allow-forms" attributes
-        iframe.name = id;
-        iframe.id = id;
-        div.appendChild(iframe);
+            var newline = document.createElement('span');
+            newline.innerHTML = "\n";
+            div.appendChild(newline);
 
-        var newline = document.createElement('span');
-        newline.innerHTML = "\n";
-        div.appendChild(newline);
+            // keep the current iframe around for debugging
+            term.iframe = iframe;
 
-        term.iframe = iframe; // keep the current iframe around for debugging
+            // linemode: iframe grows vertically with content
+            //           iframe is as wide as the terminal window
+            iframe.style.width = '100%';
 
-        // linemode: iframe grows vertically with content
-        //           iframe is as wide as the terminal window
-        iframe.style.width = '100%';
+            // the iframe must have at least the height of a vertical
+            // scrollbar otherwise, artifacts show up when animating the
+            // inital resize of an iframe with vertically scrolled content
+            iframe.style.minHeight = getVScrollbarHeight();
+            iframe.style.height = getVScrollbarHeight();
 
-        // the iframe must have at least the height of a vertical
-        // scrollbar otherwise, artifacts show up when animating the
-        // inital resize of an iframe with vertically scrolled content
-        iframe.style.minHeight = getVScrollbarHeight();
-        iframe.style.height = getVScrollbarHeight();
+            adjustTrailingSpace();
 
-        adjustTrailingSpace();
+            // load the frame document
+            iframe.src = uri;
 
-        // load the frame document
-        iframe.src = uri;
+            iframe.focus();
+        };
 
-        iframe.focus();
+        // called when entering plain terminal mode
+        this.iframeLeave = function() {
+            window.focus();
+        };
 
-        // keep the current iframe around for debugging
-        self.iframe = iframe;
-    };
+        //
+        this.iframeResize = function(frameId, height) {
+            var iframe = document.getElementById(frameId);
+            if (height === 'fullscreen') {
+                iframe.style.height = "100%";
+            } else {
+                iframe.style.height = height;
+            }
+            autoScroll();
+        };
+    }
 
-    // call .close on the iframe document.
-    this.iframeCloseDocument = function() {
-        // todo delete
-    };
+    // screen render interface of the alternative buffer:
+    // no scrollback, thus no autoscroll and switching to iframe mode
+    // always uses a fullscreen iframe
+    var AltScreen = function() {
+        this.resize = function() {
+            self.size = getTermSize(altElement);
+            send({cmd:'resize',
+                  width:self.size.cols,
+                  height:self.size.lines});
+        };
 
-    // called when entering plain terminal mode
-    this.iframeLeave = function() {
-        window.focus();
-    };
+        this.setLine = function(index, content) {
+            altElement.childNodes[index].innerHTML = content + "\n";
+        };
 
-    //
-    this.iframeResize = function(frameId, height) {
-        var iframe = document.getElementById(frameId);
-        if (height === 'fullscreen') {
-            iframe.style.height = "100%";
-        } else {
-            iframe.style.height = height;
-        }
-        autoScroll();
-    };
+        this.insertLine = function(index, content) {
+            var span = document.createElement('span');
+            span.innerHTML = content + "\n";
+            if ((linesElement.children.length) <= index) {
+                altElement.appendChild(span);
+            } else {
+                altElement.insertBefore(span, altElement.childNodes[index]);
+            }
+        };
+
+        this.appendLine = function(content) {
+            var span = document.createElement("span");
+            span.innerHTML = content + "\n";
+            altElement.appendChild(span);
+        };
+
+        this.removeLine = function(index) {
+            altElement.removeChild(altElement.childNodes[index]);
+        };
+
+        this.removeLastLine = function() {
+          altElement.removeChild(altElement.lastChild);
+        };
+
+        // clear all a lines and the history
+        this.reset = function() {
+            altElement.innerHTML = "";
+        };
+
+        // iframes
+        this.insertIframe = function(index, id, uri) {
+            // ignore the index, always create fullscreen iframes
+            altIframeContainer.innerHTML = "";
+            altIframeContainer.style.display = "block";
+            altElement.style.display = "none";
+
+            var iframe = document.createElement('iframe');
+
+            // todo: add seamless & sandbox="allow-scripts allow-forms" attributes
+            iframe.name = id;
+            iframe.id = id;
+            altIframeContainer.appendChild(iframe);
+
+            // keep the current iframe around for debugging
+            term.iframe = iframe;
+
+            // todo: or use absolute positioning???
+            iframe.style.width = '100%';
+            iframe.style.height = '100%';
+
+            // load the frame document
+            iframe.src = uri;
+
+            iframe.focus();
+        };
+
+        // back to plain terminal emulatoin (still in altbuffer mode)
+        this.iframeLeave = function() {
+            altElement.style.display="block";
+            altIframeContainer.style.display = "none";
+            altIframeContainer.innerHTML = ""; // destroy the iframe
+            window.focus();
+        };
+
+        this.iframeResize = function(frameId, height) {
+            // alt buffer mode iframes are always fullscreen
+        };
+    }
 
     // select a substring on a line
     var selectSubLine = function(lineSpan, startIdx, endIdx) {
@@ -532,26 +615,36 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
         return {start:wordStart+1, end:wordEnd};
     }
 
-    // begin to render lines in app mode (fullscreen without
+
+    // line screen and alternative screen setup
+
+    var lineScreen = new LineScreen();
+    var altScreen = new AltScreen();
+    self.screen = lineScreen;
+
+    // render lines and iframes in app mode (fullscreen without
     // scrollback)
-    var applicationMode = function(enable) {
-        //TODO: implement
-        // if (appElement) {
-        //     app.show(enable);
-        //     lines.show(!enable);
-        //     state.appmode = enable;
-        //     fn.resize(state.size.lines, state.size.lines);
-        // }
+    this.altBufferMode = function(enable) {
+        if (enable) {
+            altElement.style.display = "block";
+            linesElement.style.display = "none";
+            self.screen = altScreen;
+        } else {
+            altElement.style.display = "none";
+            linesElement.style.display = "block";
+            self.screen = lineScreen;
+        }
     };
 
     // init
     parentElement.innerHTML = termMarkup;
     linesElement = parentElement.getElementsByClassName('terminal-line-container')[0];
-    appElement   = parentElement.getElementsByClassName('terminal-app-container')[0];
-    self.resize();
+    altElement   = parentElement.getElementsByClassName('terminal-alt-container')[0];
+    self.screen.resize();
 
     // debug
     this.linesElement = linesElement;
+    this.altElement = altElement;
 
     // focus
     window.onfocus = function() { self.setFocus(true); };
