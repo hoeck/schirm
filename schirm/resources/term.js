@@ -629,18 +629,24 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
             altElement.style.display = "block";
             linesElement.style.display = "none";
             self.screen = altScreen;
+            self.screen.resize();
         } else {
             altElement.style.display = "none";
             linesElement.style.display = "block";
             self.screen = lineScreen;
+            self.screen.resize();
         }
     };
+
+    this.resize = function() {
+        self.screen.resize();
+    }
 
     // init
     parentElement.innerHTML = termMarkup;
     linesElement = parentElement.getElementsByClassName('terminal-line-container')[0];
     altElement   = parentElement.getElementsByClassName('terminal-alt-container')[0];
-    self.screen.resize();
+    self.resize();
 
     // debug
     this.linesElement = linesElement;
