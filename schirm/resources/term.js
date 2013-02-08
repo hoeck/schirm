@@ -60,6 +60,7 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
 
         socket.onmessage = function (event) {
             eval(event.data);
+            self.screen.autoScroll();
         }
     }
 
@@ -410,30 +411,25 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
             } else {
                 linesElement.insertBefore(span, linesElement.childNodes[index]);
             }
-            adjustTrailingSpace();
         };
 
         this.appendLine = function(content) {
             var span = document.createElement("span");
             span.innerHTML = content + "\n";
             linesElement.appendChild(span);
-            adjustTrailingSpace();
         };
 
         this.removeLine = function(index) {
             linesElement.removeChild(linesElement.childNodes[index]);
-            adjustTrailingSpace();
         };
 
         this.removeLastLine = function() {
-          linesElement.removeChild(linesElement.lastChild);
-          adjustTrailingSpace();
+            linesElement.removeChild(linesElement.lastChild);
         };
 
         // clear all a lines and the history
         this.reset = function() {
             linesElement.innerHTML = "";
-            adjustTrailingSpace();
         };
 
         // iframe functions
@@ -574,6 +570,10 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
 
         this.iframeResize = function(frameId, height) {
             // alt buffer mode iframes are always fullscreen
+        };
+
+        this.autoScroll = function() {
+            // fullscreen - no scrolling required
         };
     }
 

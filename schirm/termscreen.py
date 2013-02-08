@@ -327,7 +327,18 @@ class LineContainer(): # lazy
         if (len(self.lines) - self.screen0) >= self.height:
             # if there are already height lines visible, move the
             # topmost visible line pointer
-            self.set_screen0(self.screen0 + 1)
+
+            # propagate=False explanation:
+            # If each line is only appended to the terminal screen,
+            # there is no need to set the screen0 pointer for every
+            # append operation. Screen0 is only required to determine
+            # the top of the terminal window within the list of lines,
+            # so setting it (and computing all the proper offsets to
+            # hide the scrollback and find the first real line) can be
+            # deferred to the client unless we really need it
+            # (e.g. for a pop operation).
+            self.set_screen0(self.screen0 + 1, propagate=False)
+
         self._append(line)
 
     def insert(self, index, line):
@@ -406,9 +417,15 @@ class LineContainer(): # lazy
             else:
                 return
 
-    def set_screen0(self, screen0):
+    def set_screen0(self, screen0, propagate=True):
         self.screen0 = screen0
-        self.events.append(('set_screen0', self.screen0))
+        if propagate:
+            # some uses of set_screen0 do not need to also execute
+            # this on the client, such as append line, to optimize the
+            # performance (by a factor of 10-50x) of printing many
+            # lines to the bottom of the terminal (which is a very
+            # common case).
+            self.events.append(('set_screen0', self.screen0))
 
     def erase_in_display(self, cursor_attrs):
         """Implements marginless erase_in_display type 2 preserving the history."""
