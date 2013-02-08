@@ -855,7 +855,7 @@ class TermScreen(pyte.Screen):
 
         if mo.DECSAVECUR in modes:
             # save cursor position and restore it on mode reset
-            self.save_cursor()
+            self.restore_cursor()
 
         if mo.DECALTBUF in modes:
             # disable alternative draw buffer
