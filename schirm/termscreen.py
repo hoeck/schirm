@@ -1288,7 +1288,8 @@ class SchirmStream(pyte.Stream):
                     self.dispatch("draw_string", chunk)
                     i += stream_chunksize
                 else:
-                    self.dispatch("draw_string", chunk[:m.start()])
+                    if m.start() > 0:
+                        self.dispatch("draw_string", chunk[:m.start()])
                     i += m.start()
                     self.consume(src[i])
                     i += 1
