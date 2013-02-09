@@ -627,12 +627,12 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
     this.altBufferMode = function(enable) {
         if (enable) {
             altElement.style.display = "block";
-            linesElement.style.display = "none";
+            linesElement.parentElement.style.display = "none";
             self.screen = altScreen;
             self.screen.resize();
         } else {
             altElement.style.display = "none";
-            linesElement.style.display = "block";
+            linesElement.parentElement.style.display = "block";
             self.screen = lineScreen;
             self.screen.resize();
         }
