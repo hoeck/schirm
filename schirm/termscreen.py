@@ -284,6 +284,9 @@ class LineContainer(): # lazy
         self.events = []
         return ret
 
+    def append_events(self, events):
+        self.events.extend(events)
+
     def alt_buffer_mode(self, enable=False):
         self.events.append(('alt_buffer_mode', enable))
 
@@ -746,7 +749,6 @@ class TermScreen(pyte.Screen):
             self.iframe_set_mode(mode_id, cookie)
             return
 
-
         # Private mode codes are shifted, to be distingiushed from non
         # private ones.
         if kwargs.get("private"):
@@ -796,8 +798,11 @@ class TermScreen(pyte.Screen):
             self.save_cursor()
 
         if mo.DECALTBUF in modes:
-            # enable alternative buffer
+            # enable alternative draw buffer, switch internal
+            # linecontainer while preserving generated events
+            events = self.linecontainer.get_and_clear_events()
             self.linecontainer = self._alt_mode_container
+            self.linecontainer.append_events(events)
             self.linecontainer.alt_buffer_mode(True)
 
     def reset_mode(self, *modes, **kwargs):
@@ -858,9 +863,12 @@ class TermScreen(pyte.Screen):
             self.restore_cursor()
 
         if mo.DECALTBUF in modes:
-            # disable alternative draw buffer
-            self.linecontainer.alt_buffer_mode(False)
+            # disable alternative draw buffer, switch internal
+            # linecontainer while preserving generated events
+            events = self.linecontainer.get_and_clear_events()
             self.linecontainer = self._line_mode_container
+            self.linecontainer.append_events(events)
+            self.linecontainer.alt_buffer_mode(False)
 
     # def draw(self, char):
     #     """Display a character at the current cursor position and advance
