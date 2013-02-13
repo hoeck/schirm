@@ -63,6 +63,10 @@
 
 /* min scrollbar */
 
+body {
+    overflow-y:scroll;
+}
+
 body::-webkit-scrollbar {
     width: 6px;
 }

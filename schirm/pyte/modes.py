@@ -77,6 +77,6 @@ DECALTBUF_ALT = 1047 << PRIVATE_MODE_SHIFT
 #: *Save Cursor Mode*: Save cursor as in DECSC.
 DECSAVECUR = 1048 << PRIVATE_MODE_SHIFT
 
-#: *Save Cursor And Use Alternate Buffer Mode*:
+#: *Save Cursor, Clear And Use Alternate Buffer Mode*:
 #: Combination of two DECALTBUF and DECSAVECUR modes.
 DECAPPMODE = 1049 << PRIVATE_MODE_SHIFT

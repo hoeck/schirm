@@ -300,19 +300,12 @@ class LineContainer(): # lazy
         """Remove the line at terminal screen lineumber index."""
         self._ensure_lines(index)
         ri = self.real_line_index(index)
-        if self.screen0 > 0:
-            self.set_screen0(self.screen0 - 1)
+        # the termscreen must decide whether to seek the scrollback
+        # mechanism or not, depending on the current margin
+        #if self.screen0 > 0:
+        #    self.set_screen0(self.screen0 - 1)
         line = self.lines.pop(ri)
         self.events.append(('pop', ri, line))
-        return line
-
-    def pop_bottom(self):
-        """Remove a line from the bottom of the terminal screen."""
-        self._ensure_lines()
-        if self.screen0 > 0:
-            self.set_screen(self.screen0 - 1)
-        line = self.lines.pop(len(self.lines)-1)
-        self.events.append(('pop_bottom',))
         return line
 
     def _append(self, line):
@@ -429,6 +422,9 @@ class LineContainer(): # lazy
             # lines to the bottom of the terminal (which is a very
             # common case).
             self.events.append(('set_screen0', self.screen0))
+
+    def add_screen0(self, delta):
+        self.set_screen0(self.screen0 + delta)
 
     def erase_in_display(self, cursor_attrs):
         """Implements marginless erase_in_display type 2 preserving the history."""
@@ -564,13 +560,6 @@ class AltContainer(LineContainer):
         self.events.append(('pop', index, line))
         return line
 
-    def pop_bottom(self):
-        """Remove a line from the bottom of the terminal screen."""
-        self._ensure_lines()
-        line = self.lines.pop(len(self.lines)-1)
-        self.events.append(('pop_bottom',))
-        return line
-
     def append(self, line):
         """Append an empty line to the bottom of the terminal screen."""
         # is line always empty?
@@ -582,9 +571,9 @@ class AltContainer(LineContainer):
 
     def insert(self, index, line):
         self._ensure_lines(index)
-        if len(self.lines) >= self.height:
-            # remove the topmost line to have space to insert one line
-            self.pop(0)
+        # if len(self.lines) >= self.height:
+        #     # remove the topmost line to have space to insert one line
+        #     self.pop(0)
         self.lines.insert(index, line)
         line.changed = False
         self.events.append(('insert', index, line))
@@ -724,11 +713,14 @@ class TermScreen(pyte.Screen):
         self.lines   += delta_lines
         self.columns += delta_columns
 
-        cursor_delta = self.linecontainer.resize(self.lines, self.columns)
-
-        # cursor: make sure that it 'stays' on its current line
-        self.cursor.y = min(max(self.cursor.y + cursor_delta, 0), self.lines-1)
-        self.cursor.x = min(max(self.cursor.x, 0), self.columns-1)
+        if mo.DECALTBUF in self.mode and False:
+            # home cursor
+            self.reset_mode(mo.DECOM)
+        else:
+            # cursor: make sure that it 'stays' on its current line
+            cursor_delta = self.linecontainer.resize(self.lines, self.columns)
+            self.cursor.y = min(max(self.cursor.y + cursor_delta, 0), self.lines-1)
+            self.cursor.x = min(max(self.cursor.x, 0), self.columns-1)
 
         self.margins = Margins(0, self.lines - 1)
 
@@ -738,7 +730,6 @@ class TermScreen(pyte.Screen):
         :param list modes: modes to set, where each mode is a constant
                            from :mod:`pyte.modes`.
         """
-
         mode_id = (modes[:1] or [None])[0]
         if mode_id in (IFRAME_DOCUMENT_MODE_ID, IFRAME_RESPONSE_MODE_ID):
             cookie = ';'.join(map(str,modes[1:]))
@@ -756,8 +747,8 @@ class TermScreen(pyte.Screen):
 
         # translate mode shortcuts and aliases
         if mo.DECAPPMODE in modes:
-            # DECAPP is a combination of DECALTBUF and DECSAVECUR
-            modes.remove(mo.DECAPPMODE)
+            # DECAPP is a combination of DECALTBUF and DECSAVECUR and
+            # additionally erase the alternative buffer
             modes.update([mo.DECALTBUF, mo.DECSAVECUR])
 
         if mo.DECALTBUF_ALT in modes:
@@ -800,10 +791,14 @@ class TermScreen(pyte.Screen):
         if mo.DECALTBUF in modes:
             # enable alternative draw buffer, switch internal
             # linecontainer while preserving generated events
-            events = self.linecontainer.get_and_clear_events()
-            self.linecontainer = self._alt_mode_container
-            self.linecontainer.append_events(events)
-            self.linecontainer.alt_buffer_mode(True)
+            if self.linecontainer is self._line_mode_container:
+                events = self.linecontainer.get_and_clear_events()
+                self.linecontainer = self._alt_mode_container
+                self.linecontainer.append_events(events)
+                self.linecontainer.alt_buffer_mode(True)
+
+        # if mo.DECAPPMODE in modes:
+        #     self.erase_in_display(2)
 
     def reset_mode(self, *modes, **kwargs):
         """Resets (disables) a given list of modes.
@@ -865,10 +860,11 @@ class TermScreen(pyte.Screen):
         if mo.DECALTBUF in modes:
             # disable alternative draw buffer, switch internal
             # linecontainer while preserving generated events
-            events = self.linecontainer.get_and_clear_events()
-            self.linecontainer = self._line_mode_container
-            self.linecontainer.append_events(events)
-            self.linecontainer.alt_buffer_mode(False)
+            if self.linecontainer is self._alt_mode_container:
+                events = self.linecontainer.get_and_clear_events()
+                self.linecontainer = self._line_mode_container
+                self.linecontainer.append_events(events)
+                self.linecontainer.alt_buffer_mode(False)
 
     # def draw(self, char):
     #     """Display a character at the current cursor position and advance
@@ -914,7 +910,10 @@ class TermScreen(pyte.Screen):
     #     self.cursor.x += 1
 
     def draw_string(self, string):
-        """Like draw, but for a whole string at once."""
+        """Like draw, but for a whole string at once.
+
+        String MUST NOT contain any control characters like newlines or carriage-returns.
+        """
 
         cur_attrs = self.cursor.attrs[1:]
         def _write_string(s):
@@ -976,9 +975,17 @@ class TermScreen(pyte.Screen):
         top, bottom = self.margins
         if self.cursor.y == bottom:
             if bottom == self.lines-1:
+                # default margin
                 self.linecontainer.append(self._create_line())
             else:
                 self.linecontainer.insert(bottom+1, self._create_line())
+                if top == 0:
+                    # surplus lines move the scrollback if no margin is active
+                    self.linecontainer.add_screen0(1)
+                else:
+                    # delete surplus lines to achieve scrolling within in the margins
+                    self.linecontainer.pop(top)
+
         else:
             self.cursor_down()
 
@@ -1007,7 +1014,7 @@ class TermScreen(pyte.Screen):
 
         # If cursor is outside scrolling margins it -- do nothin'.
         if top <= self.cursor.y <= bottom:
-            #                           v +1, because range() is exclusive.
+            # v+1, because range() is exclusive.
             for line in range(self.cursor.y,
                               min(bottom + 1, self.cursor.y + count)):
                 self.linecontainer.pop(bottom)
@@ -1138,13 +1145,8 @@ class TermScreen(pyte.Screen):
             # lines until all current non-blank lines are above the
             # top of the term window. (thats what xterm does and
             # linux-term not, try using top in both term emulators and
-            # see what
-            # happens to the history)
-            top, bottom = self.margins # where to use them?: ans: in linecontainer as an argument to insert, pop and append
-            if top == 0 and bottom == self.lines - 1:
-                self.linecontainer.erase_in_display(self.cursor.attrs)
-            else:
-                assert False, "erase_in_display not implemented for margins"
+            # see what happens to the history)
+            self.linecontainer.erase_in_display(self.cursor.attrs)
 
         self.linecontainer.purge_empty_lines()
 

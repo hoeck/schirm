@@ -494,10 +494,9 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
     // always uses a fullscreen iframe
     var AltScreen = function() {
         this.resize = function() {
-            self.size = getTermSize(altElement);
-            send({cmd:'resize',
-                  width:self.size.cols,
-                  height:self.size.lines});
+            // get the size from the line element by temporarily switching buffer mode
+            self.altBufferMode(false);
+            self.altBufferMode(true);
         };
 
         this.setLine = function(index, content) {
@@ -626,15 +625,19 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
     // scrollback)
     this.altBufferMode = function(enable) {
         if (enable) {
+            // always call resize on the lineScreen so that both
+            // buffers use the same dimensions, even though the
+            // altScreen could be larger because it does not need a
+            // scrollbar
+            lineScreen.resize();
             altElement.style.display = "block";
             linesElement.parentElement.style.display = "none";
             self.screen = altScreen;
-            self.screen.resize();
         } else {
             altElement.style.display = "none";
             linesElement.parentElement.style.display = "block";
             self.screen = lineScreen;
-            self.screen.resize();
+            lineScreen.resize();
         }
     };
 
