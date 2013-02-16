@@ -123,10 +123,6 @@ class Events():
         return "term.screen.removeLine({});".format(index)
 
     @staticmethod
-    def pop_bottom():
-        return "term.screen.removeLastLine();"
-
-    @staticmethod
     def append(line):
         content = renderline(line)
         return "term.screen.appendLine({});".format(json.dumps(content))

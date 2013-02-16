@@ -406,11 +406,7 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
         this.insertLine = function(index, content) {
             var span = document.createElement('span');
             span.innerHTML = content + "\n";
-            if ((linesElement.children.length) <= index) {
-                linesElement.appendChild(span);
-            } else {
-                linesElement.insertBefore(span, linesElement.childNodes[index]);
-            }
+            linesElement.insertBefore(span, linesElement.childNodes[index]);
         };
 
         this.appendLine = function(content) {
@@ -421,10 +417,6 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
 
         this.removeLine = function(index) {
             linesElement.removeChild(linesElement.childNodes[index]);
-        };
-
-        this.removeLastLine = function() {
-            linesElement.removeChild(linesElement.lastChild);
         };
 
         // clear all a lines and the history
@@ -506,11 +498,7 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
         this.insertLine = function(index, content) {
             var span = document.createElement('span');
             span.innerHTML = content + "\n";
-            if ((linesElement.children.length) <= index) {
-                altElement.appendChild(span);
-            } else {
-                altElement.insertBefore(span, altElement.childNodes[index]);
-            }
+            altElement.insertBefore(span, altElement.childNodes[index]);
         };
 
         this.appendLine = function(content) {
@@ -521,10 +509,6 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
 
         this.removeLine = function(index) {
             altElement.removeChild(altElement.childNodes[index]);
-        };
-
-        this.removeLastLine = function() {
-          altElement.removeChild(altElement.lastChild);
         };
 
         // clear all a lines and the history

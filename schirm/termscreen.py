@@ -179,7 +179,7 @@ class Line(UserList):
         self.cursorpos = None
 
     def __repr__(self):
-        return "#<Line %s>" % repr(''.join(c.data for c in self))
+        return "#<Line %s:%s>" % (hex(id(self)), repr(''.join(c.data for c in self)))
 
 class IframeLine(Line):
 
@@ -300,10 +300,6 @@ class LineContainer(): # lazy
         """Remove the line at terminal screen lineumber index."""
         self._ensure_lines(index)
         ri = self.real_line_index(index)
-        # the termscreen must decide whether to seek the scrollback
-        # mechanism or not, depending on the current margin
-        #if self.screen0 > 0:
-        #    self.set_screen0(self.screen0 - 1)
         line = self.lines.pop(ri)
         self.events.append(('pop', ri, line))
         return line
@@ -340,8 +336,6 @@ class LineContainer(): # lazy
     def insert(self, index, line):
         self._ensure_lines(index)
         ri = self.real_line_index(index)
-        if (len(self.lines) - self.screen0) >= self.height:
-            self.set_screen0(self.screen0 + 1)
         self.lines.insert(ri, line)
         line.changed = False
         self.events.append(('insert', ri, line))
