@@ -4,6 +4,10 @@ import struct
 import fcntl
 import termios
 
+def _debug(s):
+    print "IO:", repr(s.replace("\x1b[", '<CSI>').replace("\x1b", '<ESC>'))
+    return s
+
 class PseudoTerminal(object):
 
     def __init__(self, size=(80,25)):
