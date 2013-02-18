@@ -543,7 +543,7 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
             iframe.focus();
         };
 
-        // back to plain terminal emulatoin (still in altbuffer mode)
+        // back to plain terminal emulation (still in altbuffer mode)
         this.iframeLeave = function() {
             altElement.style.display="block";
             altIframeContainer.style.display = "none";
