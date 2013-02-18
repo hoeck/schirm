@@ -184,7 +184,7 @@ class Iframe(object):
         if self.websocket_req_id:
             # close open websockets
             self.terminal_ui.respond(self.websocket_req_id)
-        return "term.iframeLeave();"
+        return "term.screen.iframeLeave();"
 
     def _send_message(self, data):
         """Send data to the iframe using the iframes websocket connection."""
