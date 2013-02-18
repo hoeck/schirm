@@ -162,7 +162,6 @@ class Line(UserList):
         )[type_of]
 
         ensure_size()
-
         for column in interval:
             self[column] = char
 
@@ -600,13 +599,13 @@ class AltContainer(LineContainer):
 
     def erase_in_display(self, cursor_attrs):
         # clear the whole display
-        for line in self.lines:
+        for i, line in enumerate(self.lines):
             # erase the whole line
             line.erase_in_line(2, 0, cursor_attrs)
+            line.modified(self, i)
 
     def remove_history(self, lines_to_remove=None):
         pass
-
 
 class TermScreen(pyte.Screen):
 
