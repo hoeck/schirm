@@ -118,8 +118,9 @@ var schirm = (function(schirm) {
     function getElementHeight(e) {
         var style = getComputedStyle(e);
         var margin = parseInt(style.marginTop) + parseInt(style.marginBottom);
-        return Math.max(e.scrollHeight + e.clientHeight) + margin;
+        return Math.max(e.scrollHeight, e.clientHeight) + margin;
     }
+    schirm.getElementHeight = getElementHeight;
 
     // ask the iframes parent to resize the current iframe
     var resizePrevHeight;
@@ -176,9 +177,17 @@ var schirm = (function(schirm) {
     // Listen to window resize events to adjust the height accordingly.
     schirm.resizing = function(height) {
         schirm.resize(height);
-        window.addEventListener('resize', function() {
+
+        var resizeHandler = function() {
+            // remove the resize callback when resizing to prevent
+            // infinite callback recursion
+            window.removeEventListener('resize', resizeHandler);
             schirm.resize(height);
-        });
+            window.setTimeout(0, function() {
+                window.addEventListener('resize', resizeHandler);
+            });
+        };
+        window.addEventListener('resize', resizeHandler);
     };
 
     schirm.ready = function(f) {
