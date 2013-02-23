@@ -3,6 +3,7 @@ import pwd
 import struct
 import fcntl
 import termios
+import signal
 import subprocess
 
 def _debug(s):
@@ -99,12 +100,19 @@ class SubprocessTerminal(object):
         self.proc = p
 
     def write(self, data):
-        if isinstance(data, basestring):
-            self.proc.stdin.write(data)
+        if data == '\x03': # ctrl-c
+            self.proc.send_signal(signal.SIGINT)
+            return
+        elif data == '\x04': # ctrl-d
+            self.proc.stdin.close()
+            return
         else:
-            for x in data:
+            if isinstance(data, basestring):
                 self.proc.stdin.write(data)
-        self.proc.stdin.flush()
+            else:
+                for x in data:
+                    self.proc.stdin.write(data)
+            self.proc.stdin.flush()
 
     def read(self):
         """Read data from the pty and return it."""
