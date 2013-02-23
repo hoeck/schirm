@@ -117,7 +117,7 @@ class SubprocessTerminal(object):
     def read(self):
         """Read data from the pty and return it."""
         try:
-            data = self.proc.stdout.read()
+            data = os.read(self.proc.stdout.fileno(), 8192)
             if data:
                 return data
             else:
