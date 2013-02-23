@@ -3,27 +3,47 @@ import pwd
 import struct
 import fcntl
 import termios
+import subprocess
 
 def _debug(s):
     print "IO:", repr(s.replace("\x1b[", '<CSI>').replace("\x1b", '<ESC>'))
     return s
 
+def create_terminal(size=(80,25), use_pty=True, cmd=None):
+    if not cmd:
+        # start the current users default login shell
+        cmd = pwd.getpwuid(os.getuid()).pw_shell
+
+    env = {'TERM': 'xterm',
+           'COLORTERM': 'Terminal',
+           'COLUMNS': str(size[0]),
+           'LINES': str(size[1])}
+
+    if use_pty:
+        return PseudoTerminal(cmd, size, env)
+    else:
+        return SubprocessTerminal(cmd, size, env)
+
 class PseudoTerminal(object):
 
-    def __init__(self, size=(80,25)):
+    def __init__(self, cmd, size, env):
         self.size = size
 
+        # args
+        if isinstance(cmd, basestring):
+            cmd = cmd.split()
+
+        executable = cmd[0]
+        args = [os.path.basename(cmd[0])] + cmd[1:]
+
         # start the pty
-        shell = pwd.getpwuid(os.getuid()).pw_shell
-        shell_name = os.path.basename(shell)
         pid, master = os.forkpty()
         if pid == 0:
             # child
-            os.putenv('TERM', 'xterm')
-            os.putenv('COLORTERM', 'Terminal')
-            os.putenv('COLUMNS', str(size[0]))
-            os.putenv('LINES', str(size[1]))
-            os.execl(shell, shell_name)
+            for k,v in env.items():
+                os.putenv(k, v)
+
+            os.execl(executable, *args)
             assert False
         else:
             # parent
@@ -64,3 +84,40 @@ class PseudoTerminal(object):
             win = struct.pack('HHHH', l, c, x, y)
             fcntl.ioctl(self.master, termios.TIOCSWINSZ, win)
             self.size = [c, l]
+
+class SubprocessTerminal(object):
+
+    def __init__(self, cmd, size, env):
+        # just connect the terminal to a process without using a
+        # pty device
+        p = subprocess.Popen(cmd,
+                             stdin=subprocess.PIPE,
+                             stdout=subprocess.PIPE,
+                             stderr=subprocess.STDOUT,
+                             shell=True,
+                             env=env)
+        self.proc = p
+
+    def write(self, data):
+        if isinstance(data, basestring):
+            self.proc.stdin.write(data)
+        else:
+            for x in data:
+                self.proc.stdin.write(data)
+        self.proc.stdin.flush()
+
+    def read(self):
+        """Read data from the pty and return it."""
+        try:
+            data = self.proc.stdout.read()
+            if data:
+                return data
+            else:
+                return ('pty_read_error', None)
+        except OSError, e:
+            # stdout was closed or reading interrupted by a
+            # signal -> application exit
+            return ('pty_read_error', None)
+
+    def set_size(self, lines, columns):
+        pass

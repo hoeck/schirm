@@ -14,6 +14,9 @@ def main(use_gtk=False):
     if use_gtk:
         parser.add_argument("-c", "--console-log", help="write all console.log messages to stdout (use -cc to include document URL and linenumber, -ccc to include schirm-internal usages of console.log)", action="count")
 
+    parser.add_argument("--no-pty", help="Do not use a pty (pseudo terminal) device.", action="store_true")
+    parser.add_argument("--command", help="The command to execute within the terminal instead of the current users default shell.")
+
     args = parser.parse_args()
 
     if args.verbose:
@@ -38,7 +41,8 @@ def main(use_gtk=False):
         gtkui.PageProxy.new_tab()
     else:
         import termserver
-        termserver.start()
+        termserver.start(use_pty=not args.no_pty,
+                         cmd=args.command or None)
 
 if __name__ == '__main__':
     main()

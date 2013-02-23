@@ -61,14 +61,17 @@ class UIProxy(object):
 # TODO: sort this out
 ws = None
 
-def start():
+def start(use_pty=True, cmd=None):
     global ws
 
     p = None
     def _quit():
         os.killpg(os.getpid(), signal.SIGTERM)
 
-    s = schirm.Schirm(UIProxy(_quit), websocket_proxy_hack=False)
+    s = schirm.Schirm(UIProxy(_quit),
+                      websocket_proxy_hack=False,
+                      use_pty=use_pty,
+                      cmd=cmd)
     ws = webserver.Server(s)
     p = start_chromium(ws.getport())
     p.wait()

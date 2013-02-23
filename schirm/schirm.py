@@ -82,7 +82,7 @@ class Schirm(object):
     # if True, use 'termframe.localhost' as the iframe domain
     inspect_iframes = False
 
-    def __init__(self, uiproxy, websocket_proxy_hack=True):
+    def __init__(self, uiproxy, websocket_proxy_hack=True, use_pty=True, cmd=None):
         # pty, webview, webserver -> schirm communication
         # each message on output queue is a tuple of: (typename, attrdict-value)
         # TODO: would be easier to directly enqueue functions + their arguments
@@ -95,7 +95,7 @@ class Schirm(object):
         self._term_uri = "http://termframe.localhost/term.html"
         self.uiproxy.load_uri(self._term_uri)
 
-        self.terminal_io = terminalio.PseudoTerminal(size=[80,24])
+        self.terminal_io = terminalio.create_terminal(use_pty=use_pty, cmd=cmd)
 
         # connect the terminal emulator with the pty and the ui
         self.emulator = term.Terminal(terminal_ui=self,
