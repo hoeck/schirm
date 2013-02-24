@@ -43,6 +43,9 @@ class Line(UserList):
     """
     A line of characters
     """
+
+    # this is not a valid list ctor, so do not use list methods that
+    # copy the current list like splice ([:]) assignment
     def __init__(self, size, default_char):
         self.size = size
         self.default_char = default_char
@@ -78,7 +81,7 @@ class Line(UserList):
 
     def is_empty(self):
         return (not self.cursorpos) \
-            and ((not self) or all(c == self.default_char for c in self.data))
+            and ((not self.data) or all(c == self.default_char for c in self.data))
 
     def set_size(self, size):
         """ set the size in columns for this line """
@@ -96,74 +99,73 @@ class Line(UserList):
 
         missing_chars = 1 + pos - len(self)
         if missing_chars > 0:
-            self.extend([self.default_char] * missing_chars)
+            self.data.extend([self.default_char] * missing_chars)
 
     def reverse(self):
         """ swap foreground and background for each character """
         self._ensure_size()
         self.changed = True
-        for char in self:
+        for char in self.data:
             char._replace(reverse=True)
 
     def insert_characters(self, pos, count, char):
         """
-        Inserts count chars at pos.
+        Inserts count chars at pos and moves existing chars to the left.
         (see Screen insert_characters)
         """
-        self._ensure_size(pos + count)
+        self._ensure_size(min(pos + count, self.size))
         self.changed = True
-        for _ in range(min(self.size - pos, count)):
-            self.insert(pos, char)
-            self.pop()
+        self.data[pos:pos] = [char] * count
+
+        # trim the line to its size
+        self.data = self.data[:self.size]
 
     def replace_character(self, pos, char):
         """Set character at pos to char."""
         self._ensure_size(pos)
         self.changed = True
-        self[pos] = char
+        self.data[pos] = char
 
     def replace_characters(self, pos, chars):
-        """Set characters at pos..pos+len(chars) to chars."""
+        """Set all characters beginning at pos to chars."""
         self._ensure_size(pos)
         self.changed = True
-        self[pos:pos+len(chars)] = chars
+        self.data[pos:pos+len(chars)] = chars
 
     def delete_characters(self, pos, count, char):
         """
         Delete count characters at pos, characters after pos move left.
-        Use char to fill holes at the current end of the line.
+        Use char to fill holes at the end of the line.
         """
-        self._ensure_size(pos + count)
+        self._ensure_size()
         self.changed = True
-        for _ in range(min(self.size - pos, count)):
-            self.pop(pos)
-            self.insert(self.size, char)
+        self.data[pos:pos+count] = []
+        self.data[len(self.data):] = [char] * (self.size - len(self.data))
 
     def erase_characters(self, pos, count, char):
         """ Replace count characters beginning at pos with char. """
         self._ensure_size(pos + count)
         self.changed = True
-        for p in range(pos, min(pos + count, self.size)):
-            self[p] = char
+        end = min(pos + count, self.size)
+        self.data[pos:end] = [char] * (end-pos)
 
     def erase_in_line(self, type_of, pos, char):
         """ implements Screen.erase_in_line for a Line. """
         self.changed = True
 
-        interval, ensure_size = (
+        start, end, ensure_size = (
             # a) erase from the cursor to the end of line, including
             # the cursor,
-            (range(pos, self.size), lambda: self._ensure_size()),
+            (pos, self.size, lambda: self._ensure_size()),
             # b) erase from the beginning of the line to the cursor,
             # including it,
-            (range(0, pos + 1), lambda: self._ensure_size(pos+1)),
+            (0, pos + 1, lambda: self._ensure_size(pos+1)),
             # c) erase the entire line.
-            (range(0, self.size), lambda: self._ensure_size()),
+            (0, self.size, lambda: self._ensure_size()),
         )[type_of]
 
         ensure_size()
-        for column in interval:
-            self[column] = char
+        self.data[start:end] = [char] * (end-start)
 
     def show_cursor(self, cursorpos, cursorclass):
         """Show the cursor on this line at cursorpos using cursorclass."""
