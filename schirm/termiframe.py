@@ -5,6 +5,7 @@ import logging
 import base64
 import pkg_resources
 import email.parser
+import email.Message
 
 import htmlterm
 
@@ -155,7 +156,7 @@ class Iframe(object):
     # iframe terminal methods
 
     def iframe_resize(self, height):
-        logger.debug("iframe_resize", height)
+        logger.debug("iframe_resize %s" % height)
         # send some js to the terminal hosting this iframe
         self.terminal_ui.execute(htmlterm.Events.iframe_resize(self.id, height))
 
@@ -210,11 +211,24 @@ class Iframe(object):
         # todo: test that req_id indeed belongs to a request
         # originating from this iframe
 
-        m = Message()
-        for k,v in header:
-            m[k] = v
+        m = email.Message.Message()
+
+        # cgi-like: use the 'status' header to indicate which status
+        # the webserver should respond with
+        print header
+
+        http_status = "HTTP/1.1 %s\n" % header.get('Status', header.get('status', '200'))
+
+        for k,v in header.items():
+            if k.lower() == 'status':
+                pass
+            elif k.lower().startswith('x-schirm'):
+                pass
+            else:
+                m[k] = v
         m.set_payload(body)
-        self.terminal_ui.respond(header.get('x-schirm-request-id'), m.as_string())
+
+        self.terminal_ui.respond(header.get('x-schirm-request-id'), http_status + m.as_string())
 
     def _debug(self, msg):
         # todo: this should go directly somewhere into the terminal
@@ -366,7 +380,9 @@ class Iframe(object):
                                     json.dumps(header),
                                     NEWLINE, NEWLINE,
                                     req.data or "",
-                                    STR_END])
+                                    STR_END,
+                                    # trailing newline required for flushing
+                                    NEWLINE])
                 self.terminal_io.write(term_req)
 
             else:

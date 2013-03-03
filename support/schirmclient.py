@@ -167,11 +167,7 @@ def set_block(fd, block=True):
     else:
         fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
 
-def read_next():
-    """Read characters off sys.stdin until a full request has been read.
-
-    Returns a header dict and a message body.
-    """
+def _read_next_string():
     state = None
     current = []
     while 1:
@@ -191,13 +187,21 @@ def read_next():
             else:
                 current.append(ch)
 
+def read_next():
+    """Read characters off sys.stdin until a full request has been read.
+
+    Returns a header dict and a message body.
+    """
+    header, body = _read_next_string().split('\n',1)
+    return json.loads(header), body
+
 def respond(requestid, header, body):
     """Write a response to requestid to the schirm terminal.
 
     Response must be a http response.
     """
     h = dict(header)
-    h['x-schirm-requestid'] = requestid
+    h['x-schirm-request-id'] = requestid
     _write_request(h, body)
 
 def send(data):
