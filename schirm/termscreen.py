@@ -17,8 +17,6 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from UserList import UserList
-from StringIO import StringIO
-import codecs
 import logging
 import pkg_resources
 import re
