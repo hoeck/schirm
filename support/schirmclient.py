@@ -115,12 +115,28 @@ def leave(newline=True):
         out.write("\n")
     out.flush()
 
+def isaschirm():
+    """Determine whether this process is connected to the schirm terminal emulator."""
+    # TODO: check the $SCHIRM_COOKIE
+    return sys.stdout.isatty()
+
+def get_fdin():
+    """Return the filedescriptor of the controlling schirm terminal."""
+    if isaschirm():
+        if sys.stdin.isatty():
+            return sys.stdin.fileno()
+        else:
+            return os.open(os.ctermid(), os.O_RDONLY)
+
 @contextmanager
 def frame(newline=True):
     """Enter frame mode, leaving it on return or exceptions."""
+    if not isaschirm():
+        raise Exception("Not connected to the schirm terminal.")
+
     try:
         enter()
-        yield
+        yield get_fdin()
     finally:
         leave(newline=newline)
 
@@ -167,32 +183,32 @@ def set_block(fd, block=True):
     else:
         fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
 
-def _read_next_string():
+def _read_next_string(fd):
     state = None
     current = []
     while 1:
-        ch = sys.stdin.read(1)
+        ch = os.read(fd, 1)
         if state == None:
             if ch == ESC:
-                ch += sys.stdin.read(1)
+                ch += os.read(fd, 1)
                 if ch == STR_START:
                     # STR START
                     current = []
                     state = 'string'
         elif state == 'string':
             if ch == ESC:
-                ch += sys.stdin.read(1)
+                ch += os.read(fd, 1)
                 if ch == STR_END:
                     return "".join(current)
             else:
                 current.append(ch)
 
-def read_next():
-    """Read characters off sys.stdin until a full request has been read.
+def read_next(fd=None):
+    """Read and decode requests from the given filedescriptor (defaults to stdin).
 
     Returns a header dict and a message body.
     """
-    header, body = _read_next_string().split('\n',1)
+    header, body = _read_next_string(fd or sys.stdin.fileno()).split('\n',1)
     return json.loads(header), body
 
 def respond(requestid, header, body):
