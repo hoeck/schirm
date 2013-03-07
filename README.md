@@ -37,23 +37,22 @@ HTML Demos
 ==========
 
 See the demos in `support/`
-    
+
   - add them to your `PATH`::
-  
+
       $ PATH="$PATH:<path-to-schirm>/support"
-    
+
     or invoke them with `<path-to-schirm>/support/<sXXX>`
 
-  - get a webpage (requires BeautifulSoup to remove nested scripts)::
+  - get and view some html:
 
-    $ sget news.ycombinator.com
+    $ curl news.ycombinator.com | sview
 
   - preview a document::
 
-    $ rst2html README.rst | sview
-    $ markdown README | sview
+    $ markdown README.md | sview
 
-  - show a circular tree of a directory (uses d3.js, slow/crashing for large directories)::
+  - show a tree of a directory (uses d3.js, slow/crashing for large directories)::
 
     $ stree .
 
@@ -65,11 +64,15 @@ See the demos in `support/`
 
     $ sview -i schirm-logo.png
 
+  - edit text using codemirror:
+
+    $ sedit README.md
+
 Client API
 ==========
 
 Escape-sequence based, works with every programming language which can write bytes to
-stdout like traditional Terminals. See ``support/schirmclient.py``.
+stdout. See ``support/schirmclient.py``.
 
 Missing Features/Defects
 ========================
