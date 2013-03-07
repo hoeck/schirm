@@ -137,10 +137,14 @@ class Schirm(object):
         return "\n".join(["HTTP/1.1 200 OK",
                           "Cache-Control: " + "no-cache",
                           "Connection: close",
-                          "Content-Type: " + mimetype,
+                          "Content-Type: " + (mimetype.encode('utf-8')
+                                              if isinstance(mimetype, unicode)
+                                              else mimetype),
                           "Content-Length: " + str(len(data)),
                           "",
-                          data])
+                          data.encode('utf-8')
+                          if isinstance(data, unicode)
+                          else data])
 
     def guess_type(self, name):
         """Given a path to a file, guess its mimetype."""
