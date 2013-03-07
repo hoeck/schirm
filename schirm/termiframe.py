@@ -281,7 +281,7 @@ class Iframe(object):
         # x-schirm-debug .. write this string or the body to the emulators process stdout
         if 'x-schirm-path' in header:
             self._register_resource(name=header['x-schirm-path'],
-                                    mimetype=header.get('content-type'),
+                                    mimetype=header.get('content-type', header.get('Content-Type')),
                                     data=body)
         elif 'x-schirm-request-id' in header:
             self._respond(header, body)

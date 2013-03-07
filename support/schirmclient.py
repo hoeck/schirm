@@ -153,7 +153,7 @@ def resource(path, name=None, mimetype=''):
 
     header = {'x-schirm-path': name}
     if mimetype:
-        header['ContentType'] = mimetype
+        header['Content-Type'] = mimetype
 
     with open(path) as f:
         _write_request(header, f.read())
@@ -163,7 +163,7 @@ def resource_data(data, name, mimetype=''):
 
     header = {'x-schirm-path': name}
     if mimetype:
-        header['ContentType'] = mimetype
+        header['Content-Type'] = mimetype
 
     _write_request(header, data)
 
