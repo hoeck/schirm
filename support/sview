@@ -57,6 +57,15 @@ style = """
 .buttonbar input[type=range] {
   width:50%;
 }
+
+iframe.content {
+    width:100%;
+    height:100%;
+    margin:0;
+    padding:0;
+    border:none;
+}
+
 </style>
 """
 
@@ -159,12 +168,6 @@ document.onreadystatechange = function() {
 </script>
 """
 
-content_body = """
-<div id="container">
-%(content)s
-</div>
-"""
-
 def render_image(data, mimetype='', interactive=False):
     schirm.resource_data(data, 'x', mimetype)
     print style
@@ -173,11 +176,14 @@ def render_image(data, mimetype='', interactive=False):
     print js
 
 def render_text(text):
-    print text
+    schirm.resource_data(text, 'x', 'text/html')
+    print style
     print """
+<style> body { margin:0 } </style>
+<iframe class="content" sandbox="allow-same-origin" src="x"></iframe>
 <script type="text/javascript" src="schirm.js"></script>
 <script type="text/javascript">
-schirm.ready(function() { schirm.resize(document.body); });
+schirm.ready(function() { schirm.resize(document.getElementsByClassName('content')[0].contentDocument.body); });
 </script>
 """
 
