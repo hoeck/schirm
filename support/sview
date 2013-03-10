@@ -171,7 +171,7 @@ document.onreadystatechange = function() {
 def render_image(data, mimetype='', interactive=False):
     schirm.resource_data(data, 'x', mimetype)
     print style
-    print content_body % {'content': '<img id="content-img" src="x" style="display: none;">' + buttonbar}
+    print '<div id="container">%(content)s</div>' % {'content': '<img id="content-img" src="x" style="display: none;">' + buttonbar}
     print js_options % {'interactive': 'true' if interactive else 'false'}
     print js
 
