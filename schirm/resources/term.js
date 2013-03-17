@@ -633,6 +633,7 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
     parentElement.innerHTML = termMarkup;
     linesElement = parentElement.getElementsByClassName('terminal-line-container')[0];
     altElement   = parentElement.getElementsByClassName('terminal-alt-container')[0];
+    altIframeContainer = parentElement.getElementsByClassName('terminal-alt-iframe-container')[0];
     self.resize();
 
     // debug
