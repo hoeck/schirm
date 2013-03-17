@@ -40,7 +40,8 @@ document.onreadystatechange = function () {
       value: %(text)s,
       mode:  %(mode)s,
       lineWrapping: true,
-      lineNumbers: true
+      lineNumbers: true,
+      extraKeys: "emacs",
     });
 
     var editorElem = document.getElementsByClassName('CodeMirror')[0];
