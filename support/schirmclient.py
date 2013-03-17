@@ -45,19 +45,22 @@ from contextlib import contextmanager
 ESC = "\x1b"
 CSI = ESC + "["
 MODE_PRIV = CSI + "?"
+SET_MODE = "h"
+RESET_MODE = "l"
 DOCUMENT_MODE = "5151"
 RESPONSE_MODE = "5152"
 STR_START = ESC + "X"
 STR_END = ESC + "\\"
+ALT_BUFFER_MODE = "1049" # save cursor and use alternative buffer (without scrollback)
 
 # primitives
 def _set_mode_str(mode_id, cookie=None):
     return ''.join([MODE_PRIV, mode_id] +
                    [';' + s[i:i+4] for i in range(0, len(cookie or ''), 4)] +
-                   ['h'])
+                   [SET_MODE])
 
 def _reset_mode_str(mode_id):
-    return ''.join([MODE_PRIV, mode_id, 'l'])
+    return ''.join([MODE_PRIV, mode_id, RESET_MODE])
 
 def _write_request(header, body, out=sys.stdout):
     try:
@@ -129,16 +132,24 @@ def get_fdin():
             return os.open(os.ctermid(), os.O_RDONLY)
 
 @contextmanager
-def frame(newline=True):
+def frame(newline=True, fullscreen=False):
     """Enter frame mode, leaving it on return or exceptions."""
     if not isaschirm():
         raise Exception("Not connected to the schirm terminal.")
 
     try:
+        if fullscreen:
+            out = sys.stdout
+            out.write(_set_mode_str(ALT_BUFFER_MODE))
+            out.flush()
         enter()
         yield get_fdin()
     finally:
         leave(newline=newline)
+        if fullscreen:
+            out = sys.stdout
+            out.write(_reset_mode_str(ALT_BUFFER_MODE))
+            out.flush()
 
 def resource(path, name=None, mimetype=''):
     """Make the resource name available to the current iframe.
