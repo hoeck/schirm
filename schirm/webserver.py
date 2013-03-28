@@ -129,7 +129,7 @@ class Server(object):
         return port
 
     def listen(self):
-        logger.debug("Schirm HTTP proxy server listening on localhost:%s" % (self.getport(),))
+        logger.info("Schirm HTTP proxy server listening on localhost:%s" % (self.getport(),))
         # todo: create a threaded server and fix logging!
         while 1:
             client, address = self.socket.accept()
