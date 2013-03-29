@@ -19,14 +19,14 @@ html = """
 <style>
 
 .CodeMirror {
-border: 1px solid #eee;
-height: auto;
-width:100%%;
+    border: 1px solid #eee;
+    height: auto;
+    width:100%%;
 }
 
 .CodeMirror-scroll {
-overflow-x: auto;
-overflow-y: hidden;
+    overflow-x: auto;
+    overflow-y: hidden;
 }
 
 </style>
@@ -35,6 +35,9 @@ overflow-y: hidden;
 <script type="text/javascript">
 
 document.onreadystatechange = function () {
+
+  var maxLines = %(max_lines)s;
+
   if (document.readyState == "complete") {
     codeMirror = CodeMirror(document.getElementById('editor'), {
       value: %(text)s,
@@ -44,17 +47,24 @@ document.onreadystatechange = function () {
       extraKeys: "emacs",
     });
 
-    var editorElem = document.getElementsByClassName('CodeMirror')[0];
-    codeMirror.on("change", function () { schirm.resize(); });
+    if (maxLines) {
+        var height = (codeMirror.defaultTextHeight() * maxLines) + 8;
+        document.getElementsByClassName("CodeMirror")[0].style.height = height + "px";
+        schirm.resize(height);
+    } else {
+        codeMirror.on("change", function () {
+            schirm.resize();
+        });
+        schirm.resizing();
+    }
   };
 
-  schirm.resizing();
   schirm.onmessage = function(_msg) {
     var msg = JSON.parse(_msg);
     if (msg["setReadOnly"]) {
       codeMirror.setOption("readOnly", "nocursor");
     }
-  }
+  };
 };
 
 </script>
@@ -65,13 +75,14 @@ document.onreadystatechange = function () {
 </html>
 """
 
-def codemirror_edit(s='', mode=''):
+def codemirror_edit(s='', mode='', max_lines=None):
     with schirm.frame() as fdin:
         schirm.resource_data(codemirror_css, 'codemirror.css')
         schirm.resource(os.path.join(os.path.abspath(os.path.dirname(__file__)), 'codemirror-full.js'), name='codemirror.js')
         print html % {
             'text':json.dumps(str(s)),
             'mode': json.dumps(mode),
+            'max_lines': json.dumps(max_lines),
         }
         schirm.close()
         try:
@@ -80,7 +91,7 @@ def codemirror_edit(s='', mode=''):
             # set readOnly mode, exit
             schirm.send({'setReadOnly':True})
 
-def edit(filename=None):
+def edit(filename=None, max_lines=None):
     if filename:
         with open(filename) as f:
             s = f.read()
@@ -92,12 +103,15 @@ def edit(filename=None):
         s = ""
         mime = ""
 
-    codemirror_edit(s, mode=mime)
+    codemirror_edit(s, mode=mime, max_lines=max_lines)
 
 def parse_args():
     p = argparse.ArgumentParser("Use the codemirror javascript editor to edit a file from the commandline")
     p.add_argument('file', metavar='FILE', help="The file to edit", nargs="?")
+    p.add_argument('-l', '--max-lines', help="number of lines shown at most", type=int)
     return p.parse_args()
 
 if __name__ == '__main__':
-    edit(parse_args().file)
+    args = parse_args()
+    edit(filename=args.file,
+         max_lines=args.max_lines)
