@@ -28,7 +28,7 @@ def is_available(cmd):
     except OSError:
         return False
 
-def firefox_profile_set_proxy(config_dir, host, port):
+def firefox_configure_profile(config_dir, host, port):
     # set the proxy in prefs.js
     prefs_js = subprocess.check_output("find -name 'prefs.js'", shell=True, cwd=config_dir).strip()
     if not prefs_js:
@@ -39,6 +39,27 @@ def firefox_profile_set_proxy(config_dir, host, port):
         f.write('user_pref("network.proxy.http_port", %s);\n' % json.dumps(port))
         f.write('user_pref("network.proxy.type", 1);\n') # 1 .. use manual proxy settings
         f.write('user_pref("network.proxy.no_proxies_on","");\n') # use proxy on localhost too
+
+        # other ff customizations:
+        f.write('user_pref("browser.tabs.autoHide", true);\n')
+        f.write('user_pref("browser.rights.3.shown", true);\n')
+
+    # hide the address and menubars
+    # not sure how well this will work across different ff versions
+    with open(os.path.join(config_dir, 'localstore.rdf'), "w") as f:
+        f.write("""<?xml version="1.0"?>
+<RDF:RDF xmlns:NC="http://home.netscape.com/NC-rdf#"
+         xmlns:RDF="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <RDF:Description RDF:about="chrome://browser/content/browser.xul">
+    <NC:persist RDF:resource="chrome://browser/content/browser.xul#toolbar-menubar"/>
+    <NC:persist RDF:resource="chrome://browser/content/browser.xul#nav-bar"/>
+  </RDF:Description>
+  <RDF:Description RDF:about="chrome://browser/content/browser.xul#toolbar-menubar"
+                   autohide="true" />
+  <RDF:Description RDF:about="chrome://browser/content/browser.xul#nav-bar"
+                   collapsed="true" />
+</RDF:RDF>
+""")
 
 def start_browser(proxy_port):
 
@@ -58,7 +79,7 @@ def start_browser(proxy_port):
         # chrome-like browser
         # setup a temporary profile for each browser
         config_dir = tempfile.mkdtemp(prefix='chrome_profile',
-                                      dir=os.path.join(os.path.expanduser('~/.schirmm')))
+                                      dir=os.path.join(os.path.expanduser('~/.schirm')))
         atexit.register(lambda: shutil.rmtree(config_dir))
 
         args = ['--user-data-dir=%s' % config_dir, # google-chrome has no --temp-profile option
@@ -77,10 +98,11 @@ def start_browser(proxy_port):
 
         # create a temporary profile in .schirm to be able to find and manipulate it
         profile = "schirm-%s" %  uuid.uuid4()
-        subprocess.check_call([available] + ['-CreateProfile', "%s %s" % (profile, config_dir)])
-        firefox_profile_set_proxy(config_dir, host='localhost', port=proxy_port)
+        subprocess.check_call([available] + ['-no-remote', '-CreateProfile', "%s %s" % (profile, config_dir)])
+        firefox_configure_profile(config_dir, host='localhost', port=proxy_port)
 
-        cmd = [available] + ['-profile', config_dir,
+        cmd = [available] + ['-no-remote',
+                             '-profile', config_dir,
                              '-new-window', url]
         logger.info("starting browser: %s" % cmd)
         p = subprocess.Popen(cmd)
