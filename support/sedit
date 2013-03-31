@@ -26,9 +26,12 @@ html = """
 
 .CodeMirror-scroll {
     overflow-x: auto;
-    overflow-y: hidden;
+    overflow-y: auto;
 }
 
+body {
+    overflow-y: auto;
+}
 </style>
 <script src="codemirror.js" type="text/javascript" charset="utf-8"></script>
 <script src="schirm.js" type="text/javascript" charset="utf-8"></script>
@@ -36,10 +39,9 @@ html = """
 
 document.onreadystatechange = function () {
 
-  var maxLines = %(max_lines)s;
-
   if (document.readyState == "complete") {
-    codeMirror = CodeMirror(document.getElementById('editor'), {
+    ce = document.getElementById('editor');
+    codeMirror = CodeMirror(ce, {
       value: %(text)s,
       mode:  %(mode)s,
       lineWrapping: true,
@@ -47,16 +49,21 @@ document.onreadystatechange = function () {
       extraKeys: "emacs",
     });
 
-    if (maxLines) {
-        var height = (codeMirror.defaultTextHeight() * maxLines) + 8;
-        document.getElementsByClassName("CodeMirror")[0].style.height = height + "px";
-        schirm.resize(height);
-    } else {
-        codeMirror.on("change", function () {
-            schirm.resize();
-        });
-        schirm.resizing();
-    }
+    var minLines = %(min_lines)s;
+    var maxLines = %(max_lines)s;
+
+    var minHeight = (codeMirror.defaultTextHeight() * minLines) + 8;
+    var maxHeight = (codeMirror.defaultTextHeight() * maxLines) + 8;
+
+    resize = function() {
+        var height = ce.clientHeight;
+        schirm.resize(Math.max(minHeight || 0, Math.min(maxHeight, height) || 0));
+    };
+
+    resize();
+    codeMirror.on("change", function () {
+        resize();
+    });
   };
 
   schirm.onmessage = function(_msg) {
@@ -75,14 +82,16 @@ document.onreadystatechange = function () {
 </html>
 """
 
-def codemirror_edit(s='', mode='', max_lines=None):
+def codemirror_edit(s='', mode='', max_lines=None, min_lines=1):
     with schirm.frame() as fdin:
         schirm.resource_data(codemirror_css, 'codemirror.css')
         schirm.resource(os.path.join(os.path.abspath(os.path.dirname(__file__)), 'codemirror-full.js'), name='codemirror.js')
         print html % {
             'text':json.dumps(str(s)),
             'mode': json.dumps(mode),
-            'max_lines': json.dumps(max_lines),
+
+            'min_lines': json.dumps(max_lines),
+            'max_lines': json.dumps(min_lines),
         }
         schirm.close()
         try:
@@ -109,9 +118,11 @@ def parse_args():
     p = argparse.ArgumentParser("Use the codemirror javascript editor to edit a file from the commandline")
     p.add_argument('file', metavar='FILE', help="The file to edit", nargs="?")
     p.add_argument('-l', '--max-lines', help="number of lines shown at most", type=int)
+    p.add_argument('--min-lines', help="number of lines shown at minimum", type=int, default=2)
     return p.parse_args()
 
 if __name__ == '__main__':
     args = parse_args()
     edit(filename=args.file,
-         max_lines=args.max_lines)
+         max_lines=args.max_lines,
+         min_lines=args.min_lines)
