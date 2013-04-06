@@ -365,20 +365,19 @@ class LineContainer(): # lazy
 
         Return the cursor line change.
         """
-        # if true, keep lines at the bottom when resizing, otherwise
-        # stick them at the top of the terminal window
-        grow = bool((len(self.lines) - self.screen0) == self.height)
+        line_delta = newheight - self.height
+        remaining_empty_lines = self.height - (len(self.lines) - self.screen0)
 
-        # todo: check if this works for arbitrary height resizes!
-        if (len(self.lines) > newheight) and grow:
-            screen_delta = len(self.lines) - newheight - self.screen0
+        if line_delta < remaining_empty_lines:
+            # when resizing and there are empty lines below the last visible line,
+            # keep this line in same place (measured from the top of the terminal window)
+            cursor_delta = 0
         else:
-            screen_delta = 0
+            screen0 = self.screen0
+            self.set_screen0(len(self.lines) - newheight)
+            cursor_delta = screen0 - self.screen0
 
         self.purge_empty_lines()
-
-        # emit a set_screen0 event to force a recomputation of the trailing space
-        self.set_screen0(self.screen0 + screen_delta)
         self.height = newheight
 
         # set width for all lines
@@ -386,7 +385,7 @@ class LineContainer(): # lazy
         for l in self.lines:
             l.set_size(newwidth)
 
-        return screen_delta * -1
+        return cursor_delta
 
     def set_title(self, title):
         self.events.append(('set_title', title))
@@ -407,7 +406,7 @@ class LineContainer(): # lazy
                 return
 
     def set_screen0(self, screen0, propagate=True):
-        self.screen0 = screen0
+        self.screen0 = max(0, min(len(self.lines), screen0))
         if propagate:
             # some uses of set_screen0 do not need to also execute
             # this on the client, such as append line, to optimize the
@@ -712,7 +711,7 @@ class TermScreen(pyte.Screen):
         else:
             # cursor: make sure that it 'stays' on its current line
             cursor_delta = self.linecontainer.resize(self.lines, self.columns)
-            self.cursor.y = min(max(self.cursor.y + cursor_delta, 0), self.lines-1)
+            self.cursor.y += cursor_delta
             self.cursor.x = min(max(self.cursor.x, 0), self.columns-1)
 
         self.margins = Margins(0, self.lines - 1)
