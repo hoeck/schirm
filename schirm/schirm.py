@@ -159,11 +159,11 @@ class Schirm(object):
         data = pkg_resources.resource_string('schirm.resources', path)
         self.respond(req_id, self.make_response(self.guess_type(path), data))
 
-    def respond_file(self, req_id, path):
+    def respond_file(self, req_id, path, content_type=None):
         if os.path.exists(path):
             with open(path) as f:
                 data = f.read()
-            self.respond(req_id, self.make_response(self.guess_type(path), data))
+            self.respond(req_id, self.make_response(content_type or self.guess_type(path), data))
         else:
             logger.warn('Cannot serve non-existing file: %r!' % path)
             self.respond(req_id)
