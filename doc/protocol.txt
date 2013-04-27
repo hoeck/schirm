@@ -1,0 +1,29 @@
+
+# enter iframe mode
+CSI ? 5151 ; <cookie> h
+
+# all writes go to the iframes root document
+
+# transmit resource
+SOS (start-of-string, ESC X)
+<HEADER>
+
+<b64-encoded data>
+ST (string terminator ESC \)
+
+HEADER:
+HTTP, custom fields to name the resource,
+if the first char is a '{', the header is a JSON object literal
+
+x-schirm-message: <body contains a message send to the iframe using its own websocket>
+x-schirm-resource: <resource-name, body contains the resource>
+
+BODY:
+
+base64 encoded data
+
+# request end
+ST
+
+# leave iframe mode
+CSI ? 5151 l
