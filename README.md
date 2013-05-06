@@ -1,10 +1,10 @@
 Schirm
 ======
 
-A linux compatible terminal emulator which exposes additional html
+A Linux compatible terminal emulator which exposes additional HTML
 rendering modes to client programs.
 
-Written in Python and Javascript.
+Written in Python and JavaScript.
 
 Installing
 ==========
@@ -24,7 +24,7 @@ Run:
     $ cd schirm
     $ python -m schirm
 
-or Install and then run it:
+or install and then run it:
 
     $ python setup.py install
     $ schirm
@@ -95,6 +95,10 @@ Similar Programs
 - <http://www.enlightenment.org/p.php?p=about/terminology>: nextgen Terminal Emulator of the Enlightment Project
 - <http://www.logilab.org/project/pyqonsole>: QT python terminal emulator
 - <https://github.com/selectel/pyte>: beautiful VTXXX compatible terminal emulator library
+- <http://www.masswerk.at/termlib/> (referenced by Fabrice Bellard on his tech details page. Bellard uses his own proprietary terminal emulator though)
+- <https://github.com/chjj/tty.js> ([actual terminal emulator here](https://raw.github.com/chjj/tty.js/master/static/term.js))
+- <http://mister-muffin.de/scriptreplay/VT100.js> (Frank Bi's unmaintained terminal emulator, outdated by now)
+- <https://github.com/s-macke/jor1k/blob/master/js/terminal.js> (from jor1k, the JavaScript OpenRISC emulator)
 
 Licence
 =======
