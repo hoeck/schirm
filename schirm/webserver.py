@@ -16,6 +16,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+# TODO: check out: http://asyncoro.sourceforge.net/concurrent.html
+
 import os
 import re
 import socket
@@ -25,6 +27,8 @@ import time
 import logging
 import urlparse
 import pkg_resources
+import Queue
+import itertools
 from BaseHTTPServer import BaseHTTPRequestHandler
 from StringIO import StringIO
 
@@ -34,11 +38,17 @@ from ws4py.exc import HandshakeError, StreamClosed
 from ws4py.streaming import Stream
 from ws4py.websocket import WebSocket
 
+# logging
+
 logger = logging.getLogger(__name__)
 
-class attrdict(dict):
-    def __getattr__(self, k):
-        return self[k]
+# utils
+
+def create_thread(target, name=None):
+    t = threading.Thread(target, name=name)
+    t.setDaemon(True)
+    t.start()
+    return t
 
 class HTTPRequest(BaseHTTPRequestHandler):
     def __init__(self, stream): #request_text
@@ -47,163 +57,97 @@ class HTTPRequest(BaseHTTPRequestHandler):
         self.error_code = self.error_message = None
         self.parse_request()
 
-    def send_error(self, code, message):
-        self.error_code = code
-        self.error_message = message
-
 class AsyncWebSocket(WebSocket):
     """Websocket with a configurable receive callback function."""
 
     def __init__(self, *args, **kwargs):
-
-        self.onreceive = kwargs.pop('onreceive', lambda _: None)
+        self.receive_cb = kwargs.pop('receive_cb', lambda *_: None)
+        self.close-cb   = kwargs.pop('close_cb',   lambda *_: None)
         super(AsyncWebSocket, self).__init__(*args, **kwargs)
 
-        self.recv_thread = None
-
     def received_message(self, message):
-        self.onreceive(message)
+        self.receive_cb(message)
 
-    def run_in_bg(self):
-        # thread for reading from the websocket
-        self.recv_thread = threading.Thread(target=self.run)
-        self.recv_thread.setDaemon(True)
-        self.recv_thread.start()
+    def closed(self, code, reason=None):
+        self.close_cb()
 
-class Server(object):
-    """
-    1) A simple server which reads requests from the embedded webkit,
-    enumerates them and writes them to the pty using a special ESC code:
-    ESC R <id> ESC ; <base64-encoded-request-data> \033 Q
-    the id is required to know which response belongs to which request.
-
-    2) A function to handle responses from the pty and write them to the
-    webkit socket.
-
-    3) A function to register static resources that are automatically
-    delivered.
-    """
+class ThreadedRequest(object):
+    """A Request waiting for responses in its own thread."""
 
     # close the connections for requests which have been dispatched to the terminal
     # and received no response after this amount of seconds
-    REQUEST_TIMEOUT = 30
+    TIMEOUT = 30
 
-    def __init__(self, schirm): # queue to put received requests on
-        self.socket = socket.socket()
-        # the terminal process will receive the request data and a
-        # connection-id and its response must contain the
-        # connection-id to determine which connection to use for
-        # sending the response
-        self.requests = {}
-        self._requests_lock = threading.RLock() # aquire before touching self.requests
-        self._id = 0 # last request id
+    _websocket_protocols = [] # ???
+    _websocket_extensions = [] # ???
 
-        self.listen_thread = None
-        self.schirm = schirm
-        self.start()
+    def __init__(self, id, client, address, serverport, request_cb, close_cb):
+        self.id = id                  # unique id to identify this request in the terminal client
+        self._client = client         # client socket
+        self._address = address       # client address
+        self._serverport = serverport # port of the http server, to be able to parse proxy requests
+        self._queue = Queue.Queue()   # external input, popped in the worker thread
+        self._worker = None           # thread
+        self._request_cb = request_cb # called with the request data when the r has been parsed
+                                      # or when new websocket data is available
+        self._close_cb = close_cb     # called when the request connection has been closed
+        self._request = {}            # internal request data
 
-        self.websocket_protocols = [] # ???
-        self.websocket_extensions = [] # ???
+    def handle(self):
+        self._worker = create_thread(self._run, name='request_%s' % self.id)
 
-    def _getnextid(self):
-        self._id += 1
-        return self._id
+    def _run(self):
+        # read request
+        req = self._receive()
+        if not req:
+            # fail
+            self._close()
+        else:
+            # enqueue the request data
+            self._request_cb(req)
+            # wait for responses
+            while True:
+                try:
+                    if self._queue.get(timeout=self.TIMEOUT)():
+                        self._close()
+                        return
+                except Queue.Empty, e:
+                    if not self._request.get('response_in_progress'):
+                        self._respond(self._gateway_timeout(), close=True)
+                        return
 
-    def start(self):
-        backlog = 5
-        self.socket.bind(('localhost',0))
-        self.socket.listen(backlog)
-        # listen to connections and write things to the terminal process
-        self.listen_thread = threading.Thread(target=self.listen)
-        self.listen_thread.setDaemon(True)
-        self.listen_thread.start()
-        # close the connections for requests the terminal process has
-        # not responded in REQUEST_TIMEOUT time
-        self.prune_old_request_thread = threading.Thread(target=self.prune_old_requests)
-        self.prune_old_request_thread.setDaemon(True)
-        self.prune_old_request_thread.start()
-        return self
-
-    def getport(self):
-        addr, port = self.socket.getsockname()
-        return port
-
-    def listen(self):
-        logger.info("Schirm HTTP proxy server listening on localhost:%s" % (self.getport(),))
-        # todo: create a threaded server and fix logging!
-        while 1:
-            client, address = self.socket.accept()
-            self.receive(client)
-
-    def prune_old_requests(self):
-        # simple request gc
-        while True:
-            with self._requests_lock:
-                current_time = time.time()
-                for rid in self.requests.keys():
-                    req = self.requests.get(rid)
-                    if req['type'] == 'websocket':
-                        # TODO: ignore connected websockets
-                        pass
-                    else:
-                        t = req['time']
-                        if t and current_time - t > self.REQUEST_TIMEOUT:
-                            req = self.requests.pop(rid, None)
-                            req['client'].sendall(self.make_status404())
-                            self._close_conn(req['client'])
-                            logger.info("request %(rid)s timed out" % {'rid':rid})
-            time.sleep(3)
-
-    @staticmethod
-    def _close_conn(client):
+    def _close(self):
         try:
-            sock = client._sock
+            sock = self._client._sock
             sock.shutdown(socket.SHUT_RDWR)
             sock.close()
-        except:
-            pass
+        except Exception, e:
+            logger.error('Could not close connection of request %s (ex: %s)' % (self.id, e))
+        self._close_cb()
 
-    # websockets
-
-    def respond_websocket_upgrade(self, req_id):
-        # websocket upgrade response
-        # must be called as a response to a 'type':'websocket' request
-        # to establish a websocket connection
-        req = self.requests[req_id]
-        data = "\r\n".join([
-                "HTTP/1.1 101 WebSocket Handshake",
-                "Upgrade: websocket",
-                "Connection: Upgrade",
-                "Sec-WebSocket-Version: %s" % req['ws_version'],
-                "Sec-WebSocket-Accept: %s" % base64.b64encode(sha1(req['ws_key'] + WS_KEY).digest()),
-                "",
-                ""])
-        req['client'].sendall(data)
-
-        def recv(msg):
-            req_message = attrdict({'id'              : req_id,
-                                    'type'            : 'websocket',
-                                    'data'            : str(msg)})
-            self.schirm.request(req_message)
-
-        websocket = AsyncWebSocket(sock=req['client'],
-                                   protocols=req['ws_protocols'],
-                                   extensions=req['ws_extensions'],
-                                   environ=None,
-                                   onreceive=recv)
-
-        websocket.run_in_bg() # starts a thread, blocks a lot
-
-        with self._requests_lock:
-            self.requests[int(req_id)].update({'websocket':websocket})
-
-    def make_status400(self, msg):
+    @staticmethod
+    def _bad_handshake(msg):
         return '\r\n'.join(["HTTP/1.1 400 Bad Handshake",
                             "Content-Length: " + str(len(msg)),
+                            "Connection: close",
                             "",
                             msg])
 
-    def _receive_websocket(self, req_id, req):
+    @staticmethod
+    def _gateway_timeout(msg):
+        return '\r\n'.join(["HTTP/1.1 504 Gateway Timeout",
+                            "Content-Length: " + str(len(msg)),
+                            "Connection: close",
+                            "",
+                            msg])
+
+    # decode incoming requests
+
+    def _receive_websocket(self, req):
+        """Read a websocket upgrade request.
+
+        req must be a HTTPRequest.
+        """
 
         # example websocket request
         # GET /chat HTTP/1.1
@@ -217,12 +161,12 @@ class Server(object):
 
         ws_key = req.headers.get('Sec-WebSocket-Key','')
         if len(base64.b64decode(ws_key)) != 16:
-            self.respond(req_id, self.make_status400('Invalid Websocket key length'))
+            self._respond(self._bad_handshake('Invalid Websocket key length'), close=True)
             return None
 
         ws_version = int(req.headers.get('Sec-WebSocket-Version'))
         if ws_version not in WS_VERSION:
-            self.respond(req_id, self.make_status400('Unsupported Websocket version'))
+            self._respond(self._bad_handshake('Unsupported Websocket version'), close=True)
             return None
 
         # collect supported protocols and extensions
@@ -230,64 +174,53 @@ class Server(object):
         ws_protocols = [p.strip()
                         for p
                         in subprotocols.split(',')
-                        if p.strip() in self.websocket_protocols]
+                        if p.strip() in self._websocket_protocols]
 
         extensions = req.headers.get('Sec-WebSocket-Extensions', '')
         ws_extensions = [e.strip()
                          for e
                          in extensions
-                         if e.strip() in self.websocket_extensions]
+                         if e.strip() in self._websocket_extensions]
 
-        # self.respond(req_id, resp_data, close=False)
+        self.request.update({'protocol': 'websocket',
+                             'ws_key': ws_key,
+                             'ws_version': ws_version,
+                             'ws_protocols': ws_protocols,
+                             'ws_extensions': ws_extensions})
 
-        with self._requests_lock:
-            self.requests[req_id].update({'type': 'websocket',
-                                          'ws_key': ws_key,
-                                          'ws_version': ws_version,
-                                          'ws_protocols': ws_protocols,
-                                          'ws_extensions': ws_extensions})
+        return {'id'              : self.id,
+                'protocol'        : 'websocket',
+                'path'            : req.path,
+                'headers'         : dict(req.headers),
+                'upgrade'         : True,
+                'data'            : ''}
 
-        req_message = attrdict({'id'              : req_id,
-                                'type'            : 'websocket',
-                                'path'            : req.path,
-                                'headers'         : dict(req.headers),
-                                'upgrade'         : True,
-                                'data'            : ''})
-
-        return req_message
-
-    def _proxy_connect(self, req_id, req):
+    def _receive_proxy_connect(self, req):
         # proxy connection established
         # TODO: proper path parsing!
         if (req.path in 'termframe.localhost:80' or
-            req.path in 'localhost:%s' % self.getport()):
-            # TODO: locking
-            client = self.requests[req_id]['client']
-            client.sendall("HTTP/1.1 200 Connection established\r\n\r\n")
-            # start reading the incoming data
-            self.requests.pop(req_id)
-            self.receive(client)
+            req.path in 'localhost:%s' % self.serverport):
+            self._client.sendall("HTTP/1.1 200 Connection established\r\n\r\n")
+            return self._receive()
         else:
-            logger.info('invalid connect path: %r' % req.path)
+            logger.error('invalid connect path: %r' % req.path)
+            return None
 
-    def receive(self, client):
+    def _receive(self):
+        """Receive a request.
+
+        Store all request related data into the request attribute.
+        Return a dictionary describing the request or None if the
+        request is invalid for whatever reasons.
         """
-        Receive a request and ignore, serve static files or ask the
-        pty to provide a response.
-        """
-        rfile = client.makefile()
+
+        rfile = self._client.makefile()
         req = HTTPRequest(rfile)
 
         if not req.requestline:
             # ignore 'empty' google chrome requests
             # TODO: debug
-            return
-
-        with self._requests_lock:
-            req_id = self._getnextid()
-            self.requests[req_id] = {'type':'http',
-                                     'client': client,
-                                     'time': time.time()}
+            return None
 
         if req.headers.get("Content-Length"):
             data = req.rfile.read(long(req.headers.get("Content-Length")))
@@ -298,101 +231,199 @@ class Server(object):
 
         if req.command == 'CONNECT':
             # proxy connection (for websockets or https)
-            self._proxy_connect(req_id, req)
+            return self._receive_proxy_connect(req_id, req)
 
         elif req.headers.get('Upgrade') == 'websocket':
             # prepare for an upgrade to a websocket connection
-            msg = self._receive_websocket(req_id, req)
-            if msg:
-                self.schirm.request(msg)
+            return self._receive_websocket(req)
 
         else:
             # plain http
-            req_message = attrdict({'id'              : req_id,
-                                    'type'            : 'http',
-                                    'request_version' : req.request_version,
-                                    'method'          : req.command,
-                                    'path'            : req.path,
-                                    'headers'         : dict(req.headers),
-                                    'data'            : data,
-                                    'error_code'      : req.error_code,
-                                    'error_message'   : req.error_message,
-                                    # include the portnumber of this
-                                    # webserver to allow creating a
-                                    # direct websocket uri as
-                                    # websocket requests are not
-                                    # proxied in webkitgtk (1.8.1)
-                                    'proxy_port'      : self.getport()})
+            return {'type'            : 'request',
+                    'id'              : req_id,
+                    'protocol'        : 'http',
+                    'request_version' : req.request_version,
+                    'method'          : req.command,
+                    'path'            : req.path,
+                    'headers'         : dict(req.headers),
+                    'data'            : data,
+                    'error_code'      : req.error_code,
+                    'error_message'   : req.error_message,
+                    # include the portnumber of this
+                    # webserver to allow creating a
+                    # direct websocket uri as
+                    # websocket requests are not
+                    # proxied in webkitgtk (1.8.1)
+                    'proxy_port'      : self._serverport}
 
-            self.schirm.request(req_message)
+    # responses
 
-    def make_status404(self):
-        data = "not found"
-        return '\r\n'.join(["HTTP/1.1 404 Not Found",
-                            "Content-Type: text/plain",
-                            "Content-Length: " + str(len(data)),
-                            "Connection: close",
-                            "",
-                            data])
+    def _websocket_upgrade(self):
+        """Send a websocket upgrade response if necessary."""
 
-    def _respond_http(self, req_id, data, close):
-        with self._requests_lock:
-            req = self.requests.pop(int(req_id), None)
+        # websocket upgrade response
+        # must be called as a response to a 'protocol':'websocket' request
+        # to establish a websocket connection
+        data = "\r\n".join([
+                "HTTP/1.1 101 WebSocket Handshake",
+                "Upgrade: websocket",
+                "Connection: Upgrade",
+                "Sec-WebSocket-Version: %s" % self._request['ws_version'],
+                "Sec-WebSocket-Accept: %s" % base64.b64encode(sha1(self._request['ws_key'] + WS_KEY).digest()),
+                "",
+                ""])
+        self._client.sendall(data)
+        self._request['response_in_progress'] = True
 
-        logger.debug("responding to %s with %s%s" % (req_id, repr(data)[:60], '...' if len(repr(data)) > 60 else ''))
-        client = req['client']
-        client.sendall(data if data != None else self.make_status404())
-        if close or data == None:
-            self._close_conn(client)
-        else:
-            # keep the connection around
-            with self._requests_lock:
-                self.requests[req_id] = {'type': 'http',
-                                         'client': client,
-                                         'time': time.time()}
+        def _recv(msg):
+            req_message = {'id'              : self.id,
+                           'protocol'        : 'websocket',
+                           'data'            : str(msg)}
+            self._enqueue_request(req_message)
 
-    def _respond_websocket(self, req_id, data, close):
-        if data != None:
-            with self._requests_lock:
-                req = self.requests.get(int(req_id), None)
+        def _close_cb():
+            self.respond(None, close=True)
 
-                if not req.get('opened'):
-                    logger.debug("websocket %r: upgrade" % (req_id, ))
-                    self.respond_websocket_upgrade(req_id)
-                    req = self.requests.get(int(req_id), None)
-                    req['opened'] = True
+        websocket = AsyncWebSocket(sock=req['client'],
+                                   protocols=req['ws_protocols'],
+                                   extensions=req['ws_extensions'],
+                                   environ=None,
+                                   receive_cb=_recv,
+                                   close_cb=_close_cb)
 
-                if data == True:
-                    # true indicates to only complete the handshake, without sending any data
-                    pass
-                else:
-                    logger.debug("websocket %r: send %r" % (req_id, data[:50]))
-                    req['websocket'].send(data)
+        self._request.update({'websocket': websocket})
 
-                if close:
-                    req['websocket'].close()
-                    self.requests.pop(int(req.id))
-        elif close:
-            with self._requests_lock:
-                req = self.requests.get(int(req_id), None)
+        # read from the websocket in a separate thread
+        create_thread(websocket.run)
 
-                if not req.get('opened'):
-                    self.respond_websocket_upgrade(req_id)
-                    req = self.requests.get(int(req_id), None)
-                    req['opened'] = True
+    def _respond_websocket(self, data, close=False):
+        """close or send data over the websocket.
 
-                req['websocket'].close()
-                self.requests.pop(int(req_id))
-        else:
-            pass
+        possible combinations of data and close and their reactions:
+          (None, True)  - close (without updgrading)
+          (None, False) - upgrade if required
+          (str,  False) - upgrade if required, send str
+          (str,  True)  - upgrade if required, send str, close
+        """
+        ws = self._request.get('websocket')
 
-    def respond(self, req_id, data=None, close=True):
-        req = self.requests.get(int(req_id))
+        if data is None:
+            if close:
+                if ws:
+                    ws.close()
+                return True
 
-        if req:
-            if req['type'] == 'http':
-                self._respond_http(req_id, data, close)
             else:
-                self._respond_websocket(req_id, data, close)
+                if not ws:
+                    self._websocket_upgrade()
         else:
-            logger.error("unknown request id: %r" % (req_id, ))
+            if not ws:
+               ws = self._websocket_upgrade()
+
+            ws.send(data)
+
+            if close:
+                ws.close()
+                return True
+
+    def _respond_http(self, data, close):
+        """Append response data to an http connection.
+
+        If close is True, close the connection. Otherwise leave it open.
+        """
+        if data:
+            logger.debug("responding to %s with %s%s" % (self.id, repr(data)[:60], '...' if len(repr(data)) > 60 else ''))
+            self._client.sendall(data)
+            self._request['response_in_progress'] = True
+
+        if close:
+            logger.debug("closing %s", self.id)
+            self._close()
+            return True
+
+    def _respond(self, data, close):
+        # return true to close the request thread loop
+        if self.request['protocol'] == 'http':
+            return self._respond_http(data, close)
+        else:
+            return self._respond_websocket(data, close)
+
+    def respond_async(self, data, close):
+        """Enqueue a response"""
+        self._queue.put(self.respond, data, close)
+
+class Server(object):
+    """
+    Websocket enabled proxy-webserver.
+
+    Receives incoming requests in a single thread, stores connection
+    state and puts messages of type 'request' onto the receive_queue.
+    Responses to these requests are made by calling one of the
+    response methods using the provided request id.
+    """
+
+    # close the connections for requests which have been dispatched to the terminal
+    # and received no response after this amount of seconds
+    REQUEST_TIMEOUT = 30
+
+    def __init__(self, request_cb):
+        self.socket = socket.socket()
+        # the terminal process will receive the request data and a
+        # connection-id and its response must contain the
+        # connection-id to determine which connection to use for
+        # sending the response
+        self.requests = {}
+        self.request_cb = request_cb
+        self._request_ids = itertools.count()
+
+        self.listen_thread = None
+        self.start()
+
+        self.websocket_protocols = [] # ???
+        self.websocket_extensions = [] # ???
+
+    def start(self):
+        backlog = 5
+        self.socket.bind(('localhost',0))
+        self.socket.listen(backlog)
+        self.listen_thread = create_thread(self.listen, name="listen_thread")
+        return self
+
+    def set_receive_queue(self, queue):
+        self.receive_queue = queue
+
+    def getport(self):
+        addr, port = self.socket.getsockname()
+        return port
+
+    def listen(self):
+        logger.info("Schirm HTTP proxy server listening on localhost:%s" % (self.getport(),))
+        while 1:
+            self.receive(*self.socket.accept())
+
+    def _close_request(self, id):
+        self.requests.pop(id, None)
+
+    def receive(self, client, address):
+        self.requests[req.id] = ThreadedRequest(id=self._request_ids.next(),
+                                                client=client,
+                                                address=address,
+                                                serverport=self.getport(),
+                                                request_cb=self.request_cb,
+                                                close_cb=self._close_request)
+        self.requests[req.id].handle()
+
+    # (public) method to respond to requests
+
+    def respond(self, id, data=None, close=False):
+        """Respond to request id using data, optionally closing the connection.
+
+        If close is False, keep the connection open and wait for more data.
+
+        Responding with nonempty data to a websocket upgrade requests
+        always responds with an upgrade before sending data.
+        """
+        if id in self.requests:
+            self.requests.get(id).respond(data, close)
+        else:
+            logger.error("Invalid request id: %s" % (id, ))
