@@ -5,10 +5,14 @@ import fcntl
 import termios
 import signal
 import subprocess
+import logging
 
 def _debug(s):
     print "IO:", repr(s.replace("\x1b[", '<CSI>').replace("\x1b", '<ESC>'))
     return s
+
+def terminal_read(client, queue):
+    queue.put({'name': 'client_output', 'msg': {'data': client.read()}})
 
 def create_terminal(size=(80,25), use_pty=True, cmd=None):
     if not cmd:
@@ -129,3 +133,16 @@ class SubprocessTerminal(object):
 
     def set_size(self, lines, columns):
         pass
+
+class AsnycTerminal(object):
+
+    def __init__(self, queue):
+        self.queue = queue
+
+    def write(self, data):
+        self.queue.put({'name': 'client_write', 'msg': {'data': data}})
+
+    def set_size(self, lines, columns):
+        self.queue.put({'name': 'client_set_size',
+                        'msg': {'lines': lines,
+                                'columns': columns}})

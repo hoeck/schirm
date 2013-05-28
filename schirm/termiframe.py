@@ -21,37 +21,39 @@ class Iframes(object):
     Terminal.advance, tracking http-related state for iframes.
     """
 
-    def __init__(self, terminal_io, terminal_ui):
+    def __init__(self, terminal_io, webserver):
         self.iframes = {}
         self.iframe_websockets = {} # map request ids to iframe objects
         self.terminal_io = terminal_io
-        self.terminal_ui = terminal_ui
+        #self.terminal_ui = terminal_ui
+        self.webserver = webserver
 
     def request(self, req):
-
-        if req.type == 'http':
+ 
+        if req['protocol'] == 'http':
             self._request_http(req)
-        elif req.type == 'websocket' and 'upgrade' in req:
+
+        elif req['protocol'] == 'websocket' and 'upgrade' in req:
             # upgrade requests
 
             # extract path (iframe_id) from the websocket req path
             # (hint: depends whether using an external browser or the non-websocket-proxy gtkwebview) - only the latter is implemented right now
-            m = re.match("/(?P<iframe_id>.+)", req.path)
+            m = re.match("/(?P<iframe_id>.+)", req['path'])
             iframe_id = m.groups('iframe_id')[0] if m else None
 
             logger.debug('iframe %(iframe_id)r websocket request %(id)r %(path)r ' %
                          {'iframe_id':iframe_id,
-                          'id':req.id,
-                          'path':req.path})
+                          'id':req['id'],
+                          'path':req['path']})
 
             if iframe_id in self.iframes and req.get('path'):
                 # dispatch
                 upgraded = self.iframes[iframe_id].websocket_upgrade(req)
                 if upgraded:
-                    self.iframe_websockets[req.id] = self.iframes[iframe_id]
+                    self.iframe_websockets[req['id']] = self.iframes[iframe_id]
             else:
                 # 404
-                self.terminal_ui.respond(req.id, close=True)
+                self.webserver.respond(req['id'], close=True)
 
         elif req.id in self.iframe_websockets:
             self.iframe_websockets[req.id].websocket_request(req)
@@ -83,7 +85,7 @@ class Iframes(object):
             self.iframes[iframe_id].request(req)
         else:
             # 404
-            self.terminal_ui.respond(req.id, close=True)
+            self.webserver.respond(req.id, close=True)
 
     # dispatch events produced by the termscreen state machine
     def dispatch(self, event):
@@ -97,7 +99,7 @@ class Iframes(object):
         if name == 'iframe_enter':
             # create a new iframe, switch terminal into 'iframe_document_mode'
             logger.debug("iframe_enter %r", event)
-            self.iframes[iframe_id] = Iframe(iframe_id, self.terminal_io, self.terminal_ui)
+            self.iframes[iframe_id] = Iframe(iframe_id, self.terminal_io, self.webserver)
         else:
             f = self.iframes.get(iframe_id)
             if f:
@@ -116,14 +118,14 @@ class Iframe(object):
                         '/schirm.css': "schirm.css", # schirm iframe mode styles
                        }
 
-    def __init__(self, iframe_id, terminal_io, terminal_ui):
+    def __init__(self, iframe_id, terminal_io, webserver):
         self.id = iframe_id
         self.resources = {}
         self.state = 'open'
         self.root_document_req_id = None
 
         self.terminal_io = terminal_io
-        self.terminal_ui = terminal_ui
+        self.webserver = webserver
 
         # communication url
         # use to send execute_iframe commands
@@ -134,7 +136,7 @@ class Iframe(object):
     def _command_send(self, command):
 
         def respond_w_cmd(cmd):
-            self.terminal_ui.respond(self.comm_req_id,
+            self.webserver.respond(self.comm_req_id,
                                      json.dumps(cmd),
                                      close=True)
 
@@ -158,7 +160,7 @@ class Iframe(object):
     def iframe_resize(self, height):
         logger.debug("iframe_resize %s" % height)
         # send some js to the terminal hosting this iframe
-        self.terminal_ui.execute(htmlterm.Events.iframe_resize(self.id, height))
+        self.webserver.execute(htmlterm.Events.iframe_resize(self.id, height))
 
     def iframe_write(self, data):
         if self.state in ('open', 'close'):
@@ -166,11 +168,11 @@ class Iframe(object):
         elif self.state == 'document_requested':
             self.resources.setdefault(None, []).append(data)
             # write more data
-            self.terminal_ui.respond(self.root_document_req_id, data.encode('utf-8'), close=False)
+            self.webserver.respond(self.root_document_req_id, data.encode('utf-8'), close=False)
 
     def iframe_close(self):
         if self.state == 'document_requested':
-            self.terminal_ui.respond(self.root_document_req_id, '', close=True)
+            self.webserver.respond(self.root_document_req_id, '', close=True)
         self.state = 'close'
 
     def iframe_leave(self):
@@ -184,13 +186,13 @@ class Iframe(object):
         self.state = None
         if self.websocket_req_id:
             # close open websockets
-            self.terminal_ui.respond(self.websocket_req_id)
+            self.webserver.respond(self.websocket_req_id)
         return "term.screen.iframeLeave();"
 
     def _send_message(self, data):
         """Send data to the iframe using the iframes websocket connection."""
         if self.websocket_req_id:
-            self.terminal_ui.respond(self.websocket_req_id,
+            self.webserver.respond(self.websocket_req_id,
                                      data,
                                      close=False)
         else:
@@ -205,7 +207,7 @@ class Iframe(object):
         if not name.strip().startswith("/"):
             name = "/" + name
 
-        self.resources[name] = self.terminal_ui.make_response(mimetype or self.terminal_ui.guess_type(name), data)
+        self.resources[name] = self.webserver.make_response(mimetype or self.webserver.guess_type(name), data)
 
     def _respond(self, header, body):
         # todo: test that req_id indeed belongs to a request
@@ -228,7 +230,7 @@ class Iframe(object):
                 m[k] = v
         m.set_payload(body)
 
-        self.terminal_ui.respond(header.get('x-schirm-request-id'), http_status + m.as_string())
+        self.webserver.respond(header.get('x-schirm-request-id'), http_status + m.as_string())
 
     def _debug(self, msg):
         # todo: this should go directly somewhere into the terminal
@@ -292,7 +294,7 @@ class Iframe(object):
         else:
             self._unknown(data)
 
-    # methods called by terminal_ui to respond to http requests to the iframes subdomain ???
+    # methods called by webserver to respond to http requests to the iframes subdomain ???
     def request(self, req):
         GET  = (req.method == 'GET')
         POST = (req.method == 'POST')
@@ -308,7 +310,7 @@ class Iframe(object):
             data = ''.join(self.resources.get(None, []))
 
             logger.debug("getting iframe root document: %s", repr((self.state, data)))
-            self.terminal_ui.respond(req.id,
+            self.webserver.respond(req.id,
                                      data="\r\n".join(["HTTP/1.1 200 OK",
                                                        "Cache-Control: no-cache",
                                                        "Content-Type: text/html; charset=utf-8",
@@ -324,16 +326,16 @@ class Iframe(object):
             uri = "ws://localhost:%(port)s/%(id)s" % {'port': req.proxy_port,
                                                       'id': self.id} # TODO: urlencode!
             data = pkg_resources.resource_string('schirm.resources', 'schirm.js')
-            self.terminal_ui.respond(req.id,
-                                     self.terminal_ui.make_response('text/javascript',
+            self.webserver.respond(req.id,
+                                     self.webserver.make_response('text/javascript',
                                                                     data % {'websocket_uri':uri}))
         elif GET and req.path in self.static_resources:
             logger.debug('serving static resource %r to iframe %r', req.path, self.id)
-            self.terminal_ui.respond_resource_file(req.id, self.static_resources[req.path])
+            self.webserver.respond_resource_file(req.id, self.static_resources[req.path])
 
         elif GET and req.path in self.resources:
             data = self.resources[req.path]
-            self.terminal_ui.respond(req.id, data) # data in resources is already in http-request form
+            self.webserver.respond(req.id, data) # data in resources is already in http-request form
 
         elif POST and req.path == self.comm_path:
             # receive commands from the iframe
@@ -354,17 +356,17 @@ class Iframe(object):
                         except:
                             height = 'fullscreen'
                     self.iframe_resize(height)
-                    self.terminal_ui.respond(req.id, 'HTTP/1.1 200 done\r\n\r\n')
+                    self.webserver.respond(req.id, 'HTTP/1.1 200 done\r\n\r\n')
                 elif cmd == 'control-c':
-                    self.terminal_ui.keypress({'name': 'C', 'control': True})
+                    self.webserver.keypress({'name': 'C', 'control': True})
                 elif cmd == 'control-d':
-                    self.terminal_ui.keypress({'name': 'D', 'control': True})
+                    self.webserver.keypress({'name': 'D', 'control': True})
                 elif cmd == 'control-z':
-                    self.terminal_ui.keypress({'name': 'Z', 'control': True})
+                    self.webserver.keypress({'name': 'Z', 'control': True})
                 else:
-                    self.terminal_ui.respond(req.id)
+                    self.webserver.respond(req.id)
             else:
-                self.terminal_ui.respond(req.id)
+                self.webserver.respond(req.id)
 
         else:
             if self.state == 'close':
@@ -387,27 +389,27 @@ class Iframe(object):
 
             else:
                 # return a 404
-                self.terminal_ui.respond(req.id)
+                self.webserver.respond(req.id)
 
     def websocket_upgrade(self, req):
         if self.state != None and not self.websocket_req_id:
-            self.terminal_ui.respond(req.id, True, close=False) # upgrade
+            self.webserver.respond(req.id, True, close=False) # upgrade
             self.websocket_req_id = req.id
             # send queued data
             for data in self.pre_open_queue:
-                self.terminal_ui.respond(req.id, data, close=False)
+                self.webserver.respond(req.id, data, close=False)
             return True
         else:
-            self.terminal_ui.respond(req.id, close=True) # 404
+            self.webserver.respond(req.id, close=True) # 404
             return False
 
     def websocket_request(self, req):
         if req.id == self.websocket_req_id:
-            # todo: instead of terminal_io, use terminal_ui and the
+            # todo: instead of terminal_io, use webserver and the
             # input_queue to keep data written to the PTYs in stream
             # in sync !!!
             self.terminal_io.write(''.join((START_MSG,
                                             base64.b64encode(req.data),
                                             END, NEWLINE)))
         else:
-            self.terminal_ui.respond(req.id, close=True) # 404
+            self.webserver.respond(req.id, close=True) # 404

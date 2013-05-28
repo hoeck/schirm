@@ -37,20 +37,8 @@ import json
 import traceback
 
 import term
-import terminalio
 
-def init_logger(level=logging.ERROR):
-    l = logging.getLogger('schirm')
-    h = logging.StreamHandler()
-    f = logging.Formatter("%(name)s - %(message)s")
-
-    h.setFormatter(f)
-    l.addHandler(h)
-    if level:
-        l.setLevel(level)
-    return l
-
-logger = init_logger()
+logger = utils.init_logger()
 
 def get_config_file_contents(filename):
     """Return the contents of ~/.schirm/<filename> or an empty string."""
@@ -61,57 +49,17 @@ def get_config_file_contents(filename):
     else:
         return ""
 
-def put_nowait_sleep(queue, data):
-    """Given a limited queue and an object, try to put object on the queue.
-
-    If the queue is Full, wait an increasing fraction of a second
-    until trying again. Return when the data has been put on the queue.
-    """
-    times = 0
-    wait_f = lambda x: 0.01 * (2 ** x) if x < 9 else 1.28
-    while True:
-        try:
-            queue.put_nowait(data)
-            return
-        except Queue.Full:
-            time.sleep(wait_f(times))
-            times += 1
-
 class Schirm(object):
 
-    # if True, use 'termframe.localhost' as the iframe domain
-    inspect_iframes = False
-
-    def __init__(self, uiproxy, websocket_proxy_hack=True, use_pty=True, cmd=None):
-        # pty, webview, webserver -> schirm communication
-        # each message on output queue is a tuple of: (typename, attrdict-value)
-        # TODO: would be easier to directly enqueue functions + their arguments
+    def __init__(self, client, webserver, uri="http://termframe.localhost/term.html"):
         self.input_queue = Queue.Queue(1)
 
-        self.uiproxy = uiproxy
-        self.resources = {} # iframe_id -> resource name -> data
-
-        # load the terminal ui
-        self._term_uri = "http://termframe.localhost/term.html"
-        self.uiproxy.load_uri(self._term_uri)
-
-        self.terminal_io = terminalio.create_terminal(use_pty=use_pty, cmd=cmd)
+        self.client = terminalio.create_terminal(use_pty=use_pty, cmd=cmd)
 
         # connect the terminal emulator with the pty and the ui
-        self.emulator = term.Terminal(terminal_ui=self,
-                                      terminal_io=self.terminal_io,
-                                      size=[80,24],
-                                      inspect_iframes=self.inspect_iframes)
-
-        # websocket channel to communicate with the emulator document
-        self.termframe_websocket_id = None
-
-        # required to work with the gtk webview which doesn't send
-        # websocket requests throught the proxy
-        self.websocket_proxy_hack = websocket_proxy_hack
-
-        # webview console logging (setup in main())
-        self.console_logger = logging.getLogger('webview_console')
+        self.emulator = terminal.Terminal(client, terminal_ui=self,
+                                          terminal_io=self.terminal_io,
+                                          size=[80,24])
 
     def start_terminal_emulation(self):
         # when using websockets for webkit <-> schirm communication,
@@ -132,41 +80,41 @@ class Schirm(object):
 
     # interface required to respond to requests and execute javascript
 
-    def make_response(self, mimetype, data):
-        """Return a string making up an HTML response."""
-        return "\n".join(["HTTP/1.1 200 OK",
-                          "Cache-Control: " + "no-cache",
-                          "Connection: close",
-                          "Content-Type: " + (mimetype.encode('utf-8')
-                                              if isinstance(mimetype, unicode)
-                                              else mimetype),
-                          "Content-Length: " + str(len(data)),
-                          "",
-                          data.encode('utf-8')
-                          if isinstance(data, unicode)
-                          else data])
-
-    def guess_type(self, name):
-        """Given a path to a file, guess its mimetype."""
-        guessed_type, encoding = mimetypes.guess_type(name, strict=False)
-        return guessed_type or "text/plain"
-
-    def respond(self, req_id, data=None, close=True):
-        self.uiproxy.respond(req_id, data, close)
-
-    def respond_resource_file(self, req_id, path):
-        # internal, packaged resource
-        data = pkg_resources.resource_string('schirm.resources', path)
-        self.respond(req_id, self.make_response(self.guess_type(path), data))
-
-    def respond_file(self, req_id, path, content_type=None):
-        if os.path.exists(path):
-            with open(path) as f:
-                data = f.read()
-            self.respond(req_id, self.make_response(content_type or self.guess_type(path), data))
-        else:
-            logger.warn('Cannot serve non-existing file: %r!' % path)
-            self.respond(req_id)
+    # def make_response(self, mimetype, data):
+    #     """Return a string making up an HTML response."""
+    #     return "\n".join(["HTTP/1.1 200 OK",
+    #                       "Cache-Control: " + "no-cache",
+    #                       "Connection: close",
+    #                       "Content-Type: " + (mimetype.encode('utf-8')
+    #                                           if isinstance(mimetype, unicode)
+    #                                           else mimetype),
+    #                       "Content-Length: " + str(len(data)),
+    #                       "",
+    #                       data.encode('utf-8')
+    #                       if isinstance(data, unicode)
+    #                       else data])
+    #
+    # def guess_type(self, name):
+    #     """Given a path to a file, guess its mimetype."""
+    #     guessed_type, encoding = mimetypes.guess_type(name, strict=False)
+    #     return guessed_type or "text/plain"
+    #
+    # def respond(self, req_id, data=None, close=True):
+    #     self.uiproxy.respond(req_id, data, close)
+    #
+    # def respond_resource_file(self, req_id, path):
+    #     # internal, packaged resource
+    #     data = pkg_resources.resource_string('schirm.resources', path)
+    #     self.respond(req_id, self.make_response(self.guess_type(path), data))
+    #
+    # def respond_file(self, req_id, path, content_type=None):
+    #     if os.path.exists(path):
+    #         with open(path) as f:
+    #             data = f.read()
+    #         self.respond(req_id, self.make_response(content_type or self.guess_type(path), data))
+    #     else:
+    #         logger.warn('Cannot serve non-existing file: %r!' % path)
+    #         self.respond(req_id)
 
     def execute(self, src):
         if isinstance(src, basestring):
@@ -303,17 +251,3 @@ class Schirm(object):
             # current tab, maybe use a red background/border to
             # indicate an error
             self.uiproxy.quit()
-
-def create_log_filter(filter=lambda record: True):
-    class _Filter(logging.Filter):
-
-        def __init__(self, fn):
-            self._f = f
-
-        def filter(self, record):
-            if f(record):
-                return 1
-            else:
-                return 0
-
-    return _Filter(filter)

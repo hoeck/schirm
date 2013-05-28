@@ -27,6 +27,7 @@ import time
 import logging
 import urlparse
 import pkg_resources
+import mimetypes
 import Queue
 import itertools
 from BaseHTTPServer import BaseHTTPRequestHandler
@@ -38,17 +39,18 @@ from ws4py.exc import HandshakeError, StreamClosed
 from ws4py.streaming import Stream
 from ws4py.websocket import WebSocket
 
+from schirm.utils import create_thread
+
 # logging
 
 logger = logging.getLogger(__name__)
 
 # utils
 
-def create_thread(target, name=None):
-    t = threading.Thread(target, name=name)
-    t.setDaemon(True)
-    t.start()
-    return t
+def guess_type(self, name, default="text/plain"):
+    """Given a path to a file, guess its mimetype."""
+    guessed_type, encoding = mimetypes.guess_type(name, strict=False)
+    return guessed_type or default
 
 class HTTPRequest(BaseHTTPRequestHandler):
     def __init__(self, stream): #request_text
@@ -81,15 +83,14 @@ class ThreadedRequest(object):
     _websocket_protocols = [] # ???
     _websocket_extensions = [] # ???
 
-    def __init__(self, id, client, address, serverport, request_cb, close_cb):
+    def __init__(self, id, client, address, serverport, queue, close_cb):
         self.id = id                  # unique id to identify this request in the terminal client
         self._client = client         # client socket
         self._address = address       # client address
         self._serverport = serverport # port of the http server, to be able to parse proxy requests
         self._queue = Queue.Queue()   # external input, popped in the worker thread
         self._worker = None           # thread
-        self._request_cb = request_cb # called with the request data when the r has been parsed
-                                      # or when new websocket data is available
+        self._queue = queue           # a Queue to put incoming requests or websocket data on (in the form of messages)
         self._close_cb = close_cb     # called when the request connection has been closed
         self._request = {}            # internal request data
 
@@ -104,7 +105,7 @@ class ThreadedRequest(object):
             self._close()
         else:
             # enqueue the request data
-            self._request_cb(req)
+            self._queue.put({'name':'webserver_request', 'msg':req})
             # wait for responses
             while True:
                 try:
@@ -239,8 +240,7 @@ class ThreadedRequest(object):
 
         else:
             # plain http
-            return {'type'            : 'request',
-                    'id'              : req_id,
+            return {'id'              : req_id,
                     'protocol'        : 'http',
                     'request_version' : req.request_version,
                     'method'          : req.command,
@@ -279,7 +279,7 @@ class ThreadedRequest(object):
             req_message = {'id'              : self.id,
                            'protocol'        : 'websocket',
                            'data'            : str(msg)}
-            self._enqueue_request(req_message)
+            self._queue.put({'name':'webserver_request', 'msg': req_message})
 
         def _close_cb():
             self.respond(None, close=True)
@@ -366,15 +366,17 @@ class Server(object):
     # and received no response after this amount of seconds
     REQUEST_TIMEOUT = 30
 
-    def __init__(self, request_cb):
+    def __init__(self, queue):
         self.socket = socket.socket()
         # the terminal process will receive the request data and a
         # connection-id and its response must contain the
         # connection-id to determine which connection to use for
         # sending the response
         self.requests = {}
-        self.request_cb = request_cb
         self._request_ids = itertools.count()
+
+        # a Queue to put incoming request messages on
+        self.queue = queue
 
         self.listen_thread = None
         self.start()
@@ -409,7 +411,7 @@ class Server(object):
                                                 client=client,
                                                 address=address,
                                                 serverport=self.getport(),
-                                                request_cb=self.request_cb,
+                                                queue=self.queue,
                                                 close_cb=self._close_request)
         self.requests[req.id].handle()
 
@@ -427,3 +429,86 @@ class Server(object):
             self.requests.get(id).respond(data, close)
         else:
             logger.error("Invalid request id: %s" % (id, ))
+
+    # respond helpers
+
+    def notfound(self, id, msg=""):
+        """Respond to a request with a 404 Not Found and close the connection."""
+        response = '\r\n'.join(
+            ["HTTP/1.1 404 Not Found",
+             "Content-Length: " + str(len(msg)),
+             "Connection: close",
+             "",
+             msg.encode('utf-8') if isinstance(unicode, msg) else msg
+         ])
+        self.respond(id, data, close=True)
+
+    def found(self, id, content_type, body):
+        """Respond to a request with a 200 and data and content_type."""
+        response = "\r\n".join([
+            "HTTP/1.1 200 OK",
+            "Cache-Control: " + "no-cache",
+            "Connection: close",
+            "Content-Type: " + (content_type.encode('utf-8')
+                                if isinstance(content_type, unicode)
+                                else content_type),
+            "Content-Length: " + str(len(body)),
+            "",
+            body.encode('utf-8') if isinstance(body, unicode) else body
+        ])
+        self.respond(id, response, close=True)
+
+    def gone(self, id):
+        """Respond to a request with a 410 Gone and close the connection."""
+        response = '\r\n'.join([
+            "HTTP/1.1 410 Gone",
+            "Content-Length: " + str(len(msg)),
+            "Connection: close",
+            "",
+            msg
+        ])
+        self.respond(id, response, close=True)
+
+
+class AsyncHttp(object):
+    """Webserver Response API putting messages on a Queue for debuggable async communication.
+
+
+    See the respective methods of the Server class for more documentation.
+    """
+
+    def __init__(self, queue):
+        self.queue = queue
+
+    def _put_msg(self, msg):
+        self.queue.put({'name':'webserver_response', 'msg':msg})
+
+    def respond(self, id, data=None, close=False):
+        """Respond to request id using data, optionally closing the connection."""
+        self._put_msg({'method':'respond', 'id': id, 'data': data, 'close': close})
+
+    def notfound(self, id, msg=""):
+        """Respond to a request with a 404 Not Found and close the connection."""
+        self._put_msg({'method':'notfound', 'id':id, 'msg':msg})
+
+    def found(self, id, content_type, body):
+        """Respond to a request with a 200 and data and content_type."""
+        self._put_msg({'method':'found', 'id':id, 'content_type':content_type, 'body':body})
+
+    def gone(self, id):
+        """Respond to a request with a 410 Gone and close the connection."""
+        self._put_msg({'method':'gone', 'id':id})
+
+    # extensions for files and resources
+
+    def found_resource(self, id, path, resource_module_name='schirm.resources'):
+        """Respond with a 200 to a request with a resource file."""
+        self.found(id,
+                   content_type=guess_type(path),
+                   body=pkg_resources.resource_string(resource_module_name, path))
+
+    def found_file(self, id, path, content_type=None):
+        with open(path) as f:
+            self.found(id,
+                       content_type=content_type or guess_type(path)
+                       body=f.read())

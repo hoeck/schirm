@@ -478,17 +478,6 @@ class LineContainer(): # lazy
     def iframe_resize(self, iframe_id, height):
         self.events.append(('iframe_resize', iframe_id, height))
 
-    # obsolete:
-
-    # def iframe_register_resource(self, iframe_id, name, mimetype, data):
-    #     self.events.append(('iframe_register_resource', iframe_id, name, mimetype, data))
-    #
-    # def iframe_respond(self, iframe_id, req_id, data):
-    #     self.events.append(('iframe_respond', iframe_id, req_id, data))
-    #
-    # def iframe_debug(self, iframe_id, data):
-    #     self.events.append(('iframe_debug', iframe_id, data))
-
     # embedded terminals: TODO
 
     # def iframe_terminal_create(self, iframe_id, terminal_id):
