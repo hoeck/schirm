@@ -1,14 +1,15 @@
 
+import os
 import Queue
 import logging
-
-logger = getLogger(__name__)
 
 import utils
 import termkey
 import termscreen
 import termiframe
 import htmlterm
+
+logger = logging.getLogger(__name__)
 
 def get_config_file_contents(filename):
     """Return the contents of ~/.schirm/<filename> or None."""
@@ -26,23 +27,27 @@ class Terminal(object):
                  # running webserver,
                  # must provide a non-blocking .response method
                  webserver,
+                 # queue to put other outgoing messages onto
+                 messages_out,
                  # terminal emulation options:
                  size=(80,25),
                  term_id='terminal0',
              ):
         self.client = client
         self.webserver = webserver
+        self.messages_out = messages_out
 
         # set up the terminal emulation:
         self.screen = termscreen.TermScreen(*size)
         self.stream = termscreen.SchirmStream()
         self.stream.attach(self.screen)
-        self.iframes = termiframe.Iframes(client, )
+        self.iframes = termiframe.Iframes(client, webserver)
 
         self.focus = False
 
         # request id of the terminal comm websocket
         self.websocket_id = None
+        self.state = None # None -> 'ready' -> 'closed'
 
     class handlers(object):
 
@@ -82,17 +87,17 @@ class Terminal(object):
         def request(term, msg):
             # todo: A GET of the main terminal page when state != None should result in a terminal reset
             term_root = 'http://termframe.localhost'
-
             rid      = msg.get('id')
             protocol = msg.get('protocol')
             path     = msg.get('path', '')
 
             if path.startswith(term_root):
                 if protocol == 'http':
-                    if path == (term_root + '/term.html'):
-                        # reset terminal ??
-                        pass
-                    term.respond_document(rid, path[len(term_root):])
+                    if self.state == 'ready' and path == (term_root + '/term.html'):
+                        # main terminal url loaded a second time - reset terminal ??
+                        messages_out.put({'name':'reload', 'request_id': rid})
+                    else:
+                        term.respond_document(rid, path[len(term_root):])
 
                 elif protocol == 'websocket':
                     if msg.get('upgrade'):
@@ -100,20 +105,21 @@ class Terminal(object):
                         if not term.websocket_id:
                             term.websocket_id = rid
                             term.webserver.respond(rid) # empty response to upgrade
-                            # communication set up -> start the emulator state machine
-                            term.start_terminal_emulation() ???????
+                            # communication set up, render the emulator state
+                            term.state == 'ready'
+                            term.handlers.render(term)
                         else:
                             term.webserver.notfound(rid)
                 else:
                     assert False
 
-            elif rid == self.termframe_websocket_id:
+            elif rid == term.websocket_id:
                 # termframe websocket connection, used for RPC
-                term.handle(json.loads(req.data))
+                term.handle(json.loads(msg.data))
 
             else:
                 # dispatch the request to an iframe
-                handled = term.iframe.request(msg)
+                handled = term.iframes.request(msg)
                 if not handled:
                     logger.error("Could not handle request.")
 
@@ -121,6 +127,7 @@ class Terminal(object):
         def client_output(term, msg):
             # terminal client got some data
             term.stream.feed(msg['data'])
+            term.handlers.render(term)
 
         @staticmethod
         def client_close(term, msg): # pty_read_error
@@ -129,6 +136,8 @@ class Terminal(object):
             term.stream.close()
             term.client.kill()
             term.state = 'closed'
+            # TODO:
+            messages_out.put({'name': 'close'})
 
         @staticmethod
         def hide_cursor(term, msg):
@@ -145,7 +154,11 @@ class Terminal(object):
                     'cursor' if term.focus else 'cursor-inactive')
 
         @staticmethod
-        def render(term, msg):
+        def render(term, msg=None):
+
+            if term.state != 'ready':
+                logger.debug('not rendering - terminal state != ready')
+                return
 
             # capture render events
             events = term.screen.linecontainer.get_and_clear_events()
@@ -224,13 +237,13 @@ class Terminal(object):
 
     def respond_document(self, rid, path):
         """Respond to requests to the main terminal root url."""
-        if path in static_resources:
-            term.webserver.found_resource(rid, static_resources[path])
+        if path in self.static_resources:
+            self.webserver.found_resource(rid, self.static_resources[path])
         elif path == '/user.css':
-            term.webserver.found(rid, get_config_file_contents('user.css') or "", 'text/css')
+            self.webserver.found(rid, get_config_file_contents('user.css') or "", 'text/css')
         elif path.startswith('/localfont/') and path.endswith('.ttf') or path.endswith('.otf'):
             # serve font files to allow using any local font in user.css via @font-face
-            term.webserver.found_file(rid, path[len('/localfont'):])
+            self.webserver.found_file(rid, path[len('/localfont'):])
         elif self.inspect_iframes and path.startswith('/iframe/'):
             # Ask for iframes content using the same domain
             # as the main terminal frame to be able to debug
@@ -247,7 +260,7 @@ class Terminal(object):
             #self.input_queue.put(('request', req))
             pass
         else:
-            term.webserver.notfound(rid)
+            self.webserver.notfound(rid)
 
     def decode_keypress(self, key):
         """Decode a keypress into terminal escape-codes.

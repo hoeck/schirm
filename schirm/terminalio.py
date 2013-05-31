@@ -134,7 +134,7 @@ class SubprocessTerminal(object):
     def set_size(self, lines, columns):
         pass
 
-class AsnycTerminal(object):
+class AsyncTerminal(object):
 
     def __init__(self, queue):
         self.queue = queue

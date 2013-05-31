@@ -1,7 +1,7 @@
 // Redesign of the Schirm API using a js object pattern
 // goal: reuse this code to create embedded terminals
 
-var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
+var SchirmTerminal = function(parentElement, termId) {
     // When a termId & iframeId is given, the resulting terminal will act as an
     // embedded terminal running inside a main terminals iframe line.
 
@@ -14,6 +14,7 @@ var SchirmTerminal = function(parentElement, termId, webSocketUrl) {
     <div class=\"terminal-alt-iframe-container\"></div>\
 </div>\
 ";
+    var webSocketUrl = "ws://termframe.localhost"
 
     var self = this;
 

@@ -4,17 +4,6 @@ import threading
 
 logger = logging.getLogger(__name__)
 
-def init_logger(level=logging.ERROR):
-    l = logging.getLogger('schirm')
-    h = logging.StreamHandler()
-    f = logging.Formatter("%(name)s - %(message)s")
-
-    h.setFormatter(f)
-    l.addHandler(h)
-    if level:
-        l.setLevel(level)
-    return l
-
 def put_nowait_sleep(queue, data):
     """Given a limited queue and an object, try to put object on the queue.
 
@@ -41,8 +30,9 @@ def get_xselection(self):
         else:
             raise e
 
-def create_thread(target, name=None):
-    t = threading.Thread(target, name=name)
-    t.setDaemon(True)
+def create_thread(target, name=None, daemon=True):
+    t = threading.Thread(target=target, name=name)
+    if daemon:
+        t.setDaemon(True)
     t.start()
     return t

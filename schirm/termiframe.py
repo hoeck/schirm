@@ -21,15 +21,14 @@ class Iframes(object):
     Terminal.advance, tracking http-related state for iframes.
     """
 
-    def __init__(self, terminal_io, webserver):
+    def __init__(self, client, webserver):
         self.iframes = {}
         self.iframe_websockets = {} # map request ids to iframe objects
-        self.terminal_io = terminal_io
-        #self.terminal_ui = terminal_ui
+        self.terminal_io = client
         self.webserver = webserver
 
     def request(self, req):
- 
+
         if req['protocol'] == 'http':
             self._request_http(req)
 
@@ -64,7 +63,7 @@ class Iframes(object):
     def _request_http(self, req):
 
         # http://<iframe-id>.localhost
-        (scheme, netloc, path, params, query, fragment) = urlparse.urlparse(req.path)
+        (scheme, netloc, path, params, query, fragment) = urlparse.urlparse(req['path'])
 
         # use the subdomain to sandbox iframes and separate requests
         m = re.match("(?P<iframe_id>.+)\.localhost", netloc)
@@ -76,16 +75,15 @@ class Iframes(object):
 
         logger.debug('iframe %(iframe_id)r request %(id)r: %(method)s %(path)r ' %
                      {'iframe_id':iframe_id,
-                      'id':req.id,
-                      'method':req.method,
-                      'path':req.path})
+                      'id':req['id'],
+                      'method':req['method'],
+                      'path':req['path']})
 
         if iframe_id in self.iframes and req.get('path'):
             # dispatch
             self.iframes[iframe_id].request(req)
         else:
-            # 404
-            self.webserver.respond(req.id, close=True)
+            self.webserver.notfound(req['id'])
 
     # dispatch events produced by the termscreen state machine
     def dispatch(self, event):
@@ -388,8 +386,7 @@ class Iframe(object):
                 self.terminal_io.write(term_req)
 
             else:
-                # return a 404
-                self.webserver.respond(req.id)
+                self.webserver.notfound(req['id'])
 
     def websocket_upgrade(self, req):
         if self.state != None and not self.websocket_req_id:
@@ -400,7 +397,7 @@ class Iframe(object):
                 self.webserver.respond(req.id, data, close=False)
             return True
         else:
-            self.webserver.respond(req.id, close=True) # 404
+            self.webserver.notfound(req['id'])
             return False
 
     def websocket_request(self, req):
@@ -412,4 +409,4 @@ class Iframe(object):
                                             base64.b64encode(req.data),
                                             END, NEWLINE)))
         else:
-            self.webserver.respond(req.id, close=True) # 404
+            self.webserver.notfound(req['id'])

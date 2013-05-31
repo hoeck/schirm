@@ -39,7 +39,7 @@ from ws4py.exc import HandshakeError, StreamClosed
 from ws4py.streaming import Stream
 from ws4py.websocket import WebSocket
 
-from schirm.utils import create_thread
+from utils import create_thread
 
 # logging
 
@@ -47,7 +47,7 @@ logger = logging.getLogger(__name__)
 
 # utils
 
-def guess_type(self, name, default="text/plain"):
+def guess_type(name, default="text/plain"):
     """Given a path to a file, guess its mimetype."""
     guessed_type, encoding = mimetypes.guess_type(name, strict=False)
     return guessed_type or default
@@ -64,7 +64,7 @@ class AsyncWebSocket(WebSocket):
 
     def __init__(self, *args, **kwargs):
         self.receive_cb = kwargs.pop('receive_cb', lambda *_: None)
-        self.close-cb   = kwargs.pop('close_cb',   lambda *_: None)
+        self.close_cb   = kwargs.pop('close_cb',   lambda *_: None)
         super(AsyncWebSocket, self).__init__(*args, **kwargs)
 
     def received_message(self, message):
@@ -89,8 +89,8 @@ class ThreadedRequest(object):
         self._address = address       # client address
         self._serverport = serverport # port of the http server, to be able to parse proxy requests
         self._queue = Queue.Queue()   # external input, popped in the worker thread
+        self._queue_out = queue       # a Queue to put incoming requests or websocket data on (in the form of messages)
         self._worker = None           # thread
-        self._queue = queue           # a Queue to put incoming requests or websocket data on (in the form of messages)
         self._close_cb = close_cb     # called when the request connection has been closed
         self._request = {}            # internal request data
 
@@ -105,7 +105,7 @@ class ThreadedRequest(object):
             self._close()
         else:
             # enqueue the request data
-            self._queue.put({'name':'webserver_request', 'msg':req})
+            self._queue_out.put({'name':'request', 'msg':req})
             # wait for responses
             while True:
                 try:
@@ -118,6 +118,7 @@ class ThreadedRequest(object):
                         return
 
     def _close(self):
+        logger.info('Closing socket for request %s' % self.id)
         try:
             sock = self._client._sock
             sock.shutdown(socket.SHUT_RDWR)
@@ -135,7 +136,7 @@ class ThreadedRequest(object):
                             msg])
 
     @staticmethod
-    def _gateway_timeout(msg):
+    def _gateway_timeout(msg=''):
         return '\r\n'.join(["HTTP/1.1 504 Gateway Timeout",
                             "Content-Length: " + str(len(msg)),
                             "Connection: close",
@@ -183,11 +184,11 @@ class ThreadedRequest(object):
                          in extensions
                          if e.strip() in self._websocket_extensions]
 
-        self.request.update({'protocol': 'websocket',
-                             'ws_key': ws_key,
-                             'ws_version': ws_version,
-                             'ws_protocols': ws_protocols,
-                             'ws_extensions': ws_extensions})
+        self._request.update({'protocol': 'websocket',
+                              'ws_key': ws_key,
+                              'ws_version': ws_version,
+                              'ws_protocols': ws_protocols,
+                              'ws_extensions': ws_extensions})
 
         return {'id'              : self.id,
                 'protocol'        : 'websocket',
@@ -200,7 +201,7 @@ class ThreadedRequest(object):
         # proxy connection established
         # TODO: proper path parsing!
         if (req.path in 'termframe.localhost:80' or
-            req.path in 'localhost:%s' % self.serverport):
+            req.path in 'localhost:%s' % self._serverport):
             self._client.sendall("HTTP/1.1 200 Connection established\r\n\r\n")
             return self._receive()
         else:
@@ -232,15 +233,17 @@ class ThreadedRequest(object):
 
         if req.command == 'CONNECT':
             # proxy connection (for websockets or https)
-            return self._receive_proxy_connect(req_id, req)
+            return self._receive_proxy_connect(req)
 
         elif req.headers.get('Upgrade') == 'websocket':
+            self._request['protocol'] = 'websocket'
             # prepare for an upgrade to a websocket connection
             return self._receive_websocket(req)
 
         else:
+            self._request['protocol'] = 'http'
             # plain http
-            return {'id'              : req_id,
+            return {'id'              : self.id,
                     'protocol'        : 'http',
                     'request_version' : req.request_version,
                     'method'          : req.command,
@@ -279,7 +282,7 @@ class ThreadedRequest(object):
             req_message = {'id'              : self.id,
                            'protocol'        : 'websocket',
                            'data'            : str(msg)}
-            self._queue.put({'name':'webserver_request', 'msg': req_message})
+            self._queue_out.put({'name':'request', 'msg': req_message})
 
         def _close_cb():
             self.respond(None, close=True)
@@ -337,20 +340,18 @@ class ThreadedRequest(object):
             self._request['response_in_progress'] = True
 
         if close:
-            logger.debug("closing %s", self.id)
-            self._close()
             return True
 
     def _respond(self, data, close):
         # return true to close the request thread loop
-        if self.request['protocol'] == 'http':
+        if self._request['protocol'] == 'http':
             return self._respond_http(data, close)
         else:
             return self._respond_websocket(data, close)
 
     def respond_async(self, data, close):
         """Enqueue a response"""
-        self._queue.put(self.respond, data, close)
+        self._queue.put(lambda: self._respond(data, close))
 
 class Server(object):
     """
@@ -407,15 +408,30 @@ class Server(object):
         self.requests.pop(id, None)
 
     def receive(self, client, address):
-        self.requests[req.id] = ThreadedRequest(id=self._request_ids.next(),
+        req_id = self._request_ids.next()
+        self.requests[req_id] = ThreadedRequest(id=req_id,
                                                 client=client,
                                                 address=address,
                                                 serverport=self.getport(),
                                                 queue=self.queue,
-                                                close_cb=self._close_request)
-        self.requests[req.id].handle()
+                                                close_cb=lambda: self._close_request(req_id))
+        self.requests[req_id].handle()
 
     # (public) method to respond to requests
+
+    def handle(self, msg):
+        id = msg.pop('id')
+        method = msg.pop('method')
+        if method == 'respond':
+            self.respond(id, **msg)
+        elif method == 'notfound':
+            self.notfound(id, **msg)
+        elif method == 'found':
+            self.found(id, **msg)
+        elif method == 'gone':
+            self.gone(id, **msg)
+        else:
+            logger.error('invalid method: %s' % (method, ))
 
     def respond(self, id, data=None, close=False):
         """Respond to request id using data, optionally closing the connection.
@@ -426,9 +442,9 @@ class Server(object):
         always responds with an upgrade before sending data.
         """
         if id in self.requests:
-            self.requests.get(id).respond(data, close)
+            self.requests.get(id).respond_async(data, close)
         else:
-            logger.error("Invalid request id: %s" % (id, ))
+            logger.error("Invalid request id: %r" % (id, ))
 
     # respond helpers
 
@@ -439,9 +455,9 @@ class Server(object):
              "Content-Length: " + str(len(msg)),
              "Connection: close",
              "",
-             msg.encode('utf-8') if isinstance(unicode, msg) else msg
+             msg.encode('utf-8') if isinstance(msg, unicode) else msg
          ])
-        self.respond(id, data, close=True)
+        self.respond(id, response, close=True)
 
     def found(self, id, content_type, body):
         """Respond to a request with a 200 and data and content_type."""
@@ -481,7 +497,7 @@ class AsyncHttp(object):
         self.queue = queue
 
     def _put_msg(self, msg):
-        self.queue.put({'name':'webserver_response', 'msg':msg})
+        self.queue.put({'name':'webserver', 'msg':msg})
 
     def respond(self, id, data=None, close=False):
         """Respond to request id using data, optionally closing the connection."""
@@ -510,5 +526,5 @@ class AsyncHttp(object):
     def found_file(self, id, path, content_type=None):
         with open(path) as f:
             self.found(id,
-                       content_type=content_type or guess_type(path)
+                       content_type=content_type or guess_type(path),
                        body=f.read())
