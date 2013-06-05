@@ -145,7 +145,7 @@ class ThreadedRequest(object):
 
     # decode incoming requests
 
-    def _receive_websocket(self, req):
+    def _receive_websocket(self, req, path):
         """Read a websocket upgrade request.
 
         req must be a HTTPRequest.
@@ -192,7 +192,7 @@ class ThreadedRequest(object):
 
         return {'id'              : self.id,
                 'protocol'        : 'websocket',
-                'path'            : req.path,
+                'path'            : path,
                 'headers'         : dict(req.headers),
                 'upgrade'         : True,
                 'data'            : ''}
@@ -203,12 +203,12 @@ class ThreadedRequest(object):
         if (req.path in 'termframe.localhost:80' or
             req.path in 'localhost:%s' % self._serverport):
             self._client.sendall("HTTP/1.1 200 Connection established\r\n\r\n")
-            return self._receive()
+            return self._receive('http://%s' % req.path[:-3])
         else:
             logger.error('invalid connect path: %r' % req.path)
             return None
 
-    def _receive(self):
+    def _receive(self, host=''):
         """Receive a request.
 
         Store all request related data into the request attribute.
@@ -218,6 +218,7 @@ class ThreadedRequest(object):
 
         rfile = self._client.makefile()
         req = HTTPRequest(rfile)
+        path = host + req.path
 
         if not req.requestline:
             # ignore 'empty' google chrome requests
@@ -229,7 +230,7 @@ class ThreadedRequest(object):
         else:
             data = None
 
-        logger.info("%s - %s", req.command, req.path)
+        logger.info("%s - %s", req.command, path)
 
         if req.command == 'CONNECT':
             # proxy connection (for websockets or https)
@@ -238,7 +239,7 @@ class ThreadedRequest(object):
         elif req.headers.get('Upgrade') == 'websocket':
             self._request['protocol'] = 'websocket'
             # prepare for an upgrade to a websocket connection
-            return self._receive_websocket(req)
+            return self._receive_websocket(req, path)
 
         else:
             self._request['protocol'] = 'http'
@@ -247,7 +248,7 @@ class ThreadedRequest(object):
                     'protocol'        : 'http',
                     'request_version' : req.request_version,
                     'method'          : req.command,
-                    'path'            : req.path,
+                    'path'            : path,
                     'headers'         : dict(req.headers),
                     'data'            : data,
                     'error_code'      : req.error_code,
@@ -287,9 +288,9 @@ class ThreadedRequest(object):
         def _close_cb():
             self.respond(None, close=True)
 
-        websocket = AsyncWebSocket(sock=req['client'],
-                                   protocols=req['ws_protocols'],
-                                   extensions=req['ws_extensions'],
+        websocket = AsyncWebSocket(sock=self._client,
+                                   protocols=self._request['ws_protocols'],
+                                   extensions=self._request['ws_extensions'],
                                    environ=None,
                                    receive_cb=_recv,
                                    close_cb=_close_cb)
@@ -446,6 +447,12 @@ class Server(object):
         else:
             logger.error("Invalid request id: %r" % (id, ))
 
+    def abort(self, except_id):
+        """Close all existing requests except the given one."""
+        for id, req in self.requests.items():
+            if id != except_id:
+                self.gone(id)
+
     # respond helpers
 
     def notfound(self, id, msg=""):
@@ -474,7 +481,7 @@ class Server(object):
         ])
         self.respond(id, response, close=True)
 
-    def gone(self, id):
+    def gone(self, id, msg=""):
         """Respond to a request with a 410 Gone and close the connection."""
         response = '\r\n'.join([
             "HTTP/1.1 410 Gone",
@@ -485,6 +492,14 @@ class Server(object):
         ])
         self.respond(id, response, close=True)
 
+    def redirect(self, id, url):
+        """Respond to a request with a 302 Found to url."""
+        response = '\r\n'.join([
+            "HTTP/1.1 302 Found",
+            "Connection: close",
+            "",
+        ])
+        self.respond(id, response, close=True)
 
 class AsyncHttp(object):
     """Webserver Response API putting messages on a Queue for debuggable async communication.

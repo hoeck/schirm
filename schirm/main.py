@@ -26,34 +26,36 @@ def init_logger(level=logging.ERROR):
 
 def run(use_pty=True, cmd=None):
 
-    # use two queues to feed and observe the terminal
-    messages_in  = Queue.Queue()
+    TERMINAL_URL = 'http://termframe.localhost'
+
+    # use two queues to feed and observe the terminal (the other is setup in _setup_http_terminal)
+    messages_in  = Queue.Queue() # (webserver, client) -> terminal
+    # terminal -> (webserver, client, controller) communication
     messages_out = Queue.Queue()
 
-    # threaded webserver
+    # threaded webserver acting as a proxy+webserver
     server = webserver.Server(queue=messages_in)
 
+    # browser process to display the terminal
     browser_process = browser.start_browser(
         proxy_host='localhost',
         proxy_port=server.getport(),
-        url='http://termframe.localhost'
+        url=TERMINAL_URL,
     )
 
     # client process (pty or plain process)
-    client = terminalio.create_terminal(use_pty=use_pty, cmd=cmd)
-
-    # read from the client and push onto messages_in
-    def client_read():
-        while True:
-            terminalio.terminal_read(client, messages_in)
-
-    utils.create_thread(client_read, name="client_read")
+    client = terminalio.AsyncResettableTerminal(
+        outgoing=messages_in,
+        use_pty=use_pty,
+        cmd=cmd,
+    )
 
     # client and webserver are required for inputs and responses
-    webserver_async_stub = webserver.AsyncHttp(messages_out)
-    client_async_stub = terminalio.AsyncTerminal(messages_out)
-    term = terminal.Terminal(client=client_async_stub,
-                             webserver=webserver_async_stub,
+    webserver_stub = webserver.AsyncHttp(messages_out)
+    client_stub = terminalio.TerminalMessages(messages_out)
+    print 'client_stub', client_stub
+    term = terminal.Terminal(client=client_stub, # async .write and .set_size methods
+                             webserver=webserver_stub,
                              messages_out=messages_out)
 
     # messages_in
@@ -77,31 +79,51 @@ def run(use_pty=True, cmd=None):
 
             if not msg:
                 pass
-            elif msg['name'] == 'client_write':
+            elif msg['name'] == 'client':
                 # execute client writes in its own thread to avoid blocking??
-                client.write(msg['msg']['data'])
-            elif msg['name'] == 'client_set_size':
-                client.set_size(msg['msg']['lines'], msg['msg']['columns'])
+                client.handle(msg['msg'])
             elif msg['name'] == 'webserver':
                 server.handle(msg['msg'])
             elif msg['name'] == 'close':
+                # TODO
                 sys.exit(0)
             elif msg['name'] == 'reload':
-                pass
                 # main page reload - restart the whole terminal
+                # TODO: implement confirmation in term.js when 'leaving' the page
                 # webserver: close all open connections except this one
-                # client: kill
+                webserver.abort(except_id=msg['msg']['request_id'])
+                client.kill()
+
+                # clear the _in_ queue
+                while True:
+                    try:
+                        messages_in.get_nowait()
+                    except Queue.Empty, e:
+                        return
+
+                # TODO:
+                term.reset()
+
+                # restart client
+                client.reset()
+
                 # stop this thread, client read thread, terminal in thread
                 # flush all messages from in and out queues
                 # rebuild the structure in run
                 # browser: keep going, redirect to the same url
+                webserver.redirect(
+                    id=msg['msg']['request_id'],
+                    url=TERMINAL_URL,
+                )
+
             else:
                 logger.error('unknown message from terminal: %r' % (msg, ))
                 assert False
 
     # main application loop
-    create_thread(target=dispatch_terminal_output, name='main_loop')
+    utils.create_thread(target=dispatch_terminal_output, name='main_loop')
 
+    # wait for the browser to be closed
     browser_process.wait()
 
 def main():

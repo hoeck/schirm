@@ -31,44 +31,35 @@ var SchirmTerminal = function(parentElement, termId) {
     // keep the current iframe around for debugging
     this.iframe = undefined;
 
-    // IPC
+    // IPC (via self.send())
+    var preOpenQueue = [];
+    var send = function(msg) {
+        // enqueue all messages sent before the websocket is ready
+        preOpenQueue.push(msg);
+    };
+    self.send = send;
 
-    if (false) {
-        var send = function(cmd) {
-            // faster than websockets when using an embedded webview
-            console.log("schirmcommand" + JSON.stringify(cmd));
-        };
-        this.send = send;
-    } else {
-        var preOpenQueue = [];
-        var send = function(cmd) {
-            // enqueue all messages sent before the websocket is ready
-            preOpenQueue.push(cmd);
-        };
-        self.send = send;
-
-        var socket = new WebSocket(webSocketUrl);
-        socket.onopen = function (event) {
-            // send enqueued messages
-            for (var i=0; i<preOpenQueue.length; i++) {
-                socket.send(JSON.stringify(preOpenQueue[i]));
-            }
-            preOpenQueue = undefined;
-
-            send = function(cmd) { socket.send(JSON.stringify(cmd)); };
-            self.send = send;
-        };
-
-        socket.onmessage = function (event) {
-            eval(event.data);
-            self.screen.autoScroll();
+    var socket = new WebSocket(webSocketUrl);
+    socket.onopen = function (event) {
+        // send enqueued messages
+        for (var i=0; i<preOpenQueue.length; i++) {
+            socket.send(JSON.stringify(preOpenQueue[i]));
         }
+        preOpenQueue = undefined;
+
+        send = function(msg) { socket.send(JSON.stringify(msg)); };
+        self.send = send;
+    };
+
+    socket.onmessage = function (event) {
+        eval(event.data);
+        self.screen.autoScroll();
     }
 
     // focus
 
     self.setFocus = function(focus) {
-        self.send({cmd:'focus', focus:!!focus});
+        self.send({name:'focus', msg:{focus:!!focus}});
     };
 
     // scroll
@@ -124,7 +115,7 @@ var SchirmTerminal = function(parentElement, termId) {
     var sendKeyFn = function(keyname) {
         return function(key) {
             key.name = keyname;
-            self.send({cmd:'keypress', key:key});
+            self.send({name:'keypress', msg:{key:key}});
         }
     };
 
@@ -150,14 +141,14 @@ var SchirmTerminal = function(parentElement, termId) {
         'shift-end':       function() { self.scroll('bottom');    return True; },
 
         // paste xselection
-        'shift-insert': function() { send({cmd:'paste_xsel'}); },
+        'shift-insert': function() { send({name:'paste_xsel'}); },
 
         // use the browser search
         'control-f':  function() { return false; },
 
         // browsers have space and shift-space bound to scroll page down/up
-        'space': function() { self.send({cmd:'keypress', key:{string: ' '}}); return true; },
-        'shift-space': function() { self.send({cmd:'keypress', key:{string:' ', shift:true}}); return true; }
+        'space': function() { self.send({name:'keypress', msg:{key:{string: ' '}}}); return true; },
+        'shift-space': function() { self.send({name:'keypress', msg:{key:{string:' ', shift:true}}}); return true; }
     }
 
     var handleKeyDown = function(key) {
@@ -173,13 +164,13 @@ var SchirmTerminal = function(parentElement, termId) {
         var asciiZ = 90;
         if ((key.control || key.alt) && (key.code >= asciiA) && (key.code <= asciiZ)) {
             key.name = String.fromCharCode(key.code);
-            self.send({cmd:'keypress', key:key});
+            self.send({name:'keypress', msg:{key:key}});
             return true;
         }
 
         // special keys
         if (key.name) {
-            self.send({cmd:'keypress', key:key});
+            self.send({name:'keypress', msg:{key:key}});
             return true;
         }
 
@@ -211,7 +202,7 @@ var SchirmTerminal = function(parentElement, termId) {
                        'alt':e.altKey,
                        'control':e.controlKey};
             if (key.string && !keyDownProcessed) {
-                self.send({cmd:'keypress', key:key});
+                self.send({name:'keypress', msg:{key:key}});
                 return true;
             } else {
                 return false;
@@ -308,9 +299,9 @@ var SchirmTerminal = function(parentElement, termId) {
         // terminal emulator process
         this.resize = function() {
             self.size = getTermSize(linesElement);
-            send({cmd:'resize',
-                  width:self.size.cols,
-                  height:self.size.lines});
+            send({name:'resize',
+                  msg:{width:self.size.cols,
+                       height:self.size.lines}});
         };
 
         // AutoScroll
@@ -378,7 +369,7 @@ var SchirmTerminal = function(parentElement, termId) {
                     for (var i=0; i<start; i++) {
                         if ((historyHeight - linesElement.childNodes[i].offsetTop) < maxHistoryHeight) {
                             send({cmd:'removehistory',
-                                  n:i});
+                                  msg:{n:i}});
                             checkHistorySizePending = true; // change state: wait for the removeHistory response
                             return
                         }

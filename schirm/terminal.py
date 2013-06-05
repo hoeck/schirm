@@ -1,8 +1,10 @@
 
 import os
+import json
 import Queue
 import logging
 
+import pyte
 import utils
 import termkey
 import termscreen
@@ -36,12 +38,15 @@ class Terminal(object):
         self.client = client
         self.webserver = webserver
         self.messages_out = messages_out
+        self.size = size
+        self.reset()
 
+    def reset(self):
         # set up the terminal emulation:
-        self.screen = termscreen.TermScreen(*size)
+        self.screen = termscreen.TermScreen(*self.size)
         self.stream = termscreen.SchirmStream()
         self.stream.attach(self.screen)
-        self.iframes = termiframe.Iframes(client, webserver)
+        self.iframes = termiframe.Iframes(self.client, self.webserver)
 
         self.focus = False
 
@@ -93,8 +98,9 @@ class Terminal(object):
 
             if path.startswith(term_root):
                 if protocol == 'http':
-                    if self.state == 'ready' and path == (term_root + '/term.html'):
+                    if term.state == 'ready' and path == (term_root + '/term.html'):
                         # main terminal url loaded a second time - reset terminal ??
+                        term.state = 'reloading'
                         messages_out.put({'name':'reload', 'request_id': rid})
                     else:
                         term.respond_document(rid, path[len(term_root):])
@@ -106,7 +112,7 @@ class Terminal(object):
                             term.websocket_id = rid
                             term.webserver.respond(rid) # empty response to upgrade
                             # communication set up, render the emulator state
-                            term.state == 'ready'
+                            term.state = 'ready'
                             term.handlers.render(term)
                         else:
                             term.webserver.notfound(rid)
@@ -115,7 +121,8 @@ class Terminal(object):
 
             elif rid == term.websocket_id:
                 # termframe websocket connection, used for RPC
-                term.handle(json.loads(msg.data))
+                logger.info(json.loads(msg['data']))
+                term.handle(json.loads(msg['data']))
 
             else:
                 # dispatch the request to an iframe
@@ -155,7 +162,6 @@ class Terminal(object):
 
         @staticmethod
         def render(term, msg=None):
-
             if term.state != 'ready':
                 logger.debug('not rendering - terminal state != ready')
                 return
@@ -165,11 +171,14 @@ class Terminal(object):
             if not events:
                 return
 
+            def execute_js(js):
+                term.webserver.respond(term.websocket_id, data=''.join(js))
+
             # group javascript in chunks for performance
             js = [[]]
             def js_flush():
                 if js[0]:
-                    self.terminal_ui.execute(js[0])
+                    execute_js(js[0])
                 js[0] = []
 
             def js_append(x):
@@ -187,17 +196,17 @@ class Terminal(object):
                 if name.startswith('iframe_'):
                     # iframes:
                     js_flush()
-                    js_append(self.iframes.dispatch(e))
+                    js_append(term.iframes.dispatch(e))
                 elif name == 'set_title':
                     js_flush()
-                    self.terminal_ui.set_title(args[0])
+                    # TODO: implement
                 elif name == 'set_screen0':
                     screen0 = args[0]
                 elif name == 'close_stream':
                     raise Exception('terminal exit')
-                elif self.inspect_iframes and name == 'set_iframe':
-                    # insert an iframe using the same domain as the main term frame
-                    js_append(htmlterm.Events.set_iframe(*args, same_origin=True))
+                # elif self.inspect_iframes and name == 'set_iframe':
+                #     # insert an iframe using the same domain as the main term frame
+                #     js_append(htmlterm.Events.set_iframe(*args, same_origin=True))
                 elif name in htmlterm.Events.__dict__:
                     # sth. to be translated to js
                     js_append(getattr(htmlterm.Events,name)(*args))
@@ -214,7 +223,11 @@ class Terminal(object):
             logger.error('no handler for msg: %r' % (msg, ))
 
     def handle(self, msg):
-        getattr(self.handlers, msg.get('name'), self.handlers.unknown)(self, msg['msg'])
+        if self.state != 'reloading':
+            getattr(self.handlers, msg.get('name'), self.handlers.unknown)(self, msg['msg'])
+        else:
+            # drop the message
+            pass
 
     # helpers
 

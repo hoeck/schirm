@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+OBSOLETE
+
 # Schirm - a linux compatible terminal emulator providing html modes.
 # Copyright (C) 2011  Erik Soehnel
 #

@@ -7,12 +7,11 @@ import signal
 import subprocess
 import logging
 
+import utils
+
 def _debug(s):
     print "IO:", repr(s.replace("\x1b[", '<CSI>').replace("\x1b", '<ESC>'))
     return s
-
-def terminal_read(client, queue):
-    queue.put({'name': 'client_output', 'msg': {'data': client.read()}})
 
 def create_terminal(size=(80,25), use_pty=True, cmd=None):
     if not cmd:
@@ -54,8 +53,14 @@ class PseudoTerminal(object):
             # parent
             self.pid = pid
             self.master = master
+            self.state = 'running'
 
     # interface
+
+    def kill(self, signal=9):
+        if self.state == 'running':
+            self.state = 'killed'
+            os.kill(self.pid, signal)
 
     def write(self, data):
         """Immediately write data to the terminals filedescriptor.
@@ -76,7 +81,8 @@ class PseudoTerminal(object):
         except OSError, e:
             # self.master was closed or reading interrupted by a
             # signal -> application exit
-            return ('pty_read_error', None)
+            self.state = 'closed'
+            return None
 
     def set_size(self, lines, columns):
         """Use the TIOCSWINSZ ioctl to change the size of this pty."""
@@ -102,12 +108,19 @@ class SubprocessTerminal(object):
                              shell=True,
                              env=env)
         self.proc = p
+        self.state = 'running'
+
+    def kill(self, signal):
+        if self.state == 'running':
+            self.state = 'killed'
+            self.proc.kill(signal)
 
     def write(self, data):
         if data == '\x03': # ctrl-c
             self.proc.send_signal(signal.SIGINT)
             return
         elif data == '\x04': # ctrl-d
+            self.state = 'closed'
             self.proc.stdin.close()
             return
         else:
@@ -125,24 +138,73 @@ class SubprocessTerminal(object):
             if data:
                 return data
             else:
-                return ('pty_read_error', None)
+                self.state = 'closed'
+                return None
         except OSError, e:
             # stdout was closed or reading interrupted by a
             # signal -> application exit
-            return ('pty_read_error', None)
+            self.state = 'closed'
+            return None
 
     def set_size(self, lines, columns):
         pass
 
-class AsyncTerminal(object):
+class AsyncResettableTerminal():
+
+    def __init__(self, outgoing, use_pty, cmd):
+        self.outgoing = outgoing
+        self.use_pty = use_pty
+        self.cmd = cmd
+
+        self.state = None
+        self.client = None
+        self.client_thread = None
+        self.reset()
+
+    def reset(self):
+        if not self.state == 'killed' and self.client:
+            self.kill()
+
+        self.state = 'resetting'
+        self.client = create_terminal(use_pty=self.use_pty,
+                                      cmd=self.cmd)
+
+        # read from the client and push onto outgoing
+        def _client_read():
+            while True:
+                data = self.client.read()
+                if self.state == 'ready':
+                    if data is None:
+                        # terminal client closed
+                        self.outgoing.put({'name': 'client_close', 'msg': None})
+                    else:
+                        self.outgoing.put({'name': 'client_output', 'msg': {'data': data}})
+                else:
+                    return
+
+        self.state = 'ready'
+        self.client_thread = utils.create_thread(_client_read)
+
+    def kill(self):
+        self.state = 'killed'
+        self.client.kill()
+
+    def handle(self, msg):
+        def _unknown_message(**kwargs):
+            logger.error('unknown message: %s' % (msg, ))
+
+        getattr(self.client, msg['name'], _unknown_message)(**msg['msg'])
+
+class TerminalMessages(object):
+
+    # put messages on queue, 
+    # eventually seen by the .handle method in AsyncResettableTerminal
 
     def __init__(self, queue):
         self.queue = queue
 
     def write(self, data):
-        self.queue.put({'name': 'client_write', 'msg': {'data': data}})
+        self.queue.put({'name': 'client', 'msg': {'name': 'write', 'msg': {'data': data}}})
 
     def set_size(self, lines, columns):
-        self.queue.put({'name': 'client_set_size',
-                        'msg': {'lines': lines,
-                                'columns': columns}})
+        self.queue.put({'name': 'client', 'msg': {'name': 'set_size', 'msg': {'lines': lines, 'columns': columns}}})
