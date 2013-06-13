@@ -13,9 +13,14 @@ import utils
 
 logger = logging.getLogger('schirm')
 
-def init_logger(level=logging.ERROR):
+def init_logger(level=logging.ERROR, filters=[]):
     l = logging.getLogger('schirm')
     h = logging.StreamHandler()
+
+    if filters:
+        for name in filters:
+            h.addFilter(logging.Filter(name))
+
     f = logging.Formatter("%(name)s - %(message)s")
 
     h.setFormatter(f)
@@ -131,12 +136,14 @@ def main():
     # configure logging and the Schirm class
     parser = argparse.ArgumentParser(description="A linux compatible terminal emulator providing modes for rendering (interactive) html documents.")
     parser.add_argument("-v", "--verbose", help="be verbose, -v for info, -vv for debug log level", action="count")
+    parser.add_argument("--log-filter", help="Only show log messages for this module, e.g. schirm-webserver", nargs="+")
     parser.add_argument("-d", "--iframe-debug", help="Let iframes use the same domain as the main term frame to be able to access them with javascript from the webkit inspector", action="store_true")
     parser.add_argument("--no-pty", help="Do not use a pty (pseudo terminal) device.", action="store_true")
     parser.add_argument("--command", help="The command to execute within the terminal instead of the current users default shell.")
     args = parser.parse_args()
 
-    init_logger(level=([None, logging.INFO, logging.DEBUG][max(0, min(2, args.verbose))]))
+    init_logger(level=([None, logging.INFO, logging.DEBUG][max(0, min(2, args.verbose))]),
+                filters=args.log_filter)
 
     if not (args.verbose and args.verbose > 1):
         warnings.simplefilter('ignore')
