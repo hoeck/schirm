@@ -85,8 +85,9 @@ class Terminal(object):
             term.client.write(utils.get_xselection())
 
         @staticmethod
-        def set_focus(term, msg):
+        def focus(term, msg):
             term.focus = bool(msg.get('focus'))
+            term.handlers.render(term)
 
         @staticmethod
         def request(term, msg):
@@ -98,10 +99,10 @@ class Terminal(object):
 
             if path.startswith(term_root):
                 if protocol == 'http':
-                    if term.state == 'ready' and path == (term_root + '/term.html'):
+                    if term.state == 'ready' and path == term_root + '/term.html':
                         # main terminal url loaded a second time - reset terminal ??
                         term.state = 'reloading'
-                        messages_out.put({'name':'reload', 'request_id': rid})
+                        term.messages_out.put({'name':'reload', 'msg':{'request_id': rid}})
                     else:
                         term.respond_document(rid, path[len(term_root):])
 
@@ -137,14 +138,8 @@ class Terminal(object):
             term.handlers.render(term)
 
         @staticmethod
-        def client_close(term, msg): # pty_read_error
-            # terminal client process closed its out stream
-            # cleanup and quit terminal
-            term.stream.close()
-            term.client.kill()
-            term.state = 'closed'
-            # TODO:
-            messages_out.put({'name': 'close'})
+        def client_close(term, msg):
+            term.messages_out.put({'name': 'close', 'pid': msg['pid']})
 
         @staticmethod
         def hide_cursor(term, msg):
@@ -202,11 +197,6 @@ class Terminal(object):
                     # TODO: implement
                 elif name == 'set_screen0':
                     screen0 = args[0]
-                elif name == 'close_stream':
-                    raise Exception('terminal exit')
-                # elif self.inspect_iframes and name == 'set_iframe':
-                #     # insert an iframe using the same domain as the main term frame
-                #     js_append(htmlterm.Events.set_iframe(*args, same_origin=True))
                 elif name in htmlterm.Events.__dict__:
                     # sth. to be translated to js
                     js_append(getattr(htmlterm.Events,name)(*args))
@@ -250,28 +240,32 @@ class Terminal(object):
 
     def respond_document(self, rid, path):
         """Respond to requests to the main terminal root url."""
+        logger.info("respond-document: %r %r" % (rid, path))
+
         if path in self.static_resources:
             self.webserver.found_resource(rid, self.static_resources[path])
         elif path == '/user.css':
             self.webserver.found(rid, get_config_file_contents('user.css') or "", 'text/css')
-        elif path.startswith('/localfont/') and path.endswith('.ttf') or path.endswith('.otf'):
+        elif path.startswith('/localfont/') and (path.endswith('.ttf') or path.endswith('.otf')):
             # serve font files to allow using any local font in user.css via @font-face
             self.webserver.found_file(rid, path[len('/localfont'):])
-        elif self.inspect_iframes and path.startswith('/iframe/'):
-            # Ask for iframes content using the same domain
-            # as the main terminal frame to be able to debug
-            # iframe contents with the webkit-inspector.
-
-            # modify the path into a iframe path
-            #TODO
-            #frag = path[len('/iframe/'):]
-            #iframe_id = frag[:frag.index('/')]
-            #iframe_path = frag[frag.index('/'):]
-            #req['path'] = ('http://%(iframe_id)s.localhost%(iframe_path)s'
-            #               % {'iframe_id':iframe_id,
-            #                  'iframe_path':iframe_path})
-            #self.input_queue.put(('request', req))
-            pass
+        # elif self.inspect_iframes and path.startswith('/iframe/'):
+        #     # Ask for iframes content using the same domain
+        #     # as the main terminal frame to be able to debug
+        #     # iframe contents with the webkit-inspector.
+        #
+        #     # modify the path into a iframe path
+        #     TODO
+        #     frag = path[len('/iframe/'):]
+        #     iframe_id = frag[:frag.index('/')]
+        #     iframe_path = frag[frag.index('/'):]
+        #     req['path'] = ('http://%(iframe_id)s.localhost%(iframe_path)s'
+        #                   % {'iframe_id':iframe_id,
+        #                      'iframe_path':iframe_path})
+        #     self.input_queue.put(('request', req))
+        #     pass
+        elif path in ('', '/'):
+            self.webserver.redirect(rid, url='/term.html')
         else:
             self.webserver.notfound(rid)
 

@@ -58,7 +58,6 @@ def run(use_pty=True, cmd=None):
     # client and webserver are required for inputs and responses
     webserver_stub = webserver.AsyncHttp(messages_out)
     client_stub = terminalio.TerminalMessages(messages_out)
-    print 'client_stub', client_stub
     term = terminal.Terminal(client=client_stub, # async .write and .set_size methods
                              webserver=webserver_stub,
                              messages_out=messages_out)
@@ -90,13 +89,20 @@ def run(use_pty=True, cmd=None):
             elif msg['name'] == 'webserver':
                 server.handle(msg['msg'])
             elif msg['name'] == 'close':
-                # TODO
-                sys.exit(0)
+                if msg['pid'] == client.getpid():
+                    browser_process.kill()
+                    sys.exit(0)
+                else:
+                    # ignore close messages of previously killed client processes
+                    pass
             elif msg['name'] == 'reload':
                 # main page reload - restart the whole terminal
                 # TODO: implement confirmation in term.js when 'leaving' the page
-                # webserver: close all open connections except this one
-                webserver.abort(except_id=msg['msg']['request_id'])
+
+                # webserver: close all pending (== waiting for an
+                # internal response) requests except this one)
+                server.abort_pending_requests(except_id=msg['msg']['request_id'])
+
                 client.kill()
 
                 # clear the _in_ queue
@@ -104,9 +110,8 @@ def run(use_pty=True, cmd=None):
                     try:
                         messages_in.get_nowait()
                     except Queue.Empty, e:
-                        return
+                        break
 
-                # TODO:
                 term.reset()
 
                 # restart client
@@ -116,7 +121,7 @@ def run(use_pty=True, cmd=None):
                 # flush all messages from in and out queues
                 # rebuild the structure in run
                 # browser: keep going, redirect to the same url
-                webserver.redirect(
+                server.redirect(
                     id=msg['msg']['request_id'],
                     url=TERMINAL_URL,
                 )

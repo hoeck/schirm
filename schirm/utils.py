@@ -36,3 +36,9 @@ def create_thread(target, name=None, daemon=True):
         t.setDaemon(True)
     t.start()
     return t
+
+def shorten(s, max=40, more='...'):
+    if len(s) > max:
+        return "%s%s" % (s[:max-len(more)], more)
+    else:
+        return s

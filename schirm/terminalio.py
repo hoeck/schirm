@@ -62,6 +62,9 @@ class PseudoTerminal(object):
             self.state = 'killed'
             os.kill(self.pid, signal)
 
+    def getpid(self):
+        return self.pid
+
     def write(self, data):
         """Immediately write data to the terminals filedescriptor.
 
@@ -115,6 +118,9 @@ class SubprocessTerminal(object):
             self.state = 'killed'
             self.proc.kill(signal)
 
+    def getpid(self):
+        return self.proc.pid
+
     def write(self, data):
         if data == '\x03': # ctrl-c
             self.proc.send_signal(signal.SIGINT)
@@ -165,22 +171,19 @@ class AsyncResettableTerminal():
         if not self.state == 'killed' and self.client:
             self.kill()
 
-        self.state = 'resetting'
         self.client = create_terminal(use_pty=self.use_pty,
                                       cmd=self.cmd)
 
         # read from the client and push onto outgoing
         def _client_read():
+            pid = self.client.getpid()
             while True:
                 data = self.client.read()
-                if self.state == 'ready':
-                    if data is None:
-                        # terminal client closed
-                        self.outgoing.put({'name': 'client_close', 'msg': None})
-                    else:
-                        self.outgoing.put({'name': 'client_output', 'msg': {'data': data}})
+                if data is None:
+                    # terminal client closed
+                    self.outgoing.put({'name': 'client_close', 'msg': {'pid': pid}})
                 else:
-                    return
+                    self.outgoing.put({'name': 'client_output', 'msg': {'data': data}})
 
         self.state = 'ready'
         self.client_thread = utils.create_thread(_client_read)
@@ -188,6 +191,9 @@ class AsyncResettableTerminal():
     def kill(self):
         self.state = 'killed'
         self.client.kill()
+
+    def getpid(self):
+        return self.client.getpid()
 
     def handle(self, msg):
         def _unknown_message(**kwargs):
@@ -197,7 +203,7 @@ class AsyncResettableTerminal():
 
 class TerminalMessages(object):
 
-    # put messages on queue, 
+    # put messages on queue,
     # eventually seen by the .handle method in AsyncResettableTerminal
 
     def __init__(self, queue):
