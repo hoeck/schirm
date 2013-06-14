@@ -59,6 +59,11 @@
 
 .cursor-inactive {
     border: solid 1px #ff00b0;
+    display: inline-block;
+    width: 7px;
+    height: 14px;
+    box-sizing: border-box;
+    vertical-align:top;
 }
 
 /* min scrollbar */
