@@ -376,10 +376,11 @@ class ThreadedRequest(object):
                     except:
                         logmsg = '<error decoding response:> %s' % repr(utils.shorten(data))
 
-            logger.debug("(%03d) - %s", self.id, logmsg)
-            self._client.sendall(data)
-            self._response_in_progress = True
+                logger.debug("(%03d) - %s", self.id, logmsg)
 
+            self._client.sendall(data)
+
+        self._response_in_progress = True
         if close:
             return True
 
