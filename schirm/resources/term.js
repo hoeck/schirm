@@ -635,9 +635,7 @@ var SchirmTerminal = function(parentElement, termId) {
     // focus
     window.onfocus = function() { self.setFocus(true); };
     window.onblur  = function() { self.setFocus(false); };
-    if (document.hasFocus()) {
-        self.setFocus(true);
-    }
+    self.setFocus(document.hasFocus());
 
     // adaptive autoScroll
     window.onscroll = self.checkAutoScroll;

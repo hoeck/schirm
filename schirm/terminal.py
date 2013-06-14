@@ -147,16 +147,17 @@ class Terminal(object):
             term.screen.linecontainer.hide_cursor(term.screen.cursor.y)
 
         @staticmethod
-        def show_cursor(term, msg):
+        def render(term, msg=None):
+
+            # text-cursor
             if not term.screen.cursor.hidden and not term.screen.iframe_mode:
                 # make sure the terminal cursor is drawn
                 term.screen.linecontainer.show_cursor(
                     term.screen.cursor.y,
                     term.screen.cursor.x,
-                    'cursor' if term.focus else 'cursor-inactive')
+                    'cursor' if term.focus else 'cursor-inactive'
+                )
 
-        @staticmethod
-        def render(term, msg=None):
             if term.state != 'ready':
                 logger.debug('not rendering - terminal state != ready')
                 return

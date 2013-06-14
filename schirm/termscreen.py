@@ -1247,6 +1247,10 @@ class SchirmStream(pyte.Stream):
         huge, escape-less substrings without having to go through the
         state-machinery (avoiding the function call overhead).
         """
+        # disable the cursor
+        (screen, _) = self.listeners[0]
+        screen.linecontainer.hide_cursor(screen.cursor.y)
+
         string_chunksize = 8192
         stream_chunksize = 128
         src = bytes.decode('utf-8', 'ignore')
