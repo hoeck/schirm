@@ -319,7 +319,19 @@ class ThreadedRequest(object):
         self._request.update({'websocket': websocket})
 
         # read from the websocket in a separate thread
-        utils.create_thread(websocket.run)
+        def _run():
+            try:
+                websocket.run()
+            except socket.error, e:
+                if e.errno == 104: # "Connection reset by peer"
+                    # remote processs was killed
+                    logger.debug('(%03d) - socket.error: %s', self.id, e)
+                    pass
+                else:
+                    raise e
+
+        utils.create_thread(_run)
+
         self._debugstate = 'websocket'
 
     def _respond_websocket(self, data, close=False):
@@ -370,9 +382,9 @@ class ThreadedRequest(object):
                         m = fp.close()
                         header = dict(m.items())
                         body = m.get_payload()
-                        logmsg = "%(status)s (%(content_type)s) %(body)s" % {'status': status,
+                        logmsg = "%(status)s (%(content_type)s) %(body)r" % {'status': status,
                                                                              'content_type': header.get('Content-Type', '<unknown>'),
-                                                                             'body': utils.shorten(repr(body))}
+                                                                             'body': utils.shorten(body)}
                     except:
                         logmsg = '<error decoding response:> %s' % repr(utils.shorten(data))
 

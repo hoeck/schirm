@@ -10,6 +10,7 @@ import tempfile
 import uuid
 import atexit
 import json
+import time
 
 __all__ = ('start_browser', )
 
@@ -60,6 +61,34 @@ def firefox_configure_profile(config_dir, host, port):
 </RDF:RDF>
 """)
 
+class BrowserProcess(object):
+
+    def __init__(self, proc, profilepath):
+        self.proc = proc
+        self.profilepath = profilepath
+        self.state = 'running'
+
+    def kill(self, *args, **kwargs):
+        if self.state != 'killed':
+            self.state = 'killed'
+            self.proc.kill(*args, **kwargs)
+
+    def wait_and_cleanup(self):
+        try:
+            self.proc.wait()
+        except KeyboardInterrupt, e:
+            pass
+
+        logger.debug('removing profile: %r', self.profilepath)
+        for _ in range(10):
+            try:
+                shutil.rmtree(self.profilepath)
+                logger.debug('removing profile: done')
+                return
+            except OSError, e:
+                logger.debug('removing profile: error (%s)', e)
+                time.sleep(0.1)
+
 def start_browser(url,
                   proxy_host,
                   proxy_port):
@@ -86,7 +115,7 @@ def start_browser(url,
         # setup a temporary profile for each browser
         config_dir = tempfile.mkdtemp(prefix='chrome_profile',
                                       dir=os.path.join(os.path.expanduser('~/.schirm')))
-        atexit.register(lambda: shutil.rmtree(config_dir))
+        #atexit.register(lambda: shutil.rmtree(config_dir))
 
         args = ['--user-data-dir=%s' % config_dir, # google-chrome has no --temp-profile option
                 '--proxy-server=%s' % proxy_url,
@@ -94,13 +123,13 @@ def start_browser(url,
         cmd = [available] + args
         logger.info("starting browser: %s", ' '.join(cmd))
         p = subprocess.Popen(cmd)
-        return p
+        return BrowserProcess(proc=p, profilepath=config_dir)
 
     elif available and 'fire' in available:
         # firefox
         config_dir = tempfile.mkdtemp(prefix='firefox_profile',
                                       dir=os.path.join(os.path.expanduser('~/.schirm')))
-        atexit.register(lambda: shutil.rmtree(config_dir))
+        #atexit.register(lambda: shutil.rmtree(config_dir))
 
         # create a temporary profile in .schirm to be able to find and manipulate it
         profile = "schirm-%s" %  uuid.uuid4()
@@ -112,21 +141,7 @@ def start_browser(url,
                              '-new-window', url]
         logger.info("starting browser: %s" % cmd)
         p = subprocess.Popen(cmd)
-        return p
+        return BrowserProcess(proc=p, profilepath=config_dir)
 
     else:
         raise Exception("No suitable browser found!")
-
-# def start(use_pty=True, cmd=None):
-# 
-#     p = None
-#     def _quit():
-#         p.kill()
-# 
-#     s = schirm.Schirm(UIProxy(_quit),
-#                       websocket_proxy_hack=False,
-#                       use_pty=use_pty,
-#                       cmd=cmd)
-#     ws = webserver.Server(s)
-#     p = start_browser(ws.getport())
-#     p.wait()

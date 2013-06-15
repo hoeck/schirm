@@ -91,7 +91,6 @@ def run(use_pty=True, cmd=None):
             elif msg['name'] == 'close':
                 if msg['pid'] == client.getpid():
                     browser_process.kill()
-                    sys.exit(0)
                 else:
                     # ignore close messages of previously killed client processes
                     pass
@@ -133,8 +132,8 @@ def run(use_pty=True, cmd=None):
     # main application loop
     utils.create_thread(target=dispatch_terminal_output, name='main_loop')
 
-    # wait for the browser to be closed
-    browser_process.wait()
+    # wait for the browser to be closed and rm the temporary profile
+    browser_process.wait_and_cleanup()
 
 def main():
 
