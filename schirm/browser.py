@@ -106,7 +106,6 @@ def start_browser(url,
     os.setpgid(os.getpid(), os.getpid())
 
     proxy_url = '%s:%s' % (proxy_host, proxy_port)
-    url = 'http://termframe.localhost/term.html'
 
     ensure_dir('~/.schirm')
 
@@ -115,7 +114,6 @@ def start_browser(url,
         # setup a temporary profile for each browser
         config_dir = tempfile.mkdtemp(prefix='chrome_profile',
                                       dir=os.path.join(os.path.expanduser('~/.schirm')))
-        #atexit.register(lambda: shutil.rmtree(config_dir))
 
         args = ['--user-data-dir=%s' % config_dir, # google-chrome has no --temp-profile option
                 '--proxy-server=%s' % proxy_url,
@@ -129,7 +127,6 @@ def start_browser(url,
         # firefox
         config_dir = tempfile.mkdtemp(prefix='firefox_profile',
                                       dir=os.path.join(os.path.expanduser('~/.schirm')))
-        #atexit.register(lambda: shutil.rmtree(config_dir))
 
         # create a temporary profile in .schirm to be able to find and manipulate it
         profile = "schirm-%s" %  uuid.uuid4()

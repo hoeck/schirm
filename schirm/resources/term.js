@@ -14,8 +14,6 @@ var SchirmTerminal = function(parentElement, termId) {
     <div class=\"terminal-alt-iframe-container\"></div>\
 </div>\
 ";
-    var webSocketUrl = "ws://termframe.localhost"
-
     var self = this;
 
     var linesElement; // PRE element to render the terminal in line mode
@@ -39,7 +37,7 @@ var SchirmTerminal = function(parentElement, termId) {
     };
     self.send = send;
 
-    var socket = new WebSocket(webSocketUrl);
+    var socket = new WebSocket('ws://'+window.location.host);
     socket.onopen = function (event) {
         // send enqueued messages
         for (var i=0; i<preOpenQueue.length; i++) {

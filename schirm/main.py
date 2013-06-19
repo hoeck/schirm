@@ -31,8 +31,6 @@ def init_logger(level=logging.ERROR, filters=[]):
 
 def run(use_pty=True, cmd=None):
 
-    TERMINAL_URL = 'http://termframe.localhost'
-
     # use two queues to feed and observe the terminal (the other is setup in _setup_http_terminal)
     messages_in  = Queue.Queue() # (webserver, client) -> terminal
     # terminal -> (webserver, client, controller) communication
@@ -40,13 +38,6 @@ def run(use_pty=True, cmd=None):
 
     # threaded webserver acting as a proxy+webserver
     server = webserver.Server(queue=messages_in)
-
-    # browser process to display the terminal
-    browser_process = browser.start_browser(
-        proxy_host='localhost',
-        proxy_port=server.getport(),
-        url=TERMINAL_URL,
-    )
 
     # client process (pty or plain process)
     client = terminalio.AsyncResettableTerminal(
@@ -61,6 +52,13 @@ def run(use_pty=True, cmd=None):
     term = terminal.Terminal(client=client_stub, # async .write and .set_size methods
                              webserver=webserver_stub,
                              messages_out=messages_out)
+
+    # browser process to display the terminal
+    browser_process = browser.start_browser(
+        proxy_host='localhost',
+        proxy_port=server.getport(),
+        url=term.url,
+    )
 
     # messages_in
     def dispatch_terminal_input():
@@ -122,7 +120,7 @@ def run(use_pty=True, cmd=None):
                 # browser: keep going, redirect to the same url
                 server.redirect(
                     id=msg['msg']['request_id'],
-                    url=TERMINAL_URL,
+                    url=term.url,
                 )
 
             else:

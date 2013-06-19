@@ -1,6 +1,7 @@
 
 import os
 import json
+import base64
 import Queue
 import logging
 
@@ -33,13 +34,16 @@ class Terminal(object):
                  messages_out,
                  # terminal emulation options:
                  size=(80,25),
-                 term_id='terminal0',
              ):
         self.client = client
         self.webserver = webserver
         self.messages_out = messages_out
         self.size = size
         self.reset()
+
+        # unique random id to hide the terminals url
+        self.id = base64.b32encode(os.urandom(35)).lower()
+        self.url = "http://%s.localhost" % self.id
 
     def reset(self):
         # set up the terminal emulation:
@@ -92,7 +96,7 @@ class Terminal(object):
         @staticmethod
         def request(term, msg):
             # todo: A GET of the main terminal page when state != None should result in a terminal reset
-            term_root = 'http://termframe.localhost'
+            term_root = term.url
             rid      = msg.get('id')
             protocol = msg.get('protocol')
             path     = msg.get('path', '')
@@ -129,7 +133,7 @@ class Terminal(object):
                 # dispatch the request to an iframe
                 handled = term.iframes.request(msg)
                 if not handled:
-                    logger.error("Could not handle request.")
+                    logger.error("Could not handle request %03d.", rid)
 
         @staticmethod
         def client_output(term, msg):

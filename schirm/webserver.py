@@ -134,7 +134,7 @@ class ThreadedRequest(object):
                         return
 
     def _close(self):
-        logger.info('(%03d) closing socket', self.id)
+        logger.debug('(%03d) closing socket', self.id)
         self._debugstate = 'closing-socket'
         try:
             sock = self._client._sock
@@ -219,8 +219,7 @@ class ThreadedRequest(object):
         # proxy connection established
         # TODO: proper path parsing!
         self._debugstate = 'proxy-connect'
-        if (req.path in 'termframe.localhost:80' or
-            req.path in 'localhost:%s' % self._serverport):
+        if req.path.endswith('localhost:80'):
             self._client.sendall("HTTP/1.1 200 Connection established\r\n\r\n")
             return self._receive('http://%s' % req.path[:-3])
         else:
@@ -511,7 +510,7 @@ class Server(object):
     def abort_pending_requests(self, except_id):
         """Close all requests that wait for a response except the given one."""
         reqs = [r for r in self.requests.values() if r.got_request() and r.id != except_id]
-        logger.info('ABORT:\n%s', '\n'.join(repr(r) for r in reqs))
+        logger.debug('ABORT:\n%s', '\n'.join(repr(r) for r in reqs))
         for r in reqs:
             self.gone(r.id)
 
