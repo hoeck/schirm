@@ -48,6 +48,12 @@ logger = logging.getLogger(__name__)
 
 # utils
 
+# chrome complains when using 'application/octet-stream' for fonts
+if not '.ttf' in mimetypes.types_map:
+    mimetypes.types_map['.ttf'] = "application/x-font-ttf"
+if not '.otf' in mimetypes.types_map:
+    mimetypes.types_map['.otf'] = "application/x-opentype"
+
 def guess_type(name, default="text/plain"):
     """Given a path to a file, guess its mimetype."""
     guessed_type, encoding = mimetypes.guess_type(name, strict=False)
