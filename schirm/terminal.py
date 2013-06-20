@@ -250,7 +250,7 @@ class Terminal(object):
         if path in self.static_resources:
             self.webserver.found_resource(rid, self.static_resources[path])
         elif path == '/user.css':
-            self.webserver.found(rid, get_config_file_contents('user.css') or "", 'text/css')
+            self.webserver.found(rid, body=get_config_file_contents('user.css') or "", content_type="text/css")
         elif path.startswith('/localfont/') and (path.endswith('.ttf') or path.endswith('.otf')):
             # serve font files to allow using any local font in user.css via @font-face
             self.webserver.found_file(rid, path[len('/localfont'):])

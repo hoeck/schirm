@@ -533,7 +533,7 @@ class Server(object):
          ])
         self.respond(id, response, close=True)
 
-    def found(self, id, content_type, body):
+    def found(self, id, body, content_type):
         """Respond to a request with a 200 and data and content_type."""
         response = "\r\n".join([
             "HTTP/1.1 200 OK",
@@ -590,7 +590,7 @@ class AsyncHttp(object):
         """Respond to a request with a 404 Not Found and close the connection."""
         self._put_msg({'method':'notfound', 'id':id, 'msg':msg})
 
-    def found(self, id, content_type, body):
+    def found(self, id, body, content_type):
         """Respond to a request with a 200 and data and content_type."""
         self._put_msg({'method':'found', 'id':id, 'content_type':content_type, 'body':body})
 
@@ -607,11 +607,11 @@ class AsyncHttp(object):
     def found_resource(self, id, path, resource_module_name='schirm.resources'):
         """Respond with a 200 to a request with a resource file."""
         self.found(id,
-                   content_type=guess_type(path),
-                   body=pkg_resources.resource_string(resource_module_name, path))
+                   body=pkg_resources.resource_string(resource_module_name, path),
+                   content_type=guess_type(path))
 
     def found_file(self, id, path, content_type=None):
         with open(path) as f:
             self.found(id,
-                       content_type=content_type or guess_type(path),
-                       body=f.read())
+                       body=f.read(),
+                       content_type=content_type or guess_type(path))
