@@ -54,7 +54,7 @@ if not '.ttf' in mimetypes.types_map:
 if not '.otf' in mimetypes.types_map:
     mimetypes.types_map['.otf'] = "application/x-opentype"
 
-def guess_type(name, default="text/plain"):
+def guess_type(name, default="application/octet-stream"):
     """Given a path to a file, guess its mimetype."""
     guessed_type, encoding = mimetypes.guess_type(name, strict=False)
     return guessed_type or default
