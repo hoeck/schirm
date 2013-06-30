@@ -219,6 +219,7 @@ class Terminal(object):
 
     def handle(self, msg):
         if self.state != 'reloading':
+            logger.info('handle: %r', msg.get('name'))
             getattr(self.handlers, msg.get('name'), self.handlers.unknown)(self, msg['msg'])
         else:
             # drop the message

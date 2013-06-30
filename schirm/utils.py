@@ -1,6 +1,7 @@
 import Queue
 import logging
 import threading
+import subprocess
 
 logger = logging.getLogger(__name__)
 
@@ -20,12 +21,12 @@ def put_nowait_sleep(queue, data):
             time.sleep(wait_f(times))
             times += 1
 
-def get_xselection(self):
+def get_xselection():
     try:
         return subprocess.check_output(['xsel', '-o'])
     except OSError, e:
         if e.errno == 2:
-            logger.info("Install xsel to use the 'paste x selection' feature")
+            logger.error("Install xsel to use the 'paste x selection' feature")
             return ""
         else:
             raise e

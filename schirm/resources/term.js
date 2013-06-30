@@ -139,7 +139,7 @@ var SchirmTerminal = function(parentElement, termId) {
         'shift-end':       function() { self.scroll('bottom');    return True; },
 
         // paste xselection
-        'shift-insert': function() { send({name:'paste_xsel'}); },
+        'shift-insert': function() { send({name:'paste_xsel', 'msg':null}); },
 
         // use the browser search
         'control-f':  function() { return false; },
