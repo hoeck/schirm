@@ -8,6 +8,8 @@ import email.parser
 import email.Message
 
 import htmlterm
+import webserver
+import utils
 
 logger = logging.getLogger(__name__)
 
@@ -205,7 +207,8 @@ class Iframe(object):
         if not name.strip().startswith("/"):
             name = "/" + name
 
-        self.resources[name] = self.webserver.make_response(mimetype or self.webserver.guess_type(name), data)
+        self.resources[name] = {'body': data,
+                                'content_type': mimetype or webserver.guess_type(name)}
 
     def _respond(self, header, body):
         # todo: test that req_id indeed belongs to a request
@@ -215,14 +218,14 @@ class Iframe(object):
 
         # cgi-like: use the 'status' header to indicate which status
         # the webserver should respond with
-        print header
-
         http_status = "HTTP/1.1 %s\n" % header.get('Status', header.get('status', '200'))
 
         for k,v in header.items():
             if k.lower() == 'status':
                 pass
             elif k.lower().startswith('x-schirm'):
+                # x-schirm headers are used to communicate with the
+                # terminal
                 pass
             else:
                 m[k] = v
@@ -307,7 +310,7 @@ class Iframe(object):
 
             data = ''.join(self.resources.get(None, []))
 
-            logger.debug("getting iframe root document: %s", repr((self.state, data)))
+            logger.debug("getting iframe root document: %s", repr((self.state, utils.shorten(data))))
             self.webserver.respond(req['id'],
                                    data="\r\n".join(["HTTP/1.1 200 OK",
                                                      "Cache-Control: no-cache",
@@ -326,8 +329,7 @@ class Iframe(object):
             self.webserver.respond_resource_file(req['id'], self.static_resources[req['path']])
 
         elif GET and req['path'] in self.resources:
-            data = self.resources[req['path']]
-            self.webserver.respond(req['id'], data) # data in resources is already in http-request form
+            self.webserver.found(req['id'], **self.resources[req['path']])
 
         elif POST and req['path'] == self['comm_path']:
             # receive commands from the iframe
