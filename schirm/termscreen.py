@@ -17,9 +17,11 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from UserList import UserList
+import os
 import logging
 import pkg_resources
 import re
+import base64
 
 import pyte
 from pyte.screens import Char, Margins, Cursor
@@ -1158,13 +1160,12 @@ class TermScreen(pyte.Screen):
     ## iframe extensions
 
     def _next_iframe_id(self):
-        self.iframe_id = str(int(self.iframe_id or 0) + 1)
-        return self.iframe_id
+        # unique random id to hide the terminals url
+        return base64.b32encode(os.urandom(35)).lower()
 
     def _insert_iframe_line(self):
-        iframe_id = self._next_iframe_id()
-        self.linecontainer.iframe_enter(iframe_id)
-        self.linecontainer[self.cursor.y] = IframeLine(iframe_id)
+        self.linecontainer.iframe_enter(self.iframe_id)
+        self.linecontainer[self.cursor.y] = IframeLine(self.iframe_id)
 
     def _iframe_close_document(self):
         # add some html to the iframe document for registering ctr-c and ctrl-d key handlers
@@ -1179,6 +1180,7 @@ class TermScreen(pyte.Screen):
             # all following chars are written to the iframes root document connection
             if self.iframe_mode == None:
                 self.iframe_mode = 'document'
+                self.iframe_id = self._next_iframe_id()
                 self._insert_iframe_line()
             elif self.iframe_mode == 'response':
                 self.iframe_mode = 'document'
