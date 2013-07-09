@@ -4,6 +4,7 @@ var schirm = (function(schirm) {
 
     // IPC
     var webSocketUri = "%(websocket_uri)s";
+    var commUri = "%(comm_uri)s";
     var preOpenQueue = [];
     var send = function(data) {
         // enqueue all messages sent before the websocket is ready
@@ -132,7 +133,7 @@ var schirm = (function(schirm) {
             if (0) {
                 console.log("iframeresize"+newHeight); // IPC
             } else {
-                schirm.POST('schirm',
+                schirm.POST(commUri,
                             JSON.stringify({command:"resize",
                                             height:"fullscreen"}));
             }
@@ -166,7 +167,7 @@ var schirm = (function(schirm) {
             if (0) {
                 console.log("iframeresize"+newHeight); // IPC
             } else {
-                schirm.POST('schirm',
+                schirm.POST(commUri,
                             JSON.stringify({command:"resize",
                                             height:newHeight}));
             }

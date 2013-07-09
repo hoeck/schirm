@@ -495,6 +495,8 @@ class Server(object):
             self.found(id, **msg)
         elif method == 'gone':
             self.gone(id, **msg)
+        elif method == 'done':
+            self.done(id, **msg)
         elif method == 'redirect':
             self.redirect(id, **msg)
         else:
@@ -559,6 +561,17 @@ class Server(object):
         ])
         self.respond(id, response, close=True)
 
+    def done(self, id, msg=""):
+        """Respond to a request with a 200 Done and close the connection."""
+        response = '\r\n'.join([
+            "HTTP/1.1 200 Done",
+            "Content-Length: " + str(len(msg)),
+            "Connection: close",
+            "",
+            msg
+        ])
+        self.respond(id, response, close=True)
+
     def redirect(self, id, url):
         """Respond to a request with a 302 Found to url."""
         response = '\r\n'.join([
@@ -598,16 +611,23 @@ class AsyncHttp(object):
         """Respond to a request with a 410 Gone and close the connection."""
         self._put_msg({'method':'gone', 'id':id})
 
+    def done(self, id):
+        """Respond to a request with a 200 Done and close the connection."""
+        self._put_msg({'method':'done', 'id':id})
+
     def redirect(self, id, url):
         """Respond to a request with a 302 Found to url."""
         self._put_msg({'method':'redirect', 'id':id, 'url':url})
 
     # extensions for files and resources
 
-    def found_resource(self, id, path, resource_module_name='schirm.resources'):
+    def found_resource(self, id, path, resource_module_name='schirm.resources', modify_fn=None):
         """Respond with a 200 to a request with a resource file."""
+        res_string = pkg_resources.resource_string(resource_module_name, path)
+        if modify_fn:
+            res_string = modify_fn(res_string)
         self.found(id,
-                   body=pkg_resources.resource_string(resource_module_name, path),
+                   body=res_string,
                    content_type=guess_type(path))
 
     def found_file(self, id, path, content_type=None):

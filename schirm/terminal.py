@@ -73,13 +73,6 @@ class Terminal(object):
             term.client.set_size(h, w)
 
         @staticmethod
-        def iframeresize(term, msg):
-            height = int(msg['height'])
-            logger.debug("Iframe resize request to %s", height)
-            term.screen.linecontainer.iframe_resize(msg.get('id') or
-                                                    term.screen.iframe_id, height)
-
-        @staticmethod
         def remove_history(term, msg):
             n = int(msg['n'])
             term.screen.linecontainer.remove_history(n)
@@ -130,9 +123,16 @@ class Terminal(object):
                 term.handle(json.loads(msg['data']))
 
             else:
-                # dispatch the request to an iframe
-                handled = term.iframes.request(msg)
-                if not handled:
+                # dispatch the request to an iframe and provide a
+                # channel for communication with the terminal
+                iframe_msg = term.iframes.request(msg)
+                if iframe_msg == True:
+                    pass
+                elif iframe_msg:
+                    if iframe_msg.get('name') == 'iframe_resize':
+                        term.screen.linecontainer.iframe_resize(iframe_msg.get('id'), iframe_msg.get('height'))
+                        term.handlers.render(term)
+                else:
                     logger.error("Could not handle request %03d.", rid)
 
         @staticmethod
