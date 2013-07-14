@@ -62,9 +62,15 @@ def run(use_pty=True, cmd=None):
 
     # messages_in
     def dispatch_terminal_input():
+        p = utils.Profile('profile/term')
         while True:
             msg = messages_in.get()
-            term.handle(msg)
+            p.enable()
+            quit = term.handle(msg)
+            p.disable()
+            if quit:
+                p.done()
+                return
 
     utils.create_thread(dispatch_terminal_input)
 
@@ -76,6 +82,7 @@ def run(use_pty=True, cmd=None):
             except Queue.Empty, e:
                 msg = None
             except KeyboardInterrupt, e:
+                # should do: client.kill()
                 print "\nexiting schirm"
                 sys.exit(0)
 

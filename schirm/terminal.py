@@ -144,6 +144,7 @@ class Terminal(object):
         @staticmethod
         def client_close(term, msg):
             term.messages_out.put({'name': 'close', 'pid': msg['pid']})
+            return True # leave the dispatch loop
 
         @staticmethod
         def hide_cursor(term, msg):
@@ -220,7 +221,7 @@ class Terminal(object):
     def handle(self, msg):
         if self.state != 'reloading':
             logger.info('handle: %r', msg.get('name'))
-            getattr(self.handlers, msg.get('name'), self.handlers.unknown)(self, msg['msg'])
+            return getattr(self.handlers, msg.get('name'), self.handlers.unknown)(self, msg['msg'])
         else:
             # drop the message
             pass
