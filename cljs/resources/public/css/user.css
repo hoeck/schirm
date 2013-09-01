@@ -1,0 +1,111 @@
+/* color attribute styles
+ * taken from shellinabox styles.css
+ */
+
+/* normal */
+.f-default           {                            }
+.f-default-reversed  { color:            #ffffff; }
+.f-red               { color:            #cd0000; }
+.f-green             { color:            #00cd00; }
+.f-brown             { color:            #cdcd00; }
+.f-blue              { color:            #0000ee; }
+.f-magenta           { color:            #cd00cd; }
+.f-cyan              { color:            #00cdcd; }
+.f-white             { color:            #e5e5e5; }
+
+/* bold/bright */
+.bold.f-default      { color:            #7f7f7f; }
+.bold.f-red          { color:            #ff0000; }
+.bold.f-green        { color:            #00ff00; }
+.bold.f-brown        { color:            #e8e800; }
+.bold.f-blue         { color:            #5c5cff; }
+.bold.f-magenta      { color:            #ff00ff; }
+.bold.f-cyan         { color:            #00ffff; }
+.bold.f-white        { color:            #ffffff; }
+
+/* normal */
+.b-default           {                            }
+.b-default-reversed  { background-color: #000000; }
+.b-black             { background-color: #000000; }
+.b-red               { background-color: #cd0000; }
+.b-green             { background-color: #00cd00; }
+.b-brown             { background-color: #cdcd00; }
+.b-blue              { background-color: #0000aa; }
+.b-magenta           { background-color: #cd00cd; }
+.b-cyan              { background-color: #00cdcd; }
+.b-white             { background-color: #e5e5e5; }
+
+/* other attrs */
+
+.bold {
+    font-weight: 700;
+}
+
+.italics {
+    font-style: italic;
+}
+
+.underscore {
+    text-decoration: underline;
+}
+
+.strikethrough {
+    text-decoration: line-through;
+}
+
+.cursor {
+    background-color: #ff00b0;
+}
+
+.cursor-inactive {
+    border: solid 1px #ff00b0;
+    display: inline-block;
+    width: 7px;
+    height: 14px;
+    box-sizing: border-box;
+    vertical-align:top;
+}
+
+/* min scrollbar */
+
+body {
+    overflow-y:scroll;
+}
+
+body::-webkit-scrollbar {
+    width: 6px;
+}
+
+body::-webkit-scrollbar-track {
+    -webkit-border-radius: 1px;
+    border-radius: 1px;
+    background: rgba(245,245,245,0.8);
+}
+
+body::-webkit-scrollbar-thumb {
+    -webkit-border-radius: 1px;
+    border-radius: 1px;
+    background: rgba(180,180,180,0.8);
+
+body::-webkit-scrollbar-thumb:window-inactive {
+    background: rgba(230,230,230,0.8);
+}
+
+/* Example: using different fonts:
+@font-face {
+	font-family: BitstreamVeraSansMono;
+	src: url('localfont/usr/share/fonts/truetype/ttf-bitstream-vera/VeraMono.ttf');
+}
+
+@font-face {
+	font-family: BitstreamVeraSansMono;
+        font-weight: bold;
+	src: url('localfont/usr/share/fonts/truetype/ttf-bitstream-vera/VeraMoBd.ttf');
+}
+
+body {
+    font-family: BitstreamVeraSansMono;
+    color: #181818;
+    background-color: #F9FFE9
+}
+*/

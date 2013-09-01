@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Simple CLJS</title>
+    <!--[if lt IE 9]>
+    <script src="http://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+
+<link rel="stylesheet" href="css/user.css" type="text/css">
+
+<style type="text/css">
+</style>
+
+    <!-- pointing to cljsbuild generated js file -->
+    <script src="js/term.js"></script>
+
+<script type="text/javascript">
+
+    var getCharSize = function(preElement) {
+        var specimen = document.createElement("span");
+        specimen.innerHTML = "X";
+        preElement.appendChild(specimen);
+
+        // gapsize between lines, required for an accurate lines
+        // computation, seems to depend on the selected font.
+        var gapSpecimen = document.createElement("span");
+        gapSpecimen.innerHTML = "X<br>X";
+        preElement.appendChild(gapSpecimen);
+
+        var marginBorderHeight =
+                (window.getComputedStyle(specimen, 'margin-top').value || 0) +
+                (window.getComputedStyle(specimen, 'border-top').value || 0) +
+                (window.getComputedStyle(specimen, 'border-bottom').value || 0) +
+                (window.getComputedStyle(specimen, 'margin-bottom').value || 0);
+
+        var marginBorderWidth =
+                (window.getComputedStyle(specimen, 'margin-left').value || 0) +
+                (window.getComputedStyle(specimen, 'border-left').value || 0) +
+                (window.getComputedStyle(specimen, 'border-right').value || 0) +
+                (window.getComputedStyle(specimen, 'margin-right').value || 0);
+
+        var width = specimen.offsetWidth + marginBorderWidth;
+        var height = specimen.offsetHeight + marginBorderHeight;
+        var gap = gapSpecimen.offsetHeight + marginBorderHeight - (height * 2);
+
+        preElement.removeChild(specimen);
+        preElement.removeChild(gapSpecimen);
+
+        return {width: width, height: height, gap: gap};
+    };
+
+</script>
+</head>
+<body>
+<!-- -webkit-filter: invert(100%);’+'-moz-filter: invert(100%); -->
+<pre style="position:relative">
+<span class="line"><span class="f-white b-green">A</span><span class="b-brown bold">-B-</span><span class="b-default-reversed f-default-reversed cursor">C</span><span class="">D</span></span>
+<span class="meter">012345678901234567890123456789012345678901234567890123456789012345678901234567890</span>
+<span class="meter">          10        20        30         40       50        60        70</span>
+<span class="empty"></span>
+</pre>
+
+</body>
+</html>
