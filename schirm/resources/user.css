@@ -14,14 +14,14 @@
 .f-white             { color:            #e5e5e5; }
 
 /* bold/bright */
-.f-bold-default      { color:            #7f7f7f; }
-.f-bold-red          { color:            #ff0000; }
-.f-bold-green        { color:            #00ff00; }
-.f-bold-brown        { color:            #e8e800; }
-.f-bold-blue         { color:            #5c5cff; }
-.f-bold-magenta      { color:            #ff00ff; }
-.f-bold-cyan         { color:            #00ffff; }
-.f-bold-white        { color:            #ffffff; }
+.bold.f-default      { color:            #7f7f7f; }
+.bold.f-red          { color:            #ff0000; }
+.bold.f-green        { color:            #00ff00; }
+.bold.f-brown        { color:            #e8e800; }
+.bold.f-blue         { color:            #5c5cff; }
+.bold.f-magenta      { color:            #ff00ff; }
+.bold.f-cyan         { color:            #00ffff; }
+.bold.f-white        { color:            #ffffff; }
 
 /* normal */
 .b-default           {                            }
