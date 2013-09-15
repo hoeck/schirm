@@ -306,7 +306,7 @@
     this
     ))
 
-(defn create-scrollback-screen [& parent-element]
+(defn create-scrollback-screen [parent-element]
   (let [parent-element (or parent-element (.-body js/document))]
     (set! (.-innerHTML parent-element) scrollback-screen-markup)
     (ScrollbackScreen. (-> parent-element (.getElementsByClassName "terminal-line-container") (aget 0))
