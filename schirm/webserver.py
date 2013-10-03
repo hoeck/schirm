@@ -28,7 +28,6 @@ import logging
 import urlparse
 import pkg_resources
 import mimetypes
-import Queue
 import itertools
 import email.parser
 from BaseHTTPServer import BaseHTTPRequestHandler
@@ -39,6 +38,8 @@ from ws4py import WS_KEY, WS_VERSION
 from ws4py.exc import HandshakeError, StreamClosed
 from ws4py.streaming import Stream
 from ws4py.websocket import WebSocket
+
+from chan import Chan
 
 import utils
 
@@ -71,14 +72,10 @@ class AsyncWebSocket(WebSocket):
 
     def __init__(self, *args, **kwargs):
         self.receive_cb = kwargs.pop('receive_cb', lambda *_: None)
-        self.close_cb   = kwargs.pop('close_cb',   lambda *_: None)
         super(AsyncWebSocket, self).__init__(*args, **kwargs)
 
     def received_message(self, message):
         self.receive_cb(message)
-
-    def closed(self, code, reason=None):
-        self.close_cb()
 
 class ThreadedRequest(object):
     """A Request waiting for responses in its own thread."""
@@ -90,52 +87,43 @@ class ThreadedRequest(object):
     _websocket_protocols = [] # ???
     _websocket_extensions = [] # ???
 
-    def __init__(self, id, client, address, serverport, queue, close_cb):
-        self.id = id                  # unique id to identify this request in the terminal client
-        self._client = client         # client socket
-        self._address = address       # client address
-        self._serverport = serverport # port of the http server, to be able to parse proxy requests
-        self._queue = Queue.Queue()   # external input, popped in the worker thread
-        self._queue_out = queue       # a Queue to put incoming requests or websocket data on (in the form of messages)
-        self._worker = None           # thread
-        self._close_cb = close_cb     # called when the request connection has been closed
-        self._got_request = False     # set to True after the request has been parsed
-        self._response_in_progress = False # set to True after receiving the first request response via the queue
+    @classmethod
+    def create(self, **kwargs):
+        r = self(**kwargs)
+        utils.create_thread(r._run)
+        return r
 
-        # debugdata
-        self._request = {}            # internal request data
-        self._debugstate = "init"     # current state
+    def __init__(self, client, address, chan):
+        # socket data
+        self._client = client
+        self._address = address
 
-    def __repr__(self):
-        state = ' '.join(filter(None, [self._debugstate,
-                                       self._request.get('method'),
-                                       self._request.get('path')]))
-        return "#<ThreadedRequest %03d %s>" % (self.id, state)
+        # comm
+        self._chan_out = chan         # a Chan to put incoming requests or websocket data on
+        self._response_chan = chan.Chan() # a Chan to receive response data from
 
-    def handle(self):
-        self._worker = utils.create_thread(self._run, name='request_%s' % self.id)
+        # request data such as: headers, protocol, ...
+        self.data = {}
 
     def _run(self):
         # read request
         self._debugstate = 'receiving'
-        req = self._receive()
-        if not req:
+        self.data = self._receive()
+        if not self.data:
             # fail
             self._close()
         else:
-            self._got_request = True
-            self._debugstate = 'enqueueing-request'
-            # enqueue the request data
-            self._queue_out.put({'name':'request', 'msg':req})
-            self._debugstate = 'waiting-for-response'
-            # wait for responses
+            self._chan_out.put(self)
+            # get responses from the chan in req
+            got_response = False
             while True:
                 try:
-                    if self._queue.get(timeout=self.TIMEOUT)():
+                    if self._response_chan.get(timeout=self.TIMEOUT)():
+                        got_response = True
                         self._close()
                         return
-                except Queue.Empty, e:
-                    if not self._response_in_progress:
+                except chan.Timeout, e:
+                    if not got_response:
                         self._respond(self._gateway_timeout(), close=True)
                         return
 
@@ -206,20 +194,18 @@ class ThreadedRequest(object):
         ws_extensions = [e.strip()
                          for e
                          in extensions
-                         if e.strip() in self._websocket_extensions]
-
-        self._request.update({'protocol': 'websocket',
-                              'ws_key': ws_key,
-                              'ws_version': ws_version,
-                              'ws_protocols': ws_protocols,
-                              'ws_extensions': ws_extensions})
+                         if e.strip() in self._websocket_extensions
 
         return {'id'              : self.id,
                 'protocol'        : 'websocket',
                 'path'            : path,
                 'headers'         : dict(req.headers),
                 'upgrade'         : True,
-                'data'            : ''}
+                'data'            : '',
+                'ws_key'          : ws_key,
+                'ws_version'      : ws_version,
+                'ws_protocols'    : ws_protocols,
+                'ws_extensions'   : ws_extensions}
 
     def _receive_proxy_connect(self, req):
         # proxy connection established
@@ -261,14 +247,11 @@ class ThreadedRequest(object):
             return self._receive_proxy_connect(req)
 
         elif req.headers.get('Upgrade') == 'websocket':
-            self._request['protocol'] = 'websocket'
+            #self._request['protocol'] = 'websocket'
             # prepare for an upgrade to a websocket connection
             return self._receive_websocket(req, path)
 
         else:
-            self._request['protocol'] = 'http'
-            self._request['path'] = path
-            self._request['method'] = req.command
             # plain http
             return {'id'              : self.id,
                     'protocol'        : 'http',
@@ -279,6 +262,7 @@ class ThreadedRequest(object):
                     'data'            : data,
                     'error_code'      : req.error_code,
                     'error_message'   : req.error_message,
+                    'chan'            : chan.Chan(),
                     # include the portnumber of this
                     # webserver to allow creating a
                     # direct websocket uri as
@@ -298,30 +282,29 @@ class ThreadedRequest(object):
                 "HTTP/1.1 101 WebSocket Handshake",
                 "Upgrade: websocket",
                 "Connection: Upgrade",
-                "Sec-WebSocket-Version: %s" % self._request['ws_version'],
-                "Sec-WebSocket-Accept: %s" % base64.b64encode(sha1(self._request['ws_key'] + WS_KEY).digest()),
+                "Sec-WebSocket-Version: %s" % self.data['ws_version'],
+                "Sec-WebSocket-Accept: %s" % base64.b64encode(sha1(self.data['ws_key'] + WS_KEY).digest()),
                 "",
                 ""])
         self._client.sendall(data)
-        self._response_in_progress = True
 
         def _recv(msg):
             req_message = {'id'              : self.id,
                            'protocol'        : 'websocket',
                            'data'            : str(msg)}
-            self._queue_out.put({'name':'request', 'msg': req_message})
+            self._chan_out.put({'name':'request', 'msg': req_message})
 
         def _close_cb():
             self._respond(None, close=True)
 
         websocket = AsyncWebSocket(sock=self._client,
-                                   protocols=self._request['ws_protocols'],
-                                   extensions=self._request['ws_extensions'],
+                                   protocols=self.data['ws_protocols'],
+                                   extensions=self.data['ws_extensions'],
                                    environ=None,
                                    receive_cb=_recv,
                                    close_cb=_close_cb)
 
-        self._request.update({'websocket': websocket})
+        self.data.update({'websocket': websocket})
 
         # read from the websocket in a separate thread
         def _run():
@@ -348,7 +331,7 @@ class ThreadedRequest(object):
           (str,  False) - upgrade if required, send str
           (str,  True)  - upgrade if required, send str, close
         """
-        ws = self._request.get('websocket')
+        ws = self.data.get('websocket')
 
         if data is None:
             if close:
@@ -397,135 +380,34 @@ class ThreadedRequest(object):
 
             self._client.sendall(data)
 
-        self._response_in_progress = True
         if close:
             return True
 
     def _respond(self, data, close):
         # return true to close the request thread loop
         self._debugstate = 'responding'
-        if self._request['protocol'] == 'http':
+        if self.data['protocol'] == 'http':
             return self._respond_http(data, close)
         else:
             return self._respond_websocket(data, close)
 
     # public API
 
-    def got_request(self):
-        return self._got_request
-
-    def respond_async(self, data, close):
-        """Enqueue a response"""
-        self._queue.put(lambda: self._respond(data, close))
-
-class Server(object):
-    """
-    Websocket enabled proxy-webserver.
-
-    Receives incoming requests in a single thread, stores connection
-    state and puts messages of type 'request' onto the receive_queue.
-    Responses to these requests are made by calling one of the
-    response methods using the provided request id.
-    """
-
-    # close the connections for requests which have been dispatched to the terminal
-    # and received no response after this amount of seconds
-    REQUEST_TIMEOUT = 30
-
-    def __init__(self, queue):
-        self.socket = socket.socket()
-        # the terminal process will receive the request data and a
-        # connection-id and its response must contain the
-        # connection-id to determine which connection to use for
-        # sending the response
-        self.requests = {}
-        self._request_ids = itertools.count()
-
-        # a Queue to put incoming request messages on
-        self.queue = queue
-
-        self.listen_thread = None
-        self.start()
-
-        self.websocket_protocols = [] # ???
-        self.websocket_extensions = [] # ???
-
-    def start(self):
-        backlog = 5
-        self.socket.bind(('localhost',0))
-        self.socket.listen(backlog)
-        self.listen_thread = utils.create_thread(self.listen, name="listen_thread")
-        return self
-
-    def set_receive_queue(self, queue):
-        self.receive_queue = queue
-
-    def getport(self):
-        addr, port = self.socket.getsockname()
-        return port
-
-    def listen(self):
-        logger.info("Schirm HTTP proxy server listening on localhost:%s" % (self.getport(),))
-        while 1:
-            self.receive(*self.socket.accept())
-
-    def _close_request(self, id):
-        self.requests.pop(id, None)
-
-    def receive(self, client, address):
-        req_id = self._request_ids.next()
-        self.requests[req_id] = ThreadedRequest(id=req_id,
-                                                client=client,
-                                                address=address,
-                                                serverport=self.getport(),
-                                                queue=self.queue,
-                                                close_cb=lambda: self._close_request(req_id))
-        self.requests[req_id].handle()
-
-    # (public) method to respond to requests
-
-    def handle(self, msg):
-        id = msg.pop('id')
-        method = msg.pop('method')
-        if method == 'respond':
-            self.respond(id, **msg)
-        elif method == 'notfound':
-            self.notfound(id, **msg)
-        elif method == 'found':
-            self.found(id, **msg)
-        elif method == 'gone':
-            self.gone(id, **msg)
-        elif method == 'done':
-            self.done(id, **msg)
-        elif method == 'redirect':
-            self.redirect(id, **msg)
-        else:
-            logger.error('invalid method in message: %r', method)
-
-    def respond(self, id, data=None, close=False):
-        """Respond to request id using data, optionally closing the connection.
+    def respond(self, data, close=True):
+        """Respond using data, optionally closing the connection.
 
         If close is False, keep the connection open and wait for more data.
 
         Responding with nonempty data to a websocket upgrade requests
         always responds with an upgrade before sending data.
         """
-        if id in self.requests:
-            self.requests[id].respond_async(data, close)
-        else:
-            logger.error("Invalid request id: %r", id)
-
-    def abort_pending_requests(self, except_id):
-        """Close all requests that wait for a response except the given one."""
-        reqs = [r for r in self.requests.values() if r.got_request() and r.id != except_id]
-        logger.debug('ABORT:\n%s', '\n'.join(repr(r) for r in reqs))
-        for r in reqs:
-            self.gone(r.id)
+        self._response_chan.put(lambda : self._respond(data, close))
 
     # respond helpers
 
-    def notfound(self, id, msg=""):
-        """Respond to a request with a 404 Not Found and close the connection."""
+    def notfound(self, msg=""):
+        """Respond with a 404 Not Found and close the connection."""
+        assert self.data['protocol'] = 'http'
         response = '\r\n'.join(
             ["HTTP/1.1 404 Not Found",
              "Content-Length: " + str(len(msg)),
@@ -533,10 +415,11 @@ class Server(object):
              "",
              msg.encode('utf-8') if isinstance(msg, unicode) else msg
          ])
-        self.respond(id, response, close=True)
+        self.respond(response)
 
-    def found(self, id, body, content_type):
-        """Respond to a request with a 200 and data and content_type."""
+    def found(self, body, content_type):
+        """Respond with a 200 and data and content_type."""
+        assert self.data['protocol'] = 'http'
         response = "\r\n".join([
             "HTTP/1.1 200 OK",
             "Cache-Control: " + "no-cache",
@@ -548,10 +431,11 @@ class Server(object):
             "",
             body.encode('utf-8') if isinstance(body, unicode) else body
         ])
-        self.respond(id, response, close=True)
+        self.respond(response)
 
-    def gone(self, id, msg=""):
-        """Respond to a request with a 410 Gone and close the connection."""
+    def gone(self, msg=""):
+        """Respond with a 410 Gone and close the connection."""
+        assert self.data['protocol'] = 'http'
         response = '\r\n'.join([
             "HTTP/1.1 410 Gone",
             "Content-Length: " + str(len(msg)),
@@ -559,10 +443,11 @@ class Server(object):
             "",
             msg
         ])
-        self.respond(id, response, close=True)
+        self.respond(response)
 
-    def done(self, id, msg=""):
-        """Respond to a request with a 200 Done and close the connection."""
+    def done(self, msg=""):
+        """Respond with a 200 Done and close the connection."""
+        assert self.data['protocol'] = 'http'
         response = '\r\n'.join([
             "HTTP/1.1 200 Done",
             "Content-Length: " + str(len(msg)),
@@ -570,68 +455,56 @@ class Server(object):
             "",
             msg
         ])
-        self.respond(id, response, close=True)
+        self.respond(response)
 
-    def redirect(self, id, url):
-        """Respond to a request with a 302 Found to url."""
+    def redirect(self, url):
+        """Respond with a 302 Found to url."""
+        assert self.data['protocol'] = 'http'
         response = '\r\n'.join([
             "HTTP/1.1 302 Found",
             "Location: %s" % url,
             "Connection: close",
             "",
         ])
-        self.respond(id, response, close=True)
+        self.respond(response)
 
-class AsyncHttp(object):
-    """Webserver Response API putting messages on a Queue for debuggable async communication.
-
-
-    See the respective methods of the Server class for more documentation.
-    """
-
-    def __init__(self, queue):
-        self.queue = queue
-
-    def _put_msg(self, msg):
-        self.queue.put({'name':'webserver', 'msg':msg})
-
-    def respond(self, id, data=None, close=False):
-        """Respond to request id using data, optionally closing the connection."""
-        self._put_msg({'method':'respond', 'id': id, 'data': data, 'close': close})
-
-    def notfound(self, id, msg=""):
-        """Respond to a request with a 404 Not Found and close the connection."""
-        self._put_msg({'method':'notfound', 'id':id, 'msg':msg})
-
-    def found(self, id, body, content_type):
-        """Respond to a request with a 200 and data and content_type."""
-        self._put_msg({'method':'found', 'id':id, 'content_type':content_type, 'body':body})
-
-    def gone(self, id):
-        """Respond to a request with a 410 Gone and close the connection."""
-        self._put_msg({'method':'gone', 'id':id})
-
-    def done(self, id):
-        """Respond to a request with a 200 Done and close the connection."""
-        self._put_msg({'method':'done', 'id':id})
-
-    def redirect(self, id, url):
-        """Respond to a request with a 302 Found to url."""
-        self._put_msg({'method':'redirect', 'id':id, 'url':url})
-
-    # extensions for files and resources
-
-    def found_resource(self, id, path, resource_module_name='schirm.resources', modify_fn=None):
+    def found_resource(self, path, resource_module_name='schirm.resources', modify_fn=None):
         """Respond with a 200 to a request with a resource file."""
         res_string = pkg_resources.resource_string(resource_module_name, path)
         if modify_fn:
             res_string = modify_fn(res_string)
-        self.found(id,
-                   body=res_string,
+        self.found(body=res_string,
                    content_type=guess_type(path))
 
-    def found_file(self, id, path, content_type=None):
+    def found_file(self, path, content_type=None):
         with open(path) as f:
-            self.found(id,
-                       body=f.read(),
+            self.found(body=f.read(),
                        content_type=content_type or guess_type(path))
+
+class Server(object):
+    """Websocket enabled proxy-webserver."""
+
+    def __init__(self):
+        self.socket = socket.socket()
+        self.chan = chan.Chan() # a Chan to put incoming requests on
+
+    def start(self):
+        backlog = 5
+        self.socket.bind(('localhost',0))
+        self.socket.listen(backlog)
+        utils.create_thread(self.listen, name="listen_thread")
+        return self
+
+    def getport(self):
+        addr, port = self.socket.getsockname()
+        return port
+
+    def listen(self):
+        logger.info("Schirm HTTP proxy server listening on localhost:%s" % (self.getport(),))
+        while 1:
+            self.receive(*self.socket.accept())
+
+    def receive(self, client, address):
+        ThreadedRequest.create(client=client,
+                               address=address,
+                               chan=self.chan)
