@@ -7,6 +7,7 @@ import signal
 import subprocess
 import logging
 
+import chan
 import utils
 
 def _debug(s):
@@ -155,62 +156,63 @@ class SubprocessTerminal(object):
     def set_size(self, lines, columns):
         pass
 
-class AsyncResettableTerminal():
+class AsyncResettableTerminal(object):
 
     def __init__(self, outgoing, use_pty, cmd):
-        self.outgoing = outgoing
-        self.use_pty = use_pty
-        self.cmd = cmd
+        self.out = chan.Chan()
+        self._in = chan.Chan()
 
-        self.state = None
-        self.client = None
-        self.client_thread = None
+        self._use_pty = use_pty
+        self._cmd = cmd
+
+        self._client = None
+
+        def _in_handler():
+            while True:
+                self._in.get()()
+
+        utils.create_thread(_in_handler)
         self.reset()
 
-    def reset(self):
-        if not self.state == 'killed' and self.client:
-            self.kill()
+    def _reset(self):
+        self._kill()
 
-        self.client = create_terminal(use_pty=self.use_pty,
-                                      cmd=self.cmd)
+        self._client = create_terminal(use_pty=self._use_pty,
+                                       cmd=self._cmd)
 
         # read from the client and push onto outgoing
         def _client_read():
-            pid = self.client.getpid()
             while True:
-                data = self.client.read()
+                data = self._client.read()
                 if data is None:
                     # terminal client closed
-                    self.outgoing.put({'name': 'client_close', 'msg': {'pid': pid}})
+                    self.out.put(None)
+                    return
                 else:
-                    self.outgoing.put({'name': 'client_output', 'msg': {'data': data}})
+                    self.out.put(data)
 
-        self.state = 'ready'
-        self.client_thread = utils.create_thread(_client_read)
+        utils.create_thread(_client_read)
+
+    def _kill(self):
+        self.client.kill()
+        self.client = None
+
+    def _write(self, data):
+        self._client.write(data)
+
+    def _set_size(self, lines, columns):
+        self._client.set_size(lines, columns)
+
+    # API
+
+    def reset(self):
+        self._in.put(self._reset)
 
     def kill(self):
-        self.state = 'killed'
-        self.client.kill()
+        self._in.put(self._kil)
 
-    def getpid(self):
-        return self.client.getpid()
-
-    def handle(self, msg):
-        def _unknown_message(**kwargs):
-            logger.error('unknown message: %s' % (msg, ))
-
-        getattr(self.client, msg['name'], _unknown_message)(**msg['msg'])
-
-class TerminalMessages(object):
-
-    # put messages on queue,
-    # eventually seen by the .handle method in AsyncResettableTerminal
-
-    def __init__(self, queue):
-        self.queue = queue
-
-    def write(self, data):
-        self.queue.put({'name': 'client', 'msg': {'name': 'write', 'msg': {'data': data}}})
+    def write(self):
+        self._in.put(lambda : self._write(data))
 
     def set_size(self, lines, columns):
-        self.queue.put({'name': 'client', 'msg': {'name': 'set_size', 'msg': {'lines': lines, 'columns': columns}}})
+        self._in.put(lambda : self._set_size(lines, columns))
