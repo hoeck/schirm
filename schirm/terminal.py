@@ -23,21 +23,16 @@ def get_config_file_contents(filename):
 
 class Terminal(object):
 
-    def __init__(self,
-                 # the client process
-                 # must have non-blocking .write, .signal and .set_size methods
-                 client,
-                 # running webserver,
-                 # must provide a non-blocking .response method
-                 webserver,
-                 # queue to put other outgoing messages onto
-                 messages_out,
-                 # terminal emulation options:
-                 size=(80,25),
-             ):
+    static_resources = {
+        '/term.html': 'term.html',
+        '/term.js': 'term.js',
+        '/term.css': 'term.css',
+        '/default-user.css': 'user.css',
+        '/favicon.ico': 'schirm.png',
+    }
+
+    def __init__(self, client, size=(80,25)):
         self.client = client
-        self.webserver = webserver
-        self.messages_out = messages_out
         self.size = size
         self.reset()
 
@@ -50,181 +45,13 @@ class Terminal(object):
         self.screen = termscreen.TermScreen(*self.size)
         self.stream = termscreen.SchirmStream()
         self.stream.attach(self.screen)
-        self.iframes = termiframe.Iframes(self.client, self.webserver)
+        self.iframes = termiframe.Iframes(self.client)
 
         self.focus = False
 
-        # request id of the terminal comm websocket
-        self.websocket_id = None
+        # response channel of the terminal comm websocket
+        self.websocket_response_chan = None
         self.state = None # None -> 'ready' -> 'closed'
-
-    class handlers(object):
-
-        @staticmethod
-        def keypress(term, msg):
-            keycode = term.decode_keypress(msg['key'])
-            term.client.write(keycode)
-
-        @staticmethod
-        def resize(term, msg):
-            w = int(msg.get('width'))
-            h = int(msg.get('height'))
-            term.screen.resize(h, w)
-            term.client.set_size(h, w)
-
-        @staticmethod
-        def remove_history(term, msg):
-            n = int(msg['n'])
-            term.screen.linecontainer.remove_history(n)
-
-        @staticmethod
-        def paste_xsel(term, msg):
-            term.client.write(utils.get_xselection())
-
-        @staticmethod
-        def focus(term, msg):
-            term.focus = bool(msg.get('focus'))
-            term.handlers.render(term)
-
-        @staticmethod
-        def request(term, msg):
-            # todo: A GET of the main terminal page when state != None should result in a terminal reset
-            term_root = term.url
-            rid      = msg.get('id')
-            protocol = msg.get('protocol')
-            path     = msg.get('path', '')
-
-            if path.startswith(term_root):
-                if protocol == 'http':
-                    if term.state == 'ready' and path == term_root + '/term.html':
-                        # main terminal url loaded a second time - reset terminal ??
-                        term.state = 'reloading'
-                        term.messages_out.put({'name':'reload', 'msg':{'request_id': rid}})
-                    else:
-                        term.respond_document(rid, path[len(term_root):])
-
-                elif protocol == 'websocket':
-                    if msg.get('upgrade'):
-                        # open exactly one websocket request for webkit <-> schirm communication
-                        if not term.websocket_id:
-                            term.websocket_id = rid
-                            term.webserver.respond(rid) # empty response to upgrade
-                            # communication set up, render the emulator state
-                            term.state = 'ready'
-                            term.handlers.render(term)
-                        else:
-                            term.webserver.notfound(rid)
-                else:
-                    assert False
-
-            elif rid == term.websocket_id:
-                # termframe websocket connection, used for RPC
-                logger.info(json.loads(msg['data']))
-                term.handle(json.loads(msg['data']))
-
-            else:
-                # dispatch the request to an iframe and provide a
-                # channel for communication with the terminal
-                iframe_msg = term.iframes.request(msg)
-                if iframe_msg == True:
-                    pass
-                elif iframe_msg:
-                    if iframe_msg.get('name') == 'iframe_resize':
-                        term.screen.linecontainer.iframe_resize(iframe_msg.get('id'), iframe_msg.get('height'))
-                        term.handlers.render(term)
-                else:
-                    logger.error("Could not handle request %03d.", rid)
-
-        @staticmethod
-        def client_output(term, msg):
-            # terminal client got some data
-            term.stream.feed(msg['data'])
-            term.handlers.render(term)
-
-        @staticmethod
-        def client_close(term, msg):
-            term.messages_out.put({'name': 'close', 'pid': msg['pid']})
-            return True # leave the dispatch loop
-
-        @staticmethod
-        def hide_cursor(term, msg):
-            # turn off the cursor
-            term.screen.linecontainer.hide_cursor(term.screen.cursor.y)
-
-        @staticmethod
-        def render(term, msg=None):
-
-            # text-cursor
-            if not term.screen.cursor.hidden and not term.screen.iframe_mode:
-                # make sure the terminal cursor is drawn
-                term.screen.linecontainer.show_cursor(
-                    term.screen.cursor.y,
-                    term.screen.cursor.x,
-                    'cursor' if term.focus else 'cursor-inactive'
-                )
-
-            if term.state != 'ready':
-                logger.debug('not rendering - terminal state != ready')
-                return
-
-            # capture render events
-            events = term.screen.linecontainer.get_and_clear_events()
-            if not events:
-                return
-
-            def execute_js(js):
-                term.webserver.respond(term.websocket_id, data=''.join(js))
-
-            # group javascript in chunks for performance
-            js = [[]]
-            def js_flush():
-                if js[0]:
-                    execute_js(js[0])
-                js[0] = []
-
-            def js_append(x):
-                if x:
-                    js[0].append(x)
-
-            # issue the screen0 as the last event
-            screen0 = None
-
-            for e in events:
-
-                name = e[0]
-                args = e[1:]
-
-                if name.startswith('iframe_'):
-                    # iframes:
-                    js_flush()
-                    js_append(term.iframes.dispatch(e))
-                elif name == 'set_title':
-                    js_flush()
-                    # TODO: implement
-                elif name == 'set_screen0':
-                    screen0 = args[0]
-                elif name in htmlterm.Events.__dict__:
-                    # sth. to be translated to js
-                    js_append(getattr(htmlterm.Events,name)(*args))
-                else:
-                    logger.error('unknown event: %r', name)
-
-            if screen0 is not None:
-                js_append(htmlterm.Events.set_screen0(screen0))
-
-            js_flush()
-
-        @staticmethod
-        def unknown(term, msg):
-            logger.error('no handler for msg: %r' % (msg, ))
-
-    def handle(self, msg):
-        if self.state != 'reloading':
-            logger.info('handle: %r', msg.get('name'))
-            return getattr(self.handlers, msg.get('name'), self.handlers.unknown)(self, msg['msg'])
-        else:
-            # drop the message
-            pass
 
     # helpers
 
@@ -235,46 +62,23 @@ class Terminal(object):
             js = src
 
         data = ''.join(js)
-        self.webserver.respond(self.websocket_id, data)
+        self.websocket_response_chan.put(data)
 
-    static_resources = {
-        '/term.html': 'term.html',
-        '/term.js': 'term.js',
-        '/term.css': 'term.css',
-        '/default-user.css': 'user.css',
-        '/favicon.ico': 'schirm.png',
-    }
-
-    def respond_document(self, rid, path):
+    def respond_document(self, req, path):
         """Respond to requests to the main terminal root url."""
         logger.info("respond-document: %r %r" % (rid, path))
 
         if path in self.static_resources:
-            self.webserver.found_resource(rid, self.static_resources[path])
+            req.found_resource(rid, self.static_resources[path])
         elif path == '/user.css':
-            self.webserver.found(rid, body=get_config_file_contents('user.css') or "", content_type="text/css")
+            req.found(rid, body=get_config_file_contents('user.css') or "", content_type="text/css")
         elif path.startswith('/localfont/') and (path.endswith('.ttf') or path.endswith('.otf')):
             # serve font files to allow using any local font in user.css via @font-face
-            self.webserver.found_file(rid, path[len('/localfont'):])
-        # elif self.inspect_iframes and path.startswith('/iframe/'):
-        #     # Ask for iframes content using the same domain
-        #     # as the main terminal frame to be able to debug
-        #     # iframe contents with the webkit-inspector.
-        #
-        #     # modify the path into a iframe path
-        #     TODO
-        #     frag = path[len('/iframe/'):]
-        #     iframe_id = frag[:frag.index('/')]
-        #     iframe_path = frag[frag.index('/'):]
-        #     req['path'] = ('http://%(iframe_id)s.localhost%(iframe_path)s'
-        #                   % {'iframe_id':iframe_id,
-        #                      'iframe_path':iframe_path})
-        #     self.input_queue.put(('request', req))
-        #     pass
+            req.found_file(rid, path[len('/localfont'):])
         elif path in ('', '/'):
-            self.webserver.redirect(rid, url='/term.html')
+            req.redirect(rid, url='/term.html')
         else:
-            self.webserver.notfound(rid)
+            req.notfound(rid)
 
     def decode_keypress(self, key):
         """Decode a keypress into terminal escape-codes.
@@ -309,3 +113,154 @@ class Terminal(object):
                 return k
 
         return ''
+
+    # websocket IPC
+
+    def keypress(self, msg):
+        keycode = self.decode_keypress(msg['key'])
+        self.client.write(keycode)
+
+    def resize(self, msg):
+        w = int(msg.get('width'))
+        h = int(msg.get('height'))
+        self.screen.resize(h, w)
+        self.client.set_size(h, w)
+
+    def remove_history(self, msg):
+        n = int(msg['n'])
+        self.screen.linecontainer.remove_history(n)
+
+    def paste_xsel(self, msg):
+        self.client.write(utils.get_xselection())
+
+    def focus(self, msg):
+        self.focus = bool(msg.get('focus'))
+        self.render()
+
+    def hide_cursor(self, msg):
+        # turn off the cursor
+        self.screen.linecontainer.hide_cursor(self.screen.cursor.y)
+
+    def render(self, msg=None):
+
+        # text-cursor
+        if not self.screen.cursor.hidden and not self.screen.iframe_mode:
+            # make sure the terminal cursor is drawn
+            self.screen.linecontainer.show_cursor(
+                self.screen.cursor.y,
+                self.screen.cursor.x,
+                'cursor' if self.focus else 'cursor-inactive'
+            )
+
+        if self.state != 'ready':
+            logger.debug('not rendering - terminal state != ready')
+            return
+
+        # capture render events
+        events = self.screen.linecontainer.get_and_clear_events()
+        if not events:
+            return
+
+        def execute_js(js):
+            self.websocket_response_chan.put(''.join(js))
+
+        # group javascript in chunks for performance
+        js = [[]]
+        def js_flush():
+            if js[0]:
+                execute_js(js[0])
+            js[0] = []
+
+        def js_append(x):
+            if x:
+                js[0].append(x)
+
+        # issue the screen0 as the last event
+        screen0 = None
+
+        for e in events:
+
+            name = e[0]
+            args = e[1:]
+
+            if name.startswith('iframe_'):
+                # iframes:
+                js_flush()
+                js_append(self.iframes.dispatch(e))
+            elif name == 'set_title':
+                js_flush()
+                # TODO: implement
+            elif name == 'set_screen0':
+                screen0 = args[0]
+            elif name in htmlterm.Events.__dict__:
+                # sth. to be translated to js
+                js_append(getattr(htmlterm.Events,name)(*args))
+            else:
+                logger.error('unknown event: %r', name)
+
+        if screen0 is not None:
+            js_append(htmlterm.Events.set_screen0(screen0))
+
+        js_flush()
+
+    # handlers
+
+    def request(self, req):
+        # todo: A GET of the main terminal page when state != None should result in a terminal reset
+        term_root = self.url
+        protocol = req.data.get('protocol')
+        path     = req.data.get('path', '')
+
+        if path.startswith(term_root):
+            if protocol == 'http':
+                if self.state == 'ready' and path == term_root + '/term.html':
+                    # main terminal url loaded a second time - reset terminal ??
+                    self.state = 'reloading'
+                    return False # quit, TODO: reload
+                else:
+                    self.respond_document(req, path[len(term_root):])
+
+            elif protocol == 'websocket':
+                if req.data.get('upgrade'):
+                    # open exactly one websocket request for webkit <-> schirm communication
+                    if not self.websocket_req:
+                        self.websocket_response_chan = req.data['chan']
+                        req.websocket_upgrade()
+                        # communication set up, render the emulator state
+                        self.state = 'ready'
+                        self.render()
+                        return req['in_chan'] # add this channel to the 'in' channel
+                    else:
+                        req.notfound()
+            else:
+                assert False
+
+        else:
+            # dispatch the request to an iframe and provide a
+            # channel for communication with the terminal
+            res = self.iframes.request(req)
+            if res:
+                return res
+            else:
+                logger.error("Could not handle request %r." % req)
+
+        return True
+
+    def input(self, data):
+        # input from the terminal process
+        if data is None:
+            return False # quit
+        else:
+            self.stream.feed(msg['data'])
+            self.render()
+            return True
+
+    def websocket(self, ch, data):
+        if ch == self.websocket_in_chan:
+            # termframe websocket connection, used for RPC
+            self.handle(json.loads(msg['data']))
+            TODO
+            return True
+        else:
+            # dispatch to self.iframes
+            return self.iframes.websocket(ch, data)

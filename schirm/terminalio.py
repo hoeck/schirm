@@ -158,7 +158,7 @@ class SubprocessTerminal(object):
 
 class AsyncResettableTerminal(object):
 
-    def __init__(self, outgoing, use_pty, cmd):
+    def __init__(self, use_pty, cmd):
         self.out = chan.Chan()
         self._in = chan.Chan()
 
