@@ -39,7 +39,7 @@ from ws4py.exc import HandshakeError, StreamClosed
 from ws4py.streaming import Stream
 from ws4py.websocket import WebSocket
 
-from chan import Chan
+import chan
 
 import utils
 
@@ -68,14 +68,14 @@ class HTTPRequest(BaseHTTPRequestHandler):
         self.parse_request()
 
 class AsyncWebSocket(WebSocket):
-    """Websocket with a configurable receive callback function."""
+    """Websocket writing incoming data to a chan."""
 
     def __init__(self, *args, **kwargs):
-        self.receive_cb = kwargs.pop('receive_cb', lambda *_: None)
+        self.chan = kwargs.pop('chan')
         super(AsyncWebSocket, self).__init__(*args, **kwargs)
 
     def received_message(self, message):
-        self.receive_cb(message)
+        self.chan.put(message)
 
 class ThreadedRequest(object):
     """A Request waiting for responses in its own thread."""
@@ -93,7 +93,9 @@ class ThreadedRequest(object):
         utils.create_thread(r._run)
         return r
 
-    def __init__(self, client, address, chan):
+    def __init__(self, id, client, address, chan):
+        self.id = id
+
         # socket data
         self._client = client
         self._address = address
@@ -194,7 +196,7 @@ class ThreadedRequest(object):
         ws_extensions = [e.strip()
                          for e
                          in extensions
-                         if e.strip() in self._websocket_extensions
+                         if e.strip() in self._websocket_extensions]
 
         return {'id'              : self.id,
                 'protocol'        : 'websocket',
@@ -202,6 +204,10 @@ class ThreadedRequest(object):
                 'headers'         : dict(req.headers),
                 'upgrade'         : True,
                 'data'            : '',
+                # channel to send the response to
+                'chan'            : chan.Chan(),
+                # a channel to receive messages from
+                'in_chan'         : chan.Chan(),
                 'ws_key'          : ws_key,
                 'ws_version'      : ws_version,
                 'ws_protocols'    : ws_protocols,
@@ -262,6 +268,7 @@ class ThreadedRequest(object):
                     'data'            : data,
                     'error_code'      : req.error_code,
                     'error_message'   : req.error_message,
+                    # channel to send the response to
                     'chan'            : chan.Chan(),
                     # include the portnumber of this
                     # webserver to allow creating a
@@ -288,12 +295,6 @@ class ThreadedRequest(object):
                 ""])
         self._client.sendall(data)
 
-        def _recv(msg):
-            req_message = {'id'              : self.id,
-                           'protocol'        : 'websocket',
-                           'data'            : str(msg)}
-            self._chan_out.put({'name':'request', 'msg': req_message})
-
         def _close_cb():
             self._respond(None, close=True)
 
@@ -301,7 +302,7 @@ class ThreadedRequest(object):
                                    protocols=self.data['ws_protocols'],
                                    extensions=self.data['ws_extensions'],
                                    environ=None,
-                                   receive_cb=_recv,
+                                   chan=self.data['in_chan'],
                                    close_cb=_close_cb)
 
         self.data.update({'websocket': websocket})
@@ -407,7 +408,6 @@ class ThreadedRequest(object):
 
     def notfound(self, msg=""):
         """Respond with a 404 Not Found and close the connection."""
-        assert self.data['protocol'] = 'http'
         response = '\r\n'.join(
             ["HTTP/1.1 404 Not Found",
              "Content-Length: " + str(len(msg)),
@@ -419,7 +419,7 @@ class ThreadedRequest(object):
 
     def found(self, body, content_type):
         """Respond with a 200 and data and content_type."""
-        assert self.data['protocol'] = 'http'
+        assert self.data['protocol'] == 'http'
         response = "\r\n".join([
             "HTTP/1.1 200 OK",
             "Cache-Control: " + "no-cache",
@@ -435,7 +435,7 @@ class ThreadedRequest(object):
 
     def gone(self, msg=""):
         """Respond with a 410 Gone and close the connection."""
-        assert self.data['protocol'] = 'http'
+        assert self.data['protocol'] == 'http'
         response = '\r\n'.join([
             "HTTP/1.1 410 Gone",
             "Content-Length: " + str(len(msg)),
@@ -447,7 +447,7 @@ class ThreadedRequest(object):
 
     def done(self, msg=""):
         """Respond with a 200 Done and close the connection."""
-        assert self.data['protocol'] = 'http'
+        assert self.data['protocol'] == 'http'
         response = '\r\n'.join([
             "HTTP/1.1 200 Done",
             "Content-Length: " + str(len(msg)),
@@ -459,7 +459,7 @@ class ThreadedRequest(object):
 
     def redirect(self, url):
         """Respond with a 302 Found to url."""
-        assert self.data['protocol'] = 'http'
+        assert self.data['protocol'] == 'http'
         response = '\r\n'.join([
             "HTTP/1.1 302 Found",
             "Location: %s" % url,
@@ -477,9 +477,15 @@ class ThreadedRequest(object):
                    content_type=guess_type(path))
 
     def found_file(self, path, content_type=None):
+        """Respond with a 200 and the file at path, optionally using content_type."""
         with open(path) as f:
             self.found(body=f.read(),
                        content_type=content_type or guess_type(path))
+
+    def websocket_upgrade(self):
+        """Upgrade response to a websocket request."""
+        assert self.data['protocol'] == 'websocket'
+        self.respond(data='', close=False)
 
 class Server(object):
     """Websocket enabled proxy-webserver."""
@@ -501,10 +507,12 @@ class Server(object):
 
     def listen(self):
         logger.info("Schirm HTTP proxy server listening on localhost:%s" % (self.getport(),))
+        ids = itertools.count()
         while 1:
-            self.receive(*self.socket.accept())
+            self.receive(ids.next(), *self.socket.accept())
 
-    def receive(self, client, address):
-        ThreadedRequest.create(client=client,
+    def receive(self, id, client, address):
+        ThreadedRequest.create(id=id,
+                               client=client,
                                address=address,
                                chan=self.chan)

@@ -3,7 +3,7 @@ import sys
 import logging
 import argparse
 import warnings
-import Queue
+import chan
 
 import terminal
 import terminalio
@@ -31,27 +31,58 @@ def init_logger(level=logging.ERROR, filters=[]):
 
 def run(use_pty=True, cmd=None):
 
-    # use two queues to feed and observe the terminal (the other is setup in _setup_http_terminal)
-    messages_in  = Queue.Queue() # (webserver, client) -> terminal
-    # terminal -> (webserver, client, controller) communication
-    messages_out = Queue.Queue()
-
     # threaded webserver acting as a proxy+webserver
-    server = webserver.Server(queue=messages_in)
+    server = webserver.Server().start()
 
     # client process (pty or plain process)
     client = terminalio.AsyncResettableTerminal(
-        outgoing=messages_in,
         use_pty=use_pty,
         cmd=cmd,
     )
 
-    # client and webserver are required for inputs and responses
-    webserver_stub = webserver.AsyncHttp(messages_out)
-    client_stub = terminalio.TerminalMessages(messages_out)
-    term = terminal.Terminal(client=client_stub, # async .write and .set_size methods
-                             webserver=webserver_stub,
-                             messages_out=messages_out)
+    # terminal
+    term = terminal.Terminal(client)
+
+    # thread
+    def dispatch():
+        while True:
+            channels = [client.chan, server.chan]
+
+            try:
+                ch, val = chan.chanselect(consumers=channels,
+                                          producers=[])
+                closed = False
+            except chan.ChanClosed, co:
+                ch = co.which
+                val = None
+                closed = True
+
+            if ch == client.chan:
+                if closed:
+                    return
+
+                # output from the terminal process
+                res = term.input(val)
+                if res is False:
+                    return
+
+            elif ch == server.chan:
+                if ch = closed:
+                    return
+                # webserver incoming request
+                res = term.request(val)
+                if isinstance(res, chan.Chan):
+                    channels.append(res)
+                elif res is False:
+                    return
+
+            else:
+                if closed:
+                    channels.pop(ch)
+                # webserver incoming websocket message
+                term.websocket(ch, val)
+
+    utils.create_thread(dispatch)
 
     # browser process to display the terminal
     browser_process = browser.start_browser(
@@ -59,83 +90,6 @@ def run(use_pty=True, cmd=None):
         proxy_port=server.getport(),
         url=term.url,
     )
-
-    # messages_in
-    def dispatch_terminal_input():
-        p = utils.Profile('profile/term')
-        while True:
-            msg = messages_in.get()
-            p.enable()
-            quit = term.handle(msg)
-            p.disable()
-            if quit:
-                p.done()
-                return
-
-    utils.create_thread(dispatch_terminal_input)
-
-    # messages_out
-    def dispatch_terminal_output():
-        while True:
-            try:
-                msg = messages_out.get(timeout=1)
-            except Queue.Empty, e:
-                msg = None
-            except KeyboardInterrupt, e:
-                # should do: client.kill()
-                print "\nexiting schirm"
-                sys.exit(0)
-
-            if not msg:
-                pass
-            elif msg['name'] == 'client':
-                # execute client writes in its own thread to avoid blocking??
-                client.handle(msg['msg'])
-            elif msg['name'] == 'webserver':
-                server.handle(msg['msg'])
-            elif msg['name'] == 'close':
-                if msg['pid'] == client.getpid():
-                    browser_process.kill()
-                else:
-                    # ignore close messages of previously killed client processes
-                    pass
-            elif msg['name'] == 'reload':
-                # main page reload - restart the whole terminal
-                # TODO: implement confirmation in term.js when 'leaving' the page
-
-                # webserver: close all pending (== waiting for an
-                # internal response) requests except this one)
-                server.abort_pending_requests(except_id=msg['msg']['request_id'])
-
-                client.kill()
-
-                # clear the _in_ queue
-                while True:
-                    try:
-                        messages_in.get_nowait()
-                    except Queue.Empty, e:
-                        break
-
-                term.reset()
-
-                # restart client
-                client.reset()
-
-                # stop this thread, client read thread, terminal in thread
-                # flush all messages from in and out queues
-                # rebuild the structure in run
-                # browser: keep going, redirect to the same url
-                server.redirect(
-                    id=msg['msg']['request_id'],
-                    url=term.url,
-                )
-
-            else:
-                logger.error('unknown message from terminal: %r' % (msg, ))
-                assert False
-
-    # main application loop
-    utils.create_thread(target=dispatch_terminal_output, name='main_loop')
 
     # wait for the browser to be closed and rm the temporary profile
     browser_process.wait_and_cleanup()
