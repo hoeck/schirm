@@ -25,7 +25,8 @@ class Terminal(object):
 
     static_resources = {
         '/term.html': 'term.html',
-        '/term.js': 'term.js',
+        #'/term.js': 'term.js',
+        '/term.js': 'term-debug.js',
         '/term.css': 'term.css',
         '/default-user.css': 'user.css',
         '/favicon.ico': 'schirm.png',
@@ -49,8 +50,8 @@ class Terminal(object):
 
         self.focus = False
 
-        # response channel of the terminal comm websocket
-        self.websocket_response_chan = None
+        # terminal websocket
+        self.websocket = None
         self.state = None # None -> 'ready' -> 'closed'
 
     # helpers
@@ -62,23 +63,23 @@ class Terminal(object):
             js = src
 
         data = ''.join(js)
-        self.websocket_response_chan.put(data)
+        self.websocket.respond(data)
 
     def respond_document(self, req, path):
         """Respond to requests to the main terminal root url."""
-        logger.info("respond-document: %r %r" % (rid, path))
+        logger.info("respond-document: %r %r" % (req.id, path))
 
         if path in self.static_resources:
-            req.found_resource(rid, self.static_resources[path])
+            req.found_resource(self.static_resources[path])
         elif path == '/user.css':
-            req.found(rid, body=get_config_file_contents('user.css') or "", content_type="text/css")
+            req.found(body=get_config_file_contents('user.css') or "", content_type="text/css")
         elif path.startswith('/localfont/') and (path.endswith('.ttf') or path.endswith('.otf')):
             # serve font files to allow using any local font in user.css via @font-face
-            req.found_file(rid, path[len('/localfont'):])
+            req.found_file(path[len('/localfont'):])
         elif path in ('', '/'):
-            req.redirect(rid, url='/term.html')
+            req.redirect(url='/term.html')
         else:
-            req.notfound(rid)
+            req.notfound()
 
     def decode_keypress(self, key):
         """Decode a keypress into terminal escape-codes.
@@ -162,7 +163,7 @@ class Terminal(object):
             return
 
         def execute_js(js):
-            self.websocket_response_chan.put(''.join(js))
+            self.websocket.respond(''.join(js))
 
         # group javascript in chunks for performance
         js = [[]]
@@ -223,13 +224,13 @@ class Terminal(object):
             elif protocol == 'websocket':
                 if req.data.get('upgrade'):
                     # open exactly one websocket request for webkit <-> schirm communication
-                    if not self.websocket_req:
-                        self.websocket_response_chan = req.data['chan']
+                    if not self.websocket:
                         req.websocket_upgrade()
+                        self.websocket = req
                         # communication set up, render the emulator state
                         self.state = 'ready'
                         self.render()
-                        return req['in_chan'] # add this channel to the 'in' channel
+                        return req['in_chan'] # listen to this add channel in the main dispatch loop
                     else:
                         req.notfound()
             else:
@@ -251,12 +252,12 @@ class Terminal(object):
         if data is None:
             return False # quit
         else:
-            self.stream.feed(msg['data'])
+            self.stream.feed(data)
             self.render()
             return True
 
     def websocket(self, ch, data):
-        if ch == self.websocket_in_chan:
+        if ch == self.websocket.data['in_chan']:
             # termframe websocket connection, used for RPC
             self.handle(json.loads(msg['data']))
             TODO

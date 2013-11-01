@@ -93,15 +93,16 @@ class ThreadedRequest(object):
         utils.create_thread(r._run)
         return r
 
-    def __init__(self, id, client, address, chan):
+    def __init__(self, id, client, address, port, chan_out):
         self.id = id
 
         # socket data
         self._client = client
         self._address = address
+        self._port = port
 
         # comm
-        self._chan_out = chan         # a Chan to put incoming requests or websocket data on
+        self._chan_out = chan_out         # a Chan to put this requests (once we received it fully) or websocket messages on
         self._response_chan = chan.Chan() # a Chan to receive response data from
 
         # request data such as: headers, protocol, ...
@@ -139,7 +140,6 @@ class ThreadedRequest(object):
             self._debugstate = 'closed'
         except Exception, e:
             logger.error('(%03d) could not close connection of request (ex: %s)', self.id, e)
-        self._close_cb()
 
     @staticmethod
     def _bad_handshake(msg):
@@ -275,7 +275,7 @@ class ThreadedRequest(object):
                     # direct websocket uri as
                     # websocket requests are not
                     # proxied in webkitgtk (1.8.1)
-                    'proxy_port'      : self._serverport}
+                    'proxy_port'      : self._port}
 
     # responses
 
@@ -295,15 +295,11 @@ class ThreadedRequest(object):
                 ""])
         self._client.sendall(data)
 
-        def _close_cb():
-            self._respond(None, close=True)
-
         websocket = AsyncWebSocket(sock=self._client,
                                    protocols=self.data['ws_protocols'],
                                    extensions=self.data['ws_extensions'],
                                    environ=None,
-                                   chan=self.data['in_chan'],
-                                   close_cb=_close_cb)
+                                   chan=self.data['in_chan'])
 
         self.data.update({'websocket': websocket})
 
@@ -322,6 +318,8 @@ class ThreadedRequest(object):
         utils.create_thread(_run)
 
         self._debugstate = 'websocket'
+
+        return websocket
 
     def _respond_websocket(self, data, close=False):
         """close or send data over the websocket.
@@ -492,21 +490,21 @@ class Server(object):
 
     def __init__(self):
         self.socket = socket.socket()
-        self.chan = chan.Chan() # a Chan to put incoming requests on
+        self.chan = chan.Chan() # a Chan to put incoming requests on,
+                                # to be read by an external dispatch thread
+        self.port = None
 
     def start(self):
         backlog = 5
         self.socket.bind(('localhost',0))
         self.socket.listen(backlog)
         utils.create_thread(self.listen, name="listen_thread")
+        addr, port = self.socket.getsockname()
+        self.port = port
         return self
 
-    def getport(self):
-        addr, port = self.socket.getsockname()
-        return port
-
     def listen(self):
-        logger.info("Schirm HTTP proxy server listening on localhost:%s" % (self.getport(),))
+        logger.info("Schirm HTTP proxy server listening on localhost:%s" % (self.port,))
         ids = itertools.count()
         while 1:
             self.receive(ids.next(), *self.socket.accept())
@@ -515,4 +513,5 @@ class Server(object):
         ThreadedRequest.create(id=id,
                                client=client,
                                address=address,
-                               chan=self.chan)
+                               port=self.port,
+                               chan_out=self.chan)

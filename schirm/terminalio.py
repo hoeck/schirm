@@ -194,8 +194,9 @@ class AsyncResettableTerminal(object):
         utils.create_thread(_client_read)
 
     def _kill(self):
-        self.client.kill()
-        self.client = None
+        if self._client:
+            self._client.kill()
+            self._client = None
 
     def _write(self, data):
         self._client.write(data)

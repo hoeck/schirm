@@ -8,7 +8,6 @@ import email.parser
 import email.Message
 
 import htmlterm
-import webserver
 import utils
 
 logger = logging.getLogger(__name__)
@@ -19,7 +18,7 @@ NEWLINE = "\n" # somehow required for 'flushing', tcflush and other ioctls didn'
 
 class Iframes(object):
 
-    def __init__(self, client, webserver):
+    def __init__(self, client):
         self.iframes = {}
         self.iframe_websocket_chans = {} # map websocket chans to iframe objects
         self.client = client
@@ -27,7 +26,7 @@ class Iframes(object):
     def request(self, req):
 
         # http://<iframe-id>.localhost
-        (scheme, netloc, path, params, query, fragment) = urlparse.urlparse(req.data.['path'])
+        (scheme, netloc, path, params, query, fragment) = urlparse.urlparse(req.data['path'])
 
         # use the subdomain to sandbox iframes and separate requests
         m = re.match("(?P<iframe_id>.+)\.localhost", netloc)
@@ -94,6 +93,7 @@ class Iframe(object):
     def __init__(self, iframe_id, client):
         self.id = iframe_id
         self.resources = {}
+        self.requests = {} # map of requests, waiting for responses from the client
         self.state = 'open'
 
         self.root_document_req = None
@@ -175,12 +175,16 @@ class Iframe(object):
         if not name.strip().startswith("/"):
             name = "/" + name
 
-        self.resources[name] = {'body': data,
-                                'content_type': mimetype or webserver.guess_type(name)}
+        self.resources[name] = {'body': data, 'content_type': mimetype}
 
     def _respond(self, header, body):
-        # todo: test that req_id indeed belongs to a request
-        # originating from this iframe
+        req_id = header.get('x-schirm-request-id')
+        req = self.requests.get(int(req_id))
+
+        if not req:
+            # error, how to respond?
+            logger.error("Unknown request id: %r" % (header.get('x-schirm-request-id'), ))
+            return
 
         m = email.Message.Message()
 
@@ -199,7 +203,7 @@ class Iframe(object):
                 m[k] = v
         m.set_payload(body)
 
-        self.webserver.respond(header.get('x-schirm-request-id'), http_status + m.as_string())
+        req.respond(http_status + m.as_string()) # close ????
 
     def _debug(self, msg):
         # todo: this should go directly somewhere into the terminal
@@ -241,7 +245,7 @@ class Iframe(object):
             return dict(m.items()), m.get_payload()
 
     def iframe_string(self, data):
-        # decode a string request, interpret it according to the current state
+        # decode a string coming from the client, interpret it according to the current state
         header, raw_body = self._parse_string_request(data)
         body = base64.b64decode(raw_body)
 
@@ -255,7 +259,7 @@ class Iframe(object):
                                     mimetype=header.get('content-type', header.get('Content-Type')),
                                     data=body)
         elif 'x-schirm-request-id' in header:
-            self._respond(header, body)
+            self._respond(int(header['x-schirm-request']), header, body)
         elif 'x-schirm-message' in header:
             self._send_message(header['x-schirm-message'] or body)
         elif 'x-schirm-debug' in header:
@@ -308,9 +312,9 @@ class Iframe(object):
 
         elif GET and req['protocol'] == 'websocket':
             # other websockets
-            self.webserver.notfound(req['id'])
+            req.notfound()
 
-        elif POST and req['path'] == self.comm_path
+        elif POST and req['path'] == self.comm_path:
             # receive commands from the iframe via plain plain HTTP
             try:
                 data = json.loads(req['data'])
@@ -332,20 +336,25 @@ class Iframe(object):
                             height = 'fullscreen'
                     return {'name': 'iframe_resize', 'id': self.id, 'height':height}
                 elif cmd == 'control-c': # TODO: return a 'msg' and decode in terminal.handlers.request
-                    self.webserver.keypress({'name': 'C', 'control': True})
+                    #self.webserver.keypress({'name': 'C', 'control': True})
+                    pass
                 elif cmd == 'control-d':
-                    self.webserver.keypress({'name': 'D', 'control': True})
+                    #self.webserver.keypress({'name': 'D', 'control': True})
+                    pass
                 elif cmd == 'control-z':
-                    self.webserver.keypress({'name': 'Z', 'control': True})
+                    #self.webserver.keypress({'name': 'Z', 'control': True})
+                    pass
                 else:
-                    self.webserver.respond(req['id'])
+                    #self.webserver.respond(req['id'])
+                    pass # ????
             else:
-                self.webserver.respond(req['id'])
+                req.notfound()
 
         else:
             if self.state == 'close':
                 # write the response wrapped as an ECMA-48 string back
-                # to the terminal
+                # to the terminal and keep the req around, waiting for
+                # a response from the terminal
 
                 header = dict(req['headers'])
                 header.update({'x-schirm-request-id': str(req.id),
@@ -360,6 +369,7 @@ class Iframe(object):
                                     # trailing newline required for flushing
                                     NEWLINE])
                 self.client.write(term_req)
+                self.requests[req.id] = req
 
             else:
                 req.notfound()

@@ -46,7 +46,7 @@ def run(use_pty=True, cmd=None):
     # thread
     def dispatch():
         while True:
-            channels = [client.chan, server.chan]
+            channels = [client.out, server.chan]
 
             try:
                 ch, val = chan.chanselect(consumers=channels,
@@ -57,7 +57,7 @@ def run(use_pty=True, cmd=None):
                 val = None
                 closed = True
 
-            if ch == client.chan:
+            if ch == client.out:
                 if closed:
                     return
 
@@ -67,7 +67,7 @@ def run(use_pty=True, cmd=None):
                     return
 
             elif ch == server.chan:
-                if ch = closed:
+                if ch == closed:
                     return
                 # webserver incoming request
                 res = term.request(val)
@@ -87,7 +87,7 @@ def run(use_pty=True, cmd=None):
     # browser process to display the terminal
     browser_process = browser.start_browser(
         proxy_host='localhost',
-        proxy_port=server.getport(),
+        proxy_port=server.port,
         url=term.url,
     )
 
