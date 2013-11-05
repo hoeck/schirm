@@ -122,9 +122,11 @@ class ThreadedRequest(object):
             while True:
                 try:
                     if self._response_chan.get(timeout=self.TIMEOUT)():
-                        got_response = True
+                        # the _respond or _respond_websocket functions
+                        # return False to close the connection
                         self._close()
                         return
+                    got_response = True
                 except chan.Timeout, e:
                     if not got_response:
                         self._respond(self._gateway_timeout(), close=True)
@@ -133,6 +135,7 @@ class ThreadedRequest(object):
     def _close(self):
         logger.debug('(%03d) closing socket', self.id)
         self._debugstate = 'closing-socket'
+        self._response_chan.close()
         try:
             sock = self._client._sock
             sock.shutdown(socket.SHUT_RDWR)
@@ -221,7 +224,13 @@ class ThreadedRequest(object):
             self._client.sendall("HTTP/1.1 200 Connection established\r\n\r\n")
             return self._receive('http://%s' % req.path[:-3])
         else:
-            logger.error('(%03d) invalid connect path: %r', self.id, req.path)
+            if req.path in ("ssl.gstatic.com:443",
+                            "translate.googleapis.com:443",
+                            "www.google.com:443",
+                            "clients3.google.com:443"):
+                pass
+            else:
+                logger.error('(%03d) invalid connect path: %r', self.id, req.path)
             return None
 
     def _receive(self, host=''):

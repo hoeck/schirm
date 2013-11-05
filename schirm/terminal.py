@@ -21,6 +21,9 @@ def get_config_file_contents(filename):
         with open(config) as f:
             return f.read()
 
+def roll_id():
+    return base64.b32encode(os.urandom(35)).lower()
+
 class Terminal(object):
 
     static_resources = {
@@ -32,14 +35,17 @@ class Terminal(object):
         '/favicon.ico': 'schirm.png',
     }
 
-    def __init__(self, client, size=(80,25)):
+    @classmethod
+    def create_url(self, id=None):
+        return "http://%s.localhost" % (id or roll_id())
+
+    def __init__(self, client, size=(80,25), url=None):
         self.client = client
         self.size = size
         self.reset()
 
         # unique random id to hide the terminals url
-        self.id = base64.b32encode(os.urandom(35)).lower()
-        self.url = "http://%s.localhost" % self.id
+        self.url = url or self.create_url()
 
     def reset(self):
         # set up the terminal emulation:
@@ -63,7 +69,7 @@ class Terminal(object):
             js = src
 
         data = ''.join(js)
-        self.websocket.respond(data)
+        self.websocket.respond(data, False)
 
     def respond_document(self, req, path):
         """Respond to requests to the main terminal root url."""
@@ -163,7 +169,7 @@ class Terminal(object):
             return
 
         def execute_js(js):
-            self.websocket.respond(''.join(js))
+            self.websocket.respond(''.join(js), False)
 
         # group javascript in chunks for performance
         js = [[]]
@@ -216,8 +222,10 @@ class Terminal(object):
             if protocol == 'http':
                 if self.state == 'ready' and path == term_root + '/term.html':
                     # main terminal url loaded a second time - reset terminal ??
+                    #self.respond_document(req, path[len(term_root):])
+                    self.websocket.respond(None, close=True)
                     self.state = 'reloading'
-                    return False # quit, TODO: reload
+                    return 'reload' # quit, TODO: reload
                 else:
                     self.respond_document(req, path[len(term_root):])
 
@@ -230,7 +238,7 @@ class Terminal(object):
                         # communication set up, render the emulator state
                         self.state = 'ready'
                         self.render()
-                        return req['in_chan'] # listen to this add channel in the main dispatch loop
+                        return req.data['in_chan'] # listen to this add channel in the main dispatch loop
                     else:
                         req.notfound()
             else:
@@ -256,7 +264,7 @@ class Terminal(object):
             self.render()
             return True
 
-    def websocket(self, ch, data):
+    def websocket_msg(self, ch, data):
         if ch == self.websocket.data['in_chan']:
             # termframe websocket connection, used for RPC
             self.handle(json.loads(msg['data']))
