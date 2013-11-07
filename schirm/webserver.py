@@ -75,7 +75,7 @@ class AsyncWebSocket(WebSocket):
         super(AsyncWebSocket, self).__init__(*args, **kwargs)
 
     def received_message(self, message):
-        self.chan.put(message)
+        self.chan.put(str(message))
 
 class ThreadedRequest(object):
     """A Request waiting for responses in its own thread."""

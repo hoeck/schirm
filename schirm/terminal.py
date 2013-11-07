@@ -264,12 +264,20 @@ class Terminal(object):
             self.render()
             return True
 
+    def dispatch_msg(self, msg):
+        print "TODO: dispatch!\n", msg
+
     def websocket_msg(self, ch, data):
         if ch == self.websocket.data['in_chan']:
             # termframe websocket connection, used for RPC
-            self.handle(json.loads(msg['data']))
-            TODO
-            return True
+            try:
+                msg = json.loads(data)
+            except Exception, e:
+                logger.error("JSON decode error in websocket message: %r" % (data,))
+                return
+
+            self.dispatch_msg(msg)
+
         else:
             # dispatch to self.iframes
             return self.iframes.websocket(ch, data)

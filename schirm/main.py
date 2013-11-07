@@ -75,9 +75,9 @@ def setup_and_dispatch(server,
         else:
             if closed:
                 channels.pop(ch)
-
-            # webserver incoming websocket message
-            res = term.websocket_msg(ch, val)
+            else:
+                # webserver incoming websocket message
+                res = term.websocket_msg(ch, val)
 
         # deal with the returnvalue
         if isinstance(res, chan.Chan):
