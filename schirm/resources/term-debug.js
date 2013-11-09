@@ -28,6 +28,6 @@ var SchirmTerminal = function(parentElement, termId) {
     // debugkeypresses
     var input = document.getElementById('key');
     input.onclick = function() {
-        send({name:'keypress', msg:{key:'a'}});
+        send({name:'keypress', key:{string:'a'}});
     };
 };

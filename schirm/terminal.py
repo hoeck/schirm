@@ -123,28 +123,30 @@ class Terminal(object):
 
     # websocket IPC
 
-    def keypress(self, msg):
-        keycode = self.decode_keypress(msg['key'])
+    def keypress(self, key):
+        keycode = self.decode_keypress(key)
         self.client.write(keycode)
 
-    def resize(self, msg):
-        w = int(msg.get('width'))
-        h = int(msg.get('height'))
+    def resize(self, width, height):
+        w = int(width)
+        h = int(height)
+        assert w > 0
+        assert h > 0
         self.screen.resize(h, w)
         self.client.set_size(h, w)
 
-    def remove_history(self, msg):
-        n = int(msg['n'])
+    def remove_history(self, n):
+        n = int(n)
         self.screen.linecontainer.remove_history(n)
 
-    def paste_xsel(self, msg):
+    def paste_xsel(self):
         self.client.write(utils.get_xselection())
 
-    def focus(self, msg):
-        self.focus = bool(msg.get('focus'))
+    def focus(self, focus=True):
+        self.focus = bool(focus)
         self.render()
 
-    def hide_cursor(self, msg):
+    def hide_cursor(self):
         # turn off the cursor
         self.screen.linecontainer.hide_cursor(self.screen.cursor.y)
 
@@ -264,8 +266,20 @@ class Terminal(object):
             self.render()
             return True
 
+    valid_msg_names = set(['keypress',
+                           'resize',
+                           'remove_history',
+                           'paste_xsel',
+                           'focus',
+                           'hide_cursor'])
     def dispatch_msg(self, msg):
-        print "TODO: dispatch!\n", msg
+        """Dispatch websocket messages."""
+        name = msg.get('name')
+        if name in self.valid_msg_names:
+            msg.pop('name')
+            getattr(self, name)(**msg)
+        else:
+            logger.error("Unknown name: %r in message %r" % (name, msg))
 
     def websocket_msg(self, ch, data):
         if ch == self.websocket.data['in_chan']:
@@ -276,7 +290,7 @@ class Terminal(object):
                 logger.error("JSON decode error in websocket message: %r" % (data,))
                 return
 
-            self.dispatch_msg(msg)
+            return self.dispatch_msg(msg)
 
         else:
             # dispatch to self.iframes

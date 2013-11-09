@@ -212,7 +212,7 @@ class AsyncResettableTerminal(object):
     def kill(self):
         self._in.put(self._kil)
 
-    def write(self):
+    def write(self, data):
         self._in.put(lambda : self._write(data))
 
     def set_size(self, lines, columns):
