@@ -11,6 +11,7 @@ import termkey
 import termscreen
 import termiframe
 import htmlterm
+import proxyconnection
 
 logger = logging.getLogger(__name__)
 
@@ -26,10 +27,13 @@ def roll_id():
 
 class Terminal(object):
 
+    clojurescript_repl_url = "http://localhost:9000"
+
     static_resources = {
         '/term.html': 'term.html',
         #'/term.js': 'term.js',
-        '/term.js': 'term-debug.js',
+        #'/term.js': 'term-debug.js',
+        '/term.js': 'term-cljs.js',
         '/term.css': 'term.css',
         '/default-user.css': 'user.css',
         '/favicon.ico': 'schirm.png',
@@ -152,15 +156,16 @@ class Terminal(object):
 
     def render(self, msg=None):
 
-        # text-cursor
-        if not self.screen.cursor.hidden and not self.screen.iframe_mode:
-            # make sure the terminal cursor is drawn
-            self.screen.linecontainer.show_cursor(
-                self.screen.cursor.y,
-                self.screen.cursor.x,
-                'cursor' if self.focus else 'cursor-inactive'
-            )
+        # text-cursor TODO: turn that into an EVENT to toggle the cursor display
+        # if not self.screen.cursor.hidden and not self.screen.iframe_mode:
+        #     # make sure the terminal cursor is drawn
+        #     self.screen.linecontainer.show_cursor(
+        #         self.screen.cursor.y,
+        #         self.screen.cursor.x,
+        #         'cursor' if self.focus else 'cursor-inactive'
+        #     )
 
+        # ??????????
         if self.state != 'ready':
             logger.debug('not rendering - terminal state != ready')
             return
@@ -168,6 +173,9 @@ class Terminal(object):
         # capture render events
         events = self.screen.linecontainer.get_and_clear_events()
         if not events:
+            return
+        else:
+            print events
             return
 
         def execute_js(js):
@@ -246,6 +254,20 @@ class Terminal(object):
             else:
                 assert False
 
+        elif path.startswith(self.clojurescript_repl_url):
+            # proxy to the clojurescript repl
+            req.disable_timeout()
+            self.clojurescript_proxy_connection = proxyconnection.ProxyTcpConnection(
+                host='localhost',
+                port=9000,
+                req=req,
+            )
+            raw_requestline = "%s %s HTTP 1/1\r\n" % (req.data['method'],
+                                                      req.data['path'][len(self.clojurescript_repl_url):])
+            raw_proxy_req = ''.join([raw_requestline] +
+                                    req.data['raw_headers'] +
+                                    ['\r\n', req.data['data'] or ''])
+            self.clojurescript_proxy_connection.send(raw_proxy_req)
         else:
             # dispatch the request to an iframe and provide a
             # channel for communication with the terminal

@@ -1,9 +1,9 @@
 (ns schirm-cljs.term
-  (require [cljs.core.async :as async
-            :refer [<! >! chan close! sliding-buffer put! alts!]]
+  (:require [cljs.core.async :as async
+             :refer [<! >! chan close! sliding-buffer put! alts!]]
 
-           [schirm-cljs.screen :as screen]
-           [schirm-cljs.dom-utils :as dom-utils])
+            [schirm-cljs.screen :as screen]
+            [schirm-cljs.dom-utils :as dom-utils])
 
   (:require-macros [cljs.core.async.macros :as m :refer [go alt!]]))
 
@@ -17,7 +17,7 @@
 ;; socket-messages -> chan
 
 (defn setup-screen [parent-element input-chan]
-  (let [screen (create-scrollback-screen parent-element)]
+  (let [screen (screen/create-scrollback-screen parent-element)]
     (go
      (loop []
        (let [msg (<! input-chan)]
@@ -37,3 +37,9 @@
         ]
     (setup-screen (dom-utils/select 'body) screen-input-chan)
     ))
+
+(defn init []
+  (set! (.-onreadystatechange js/document)
+        #(when (== (.-readyState js/document) "complete") (setup-terminal))))
+
+(init)

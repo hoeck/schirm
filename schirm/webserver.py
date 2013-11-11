@@ -100,6 +100,7 @@ class ThreadedRequest(object):
         self._client = client
         self._address = address
         self._port = port
+        self._timeout = self.TIMEOUT
 
         # comm
         self._chan_out = chan_out         # a Chan to put this requests (once we received it fully) or websocket messages on
@@ -107,6 +108,10 @@ class ThreadedRequest(object):
 
         # request data such as: headers, protocol, ...
         self.data = {}
+
+    def __repr__(self):
+        url = urlparse.unquote(self.data.get('path') or '')
+        return "#<ThreadedRequest %d %r>" % (self.id, url)
 
     def _run(self):
         # read request
@@ -121,16 +126,17 @@ class ThreadedRequest(object):
             got_response = False
             while True:
                 try:
-                    if self._response_chan.get(timeout=self.TIMEOUT)():
+                    if self._response_chan.get(timeout=self._timeout)():
                         # the _respond or _respond_websocket functions
                         # return False to close the connection
                         self._close()
                         return
                     got_response = True
                 except chan.Timeout, e:
-                    if not got_response:
-                        self._respond(self._gateway_timeout(), close=True)
-                        return
+                    if self._timeout:
+                        if not got_response:
+                            self._respond(self._gateway_timeout(), close=True)
+                            return
 
     def _close(self):
         logger.debug('(%03d) closing socket', self.id)
@@ -272,6 +278,7 @@ class ThreadedRequest(object):
                     'protocol'        : 'http',
                     'request_version' : req.request_version,
                     'method'          : req.command,
+                    'raw_headers'     : req.headers.headers,
                     'path'            : path,
                     'headers'         : dict(req.headers),
                     'data'            : data,
@@ -400,6 +407,10 @@ class ThreadedRequest(object):
             return self._respond_websocket(data, close)
 
     # public API
+
+    def disable_timeout(self):
+        """Disable the default gateway timeout."""
+        self._timeout = None
 
     def respond(self, data, close=True):
         """Respond using data, optionally closing the connection.
