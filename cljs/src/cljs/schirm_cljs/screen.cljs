@@ -25,6 +25,7 @@
       (when (inv-color fg) (.add js-class-list (format "b-%s" (inv-color fg))))
       (when (inv-color bg) (.add js-class-list (format "f-%s" (inv-color bg)))))))
 
+;; same as the attribute part of pyte.screens.Char
 (defrecord CharacterStyle [fg, bg, bold, italics, underscore, strikethrough, cursor])
 
 (defn get-class-string [character-style]

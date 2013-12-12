@@ -26,6 +26,7 @@ import base64
 import pyte
 from pyte.screens import Char, Margins, Cursor
 from pyte import modes as mo, graphics as g, charsets as cs, control as ctrl
+import browserscreen
 
 logger = logging.getLogger(__name__)
 
@@ -36,567 +37,6 @@ IFRAME_DOCUMENT_MODE_ID = 5151
 # cgi-like interface to respond to a previous iframes http requests
 IFRAME_RESPONSE_MODE_ID = 5152
 
-# create an explicit interface to Lines and the seq of Lines to be
-# able to create better js dom-update instructions
-
-class Line(UserList):
-    """
-    A line of characters
-    """
-
-    # this is not a valid list ctor, so do not use list methods that
-    # copy the current list like splice ([:]) assignment
-    def __init__(self, size, default_char):
-        self.size = size
-        self.default_char = default_char
-        self.changed = False # empty lines are rendered lazily
-        self.data = [] # UserList data attribute
-        # if set to a number, render a cursor block on this line at
-        # the given position:
-        self.cursorpos = None
-        # the kind of cursor to render, either 'cursor' or 'cursor-inactive'
-        # set in self.show_cursor()
-        self.cursorclass = ''
-
-    def modified(self, linecontainer, real_line_index):
-        """Mark this line as modified."""
-        # try limiting the amount of modify events by not adding consecutive duplicates
-        if linecontainer.events:
-            last_ev = linecontainer.events[-1]
-            if last_ev[0] == 'modify' \
-                    and last_ev[1] == real_line_index \
-                    and last_ev[2] is self:
-                # skip consecutive modify events of the same line
-                return
-            elif last_ev[0] == 'append' \
-                    and last_ev[1] is self:
-                # skip append - modify sequences
-                # event though append receives an empty line, at
-                # rendering time, it will be rendered with the full
-                # lines contents, this works because each events keeps
-                # a reference to the line instead of only its value.
-                return
-
-        linecontainer.events.append(('modify', real_line_index, self))
-
-    def is_empty(self):
-        return (not self.cursorpos) \
-            and ((not self.data) or all(c == self.default_char for c in self.data))
-
-    def set_size(self, size):
-        """ set the size in columns for this line """
-        #self.changed = True
-        #if size > self.size:
-        #    self.extend([self.default_char] * (size - self.size))
-        self.size = size
-
-    def _ensure_size(self, pos=None):
-        """Ensure that this line is filled with at least pos default char characters.
-
-        pos defaults to self.size."""
-        if pos == None:
-            pos = self.size
-
-        missing_chars = 1 + pos - len(self)
-        if missing_chars > 0:
-            self.data.extend([self.default_char] * missing_chars)
-
-    def reverse(self):
-        """ swap foreground and background for each character """
-        self._ensure_size()
-        self.changed = True
-        for char in self.data:
-            char._replace(reverse=True)
-
-    def insert_characters(self, pos, count, char):
-        """
-        Inserts count chars at pos and moves existing chars to the left.
-        (see Screen insert_characters)
-        """
-        self._ensure_size(min(pos + count, self.size))
-        self.changed = True
-        self.data[pos:pos] = [char] * count
-
-        # trim the line to its size
-        self.data = self.data[:self.size]
-
-    def replace_character(self, pos, char):
-        """Set character at pos to char."""
-        self._ensure_size(pos)
-        self.changed = True
-        self.data[pos] = char
-
-    def replace_characters(self, pos, chars):
-        """Set all characters beginning at pos to chars."""
-        self._ensure_size(pos)
-        self.changed = True
-        self.data[pos:pos+len(chars)] = chars
-
-    def delete_characters(self, pos, count, char):
-        """
-        Delete count characters at pos, characters after pos move left.
-        Use char to fill holes at the end of the line.
-        """
-        self._ensure_size()
-        self.changed = True
-        self.data[pos:pos+count] = []
-        self.data[len(self.data):] = [char] * (self.size - len(self.data))
-
-    def erase_characters(self, pos, count, char):
-        """ Replace count characters beginning at pos with char. """
-        self._ensure_size(pos + count)
-        self.changed = True
-        end = min(pos + count, self.size)
-        self.data[pos:end] = [char] * (end-pos)
-
-    def erase_in_line(self, type_of, pos, char):
-        """ implements Screen.erase_in_line for a Line. """
-        self.changed = True
-
-        start, end, ensure_size = (
-            # a) erase from the cursor to the end of line, including
-            # the cursor,
-            (pos, self.size, lambda: self._ensure_size()),
-            # b) erase from the beginning of the line to the cursor,
-            # including it,
-            (0, pos + 1, lambda: self._ensure_size(pos+1)),
-            # c) erase the entire line.
-            (0, self.size, lambda: self._ensure_size()),
-        )[type_of]
-
-        ensure_size()
-        self.data[start:end] = [char] * (end-start)
-
-    def show_cursor(self, cursorpos, cursorclass):
-        """Show the cursor on this line at cursorpos using cursorclass."""
-        self._ensure_size(cursorpos)
-        self.changed = True
-        self.cursorpos = cursorpos
-        self.cursorclass = cursorclass
-
-    def hide_cursor(self):
-        """Turn off the cursor on this line."""
-        self.changed = True
-        self.cursorpos = None
-
-    def __repr__(self):
-        return "#<Line %s:%s>" % (hex(id(self)), repr(''.join(c.data for c in self)))
-
-class IframeLine(Line):
-
-    def __init__(self, id):
-        """
-        Create an IframeLine.
-        Id must be a unique identifier to be able to map webview requests to iframes.
-        Args is a list of strings, interpreted as a dictionary used to set options:
-          width, height: width/height of the iframe
-            defaults: width='100%', height='auto'
-            possible values:
-              '100%': make the iframe as large as the schirm window in this dimension
-              'auto': resize the iframe whenever its content changes
-        """
-        self.id = id
-        self.changed = False
-        self.cursorpos = None
-        self.cursorclass = None
-
-    def modified(self, linecontainer, index):
-        pass
-
-    def is_empty(self):
-        return False
-
-    def set_size(self, size):
-        pass
-
-    def reverse(self):
-        pass
-
-    def insert_characters(self, pos, count, char):
-        pass
-
-    def replace_character(self, pos, char):
-        pass
-
-    def replace_characters(self, pos, chars):
-        pass
-
-    def delete_characters(self, pos, count, char):
-        pass
-
-    def erase_characters(self, pos, count, char):
-        pass
-
-    def erase_in_line(self, type_of, pos, char):
-        pass
-
-    def show_cursor(self, cursorpos, cursorclass):
-        # showing the cursor on an iframe line could be rendered
-        # by highlighting the iframe?
-        pass
-
-    def hide_cursor(self):
-        pass
-
-
-class LineContainer(): # lazy
-
-    """The LineContainer provides an array-like interface for the TermScreen
-    and translates calls to it into a stream of events digestible by the
-    browser interface implemented in term.js.
-    """
-
-    def __init__(self, create_line_fn):
-        # the real initialization happens in self.reset()
-        self.height = 0
-        # index into self.lines where the screen starts
-        # everything < screen0 is the terminal history
-        # without lazy line rendering, screen0 would
-        # be defined by: len(lines) - height
-        self.screen0 = 0
-        self.lines  = []
-        # list of events (tuples) describing changes (line
-        # insertions, changes, cursor movement ..)
-        self.events = []
-        self._create_line_fn = create_line_fn
-
-    def _create_line(self, default_char=None):
-        return self._create_line_fn(default_char)
-
-    def _ensure_lines(self, _linenumber=None):
-        """Ensure that all lines up to linenumber are present."""
-        if _linenumber == None:
-            linenumber = self.height-1
-        else:
-            linenumber = _linenumber
-
-        missing_lines =  1 + linenumber - (len(self.lines) - self.screen0)
-
-        for i in range(missing_lines):
-            # must issue an append event for each appended line
-            self._append(self._create_line())
-
-    def real_line_index(self, i):
-        """Given a linenumber i, return the index into self.lines."""
-        return self.screen0 + i
-
-    def get_and_clear_events(self):
-        ret = self.events
-        self.events = []
-        return ret
-
-    def append_events(self, events):
-        self.events.extend(events)
-
-    def alt_buffer_mode(self, enable=False):
-        self.events.append(('alt_buffer_mode', enable))
-
-    def reset(self, height):
-        self.height = height # height of the terminal screen in lines
-        self.set_screen0(0)
-        self.lines = [] # a list of Line objects, created lazily
-        self.events.append(('reset',))
-
-    def pop(self, index):
-        """Remove the line at terminal screen lineumber index."""
-        self._ensure_lines(index)
-        ri = self.real_line_index(index)
-        line = self.lines.pop(ri)
-        self.events.append(('pop', ri, line))
-        return line
-
-    def _append(self, line):
-        """Append line to self.lines and generate an appropriate event.
-        Do mess with screen0.
-        """
-        self.lines.append(line)
-        line.changed = False
-        self.events.append(('append', line))
-
-    def append(self, line):
-        """Append an empty line to the bottom of the terminal screen."""
-        # is line always empty?
-        self._ensure_lines()
-        if (len(self.lines) - self.screen0) >= self.height:
-            # if there are already height lines visible, move the
-            # topmost visible line pointer
-
-            # propagate=False explanation:
-            # If each line is only appended to the terminal screen,
-            # there is no need to set the screen0 pointer for every
-            # append operation. Screen0 is only required to determine
-            # the top of the terminal window within the list of lines,
-            # so setting it (and computing all the proper offsets to
-            # hide the scrollback and find the first real line) can be
-            # deferred to the client unless we really need it
-            # (e.g. for a pop operation).
-            self.set_screen0(self.screen0 + 1, propagate=False)
-
-        self._append(line)
-
-    def insert(self, index, line):
-        self._ensure_lines(index)
-        ri = self.real_line_index(index)
-        self.lines.insert(ri, line)
-        line.changed = False
-        self.events.append(('insert', ri, line))
-
-    def __getitem__(self, index):
-        self._ensure_lines(index)
-        ri = self.real_line_index(index)
-        line = self.lines[ri]
-        line.modified(self, ri)
-        return line
-
-    def __setitem__(self, index, line):
-        self._ensure_lines(index)
-        ri = self.real_line_index(index)
-        self.lines[ri] = line
-        if isinstance(line, IframeLine):
-            self.events.append(('set_iframe', ri, line.id))
-        else:
-            self.events.append(('set', ri, line))
-
-    def __iter__(self):
-        assert False # do we need an __iter__ method?
-        self._ensure_lines() # ???
-        return self.lines[self.real_line_index(0):].__iter__()
-
-    def resize(self, newheight, newwidth):
-        """Resize this container to newheight and all lines to newwidth.
-
-        Return the cursor line change.
-        """
-        line_delta = newheight - self.height
-        remaining_empty_lines = self.height - (len(self.lines) - self.screen0)
-
-        if line_delta < remaining_empty_lines:
-            # when resizing and there are empty lines below the last visible line,
-            # keep this line in same place (measured from the top of the terminal window)
-            cursor_delta = 0
-        else:
-            screen0 = self.screen0
-            self.set_screen0(len(self.lines) - newheight)
-            cursor_delta = screen0 - self.screen0
-
-        self.purge_empty_lines()
-        self.height = newheight
-
-        # set width for all lines
-        # (they could become visible by resizing the terminal again)
-        for l in self.lines:
-            l.set_size(newwidth)
-
-        return cursor_delta
-
-    def set_title(self, title):
-        self.events.append(('set_title', title))
-
-    def purge_empty_lines(self):
-        """Remove all consecutive unchanged empty lines from the bottom."""
-        i = len(self.lines)
-        while True and i>0:
-            l = self.lines[-1]
-            if (not l.changed) \
-                    and l.is_empty() \
-                    and i >= self.screen0:
-                self.lines.pop()
-                # remove at most self.height lines
-                # do not remove empty lines from the history
-                i += 1
-            else:
-                return
-
-    def set_screen0(self, screen0, propagate=True):
-        self.screen0 = max(0, min(len(self.lines), screen0))
-        if propagate:
-            # some uses of set_screen0 do not need to also execute
-            # this on the client, such as append line, to optimize the
-            # performance (by a factor of 10-50x) of printing many
-            # lines to the bottom of the terminal (which is a very
-            # common case).
-            self.events.append(('set_screen0', self.screen0))
-
-    def add_screen0(self, delta):
-        self.set_screen0(self.screen0 + delta)
-
-    def erase_in_display(self, cursor_attrs):
-        """Implements marginless erase_in_display type 2 preserving the history."""
-        # push the current terminal contents to the history
-        self.set_screen0(len(self.lines))
-
-    def remove_history(self, lines_to_remove=None):
-        """Remove all or the first n lines_to_remove from the history."""
-        if lines_to_remove == None:
-            n = self.screen0
-        else:
-            n = min(self.screen0, lines_to_remove)
-
-        self.lines = self.lines[n:]
-        self.events.append(('remove_history_lines', n))
-        self.set_screen0(self.screen0 - n)
-
-    def close_stream(self):
-        self.events.append(('close_stream',))
-
-    ## cursor show and hide events
-
-    def show_cursor(self, linenumber, column, cursorclass='cursor'):
-        self[linenumber].show_cursor(column, cursorclass)
-
-    def hide_cursor(self, linenumber):
-        self[linenumber].hide_cursor()
-
-    ## iframe events, not directly line-based
-
-    # mode messages
-
-    #   <plain terminal mode>
-    # enter -> 'document'
-    #   <write document>
-    #   <provide static resources>
-    # close -> 'response'
-    #   <responses>
-    # leave -> None
-    #   <plain terminal mode>
-
-    def iframe_enter(self, iframe_id):
-        self.events.append(('iframe_enter', iframe_id))
-
-    def iframe_close(self, iframe_id):
-        self.events.append(('iframe_close', iframe_id))
-
-    def iframe_leave(self, iframe_id):
-        self.events.append(('iframe_leave', iframe_id))
-
-    # sending data
-
-    def iframe_write(self, iframe_id, data):
-        self.events.append(('iframe_write', iframe_id, data))
-
-    def iframe_string(self, iframe_id, data):
-        self.events.append(('iframe_string', iframe_id, data))
-
-    def iframe_resize(self, iframe_id, height):
-        self.events.append(('iframe_resize', iframe_id, height))
-
-    # embedded terminals: TODO
-
-    # def iframe_terminal_create(self, iframe_id, terminal_id):
-    #     # Create an embedded terminal for the given iframe using the
-    #     # given terminal_id as a handle in terminal_writes and
-    #     # terminal_responses.
-    #     # Free the used terminal responses when the iframe closes.
-    #
-    #     # self._iframe_id()
-    #     # self._embedded_terminals = self.__init__
-    #     self.events.append(('iframe_terminal_create', iframe_id, terminal_id))
-    #
-    # def iframe_terminal_write(self, iframe_id, terminal_id, data):
-    #     self.events.append(('iframe_terminal_write', iframe_id, terminal_id, data))
-
-    # example usage
-    # with schirmclient.iframe():
-    #     # plain iframe-term RPC
-    #     term_id = schirmclient.create_terminal()
-    #     # ESC R 'terminal_create' ESC Q
-    #     # response?:
-    #     # ESC R 'terminal_created' ESC ; <term-id> ESC Q
-    #     # alternatively, specify the terminal_id when creating the terminal
-    #     # client will be responsible to specify a uniqe (per iframe) term-id
-    #     # renders the 'terminal_create' response redundant (less complexity)
-    #
-    #     schirmclient.write("""
-    #         <h1>embedded terminal<h1>
-    #         <div id="terminal"></div>
-    #         <script type=text/javascript>
-    #              var term = SchirmTerminal(document.getElementById("terminal"), %(term_id)s);
-    #         </script>
-    #     """ % term_id);
-    #     schirmclient.close()
-    #
-    #     # write contents to the embedded terminal:
-    #     schirmclient.write(term_id, 'hello world')
-    #     # ESC R 'terminal_write' ESC ; <term-id> ESC ; <b64-encoded data> ESC Q
-    #
-    #     # any need to get information from the embedded terminal??
-    #     # yes, for iframe content, read via stdin:
-    #     # ESC R 'terminal_response' ESC ; <term-id> ESC ; <b64-encoded data> ESC Q
-
-
-class AltContainer(LineContainer):
-    """A simplified Line Container implementation for the DECALTBUF mode."""
-
-    # In this mode, there is no scrollback which simplifies some of
-    # the operations.
-
-    # no-scrollback
-    #  -> screen0 is always 0
-    #  -> real_line_index is not needed
-    #  -> rendering is still lazy, so _ensure_lines must be called
-    #     prior to each line-array operation
-
-    def pop(self, index):
-        """Remove the line at terminal screen lineumber index."""
-        self._ensure_lines(index)
-        line = self.lines.pop(index)
-        self.events.append(('pop', index, line))
-        return line
-
-    def append(self, line):
-        """Append an empty line to the bottom of the terminal screen."""
-        # is line always empty?
-        self._ensure_lines()
-        if len(self.lines) >= self.height:
-            # remove the topmost line to have space to append one line
-            self.pop(0)
-        self._append(line)
-
-    def insert(self, index, line):
-        self._ensure_lines(index)
-        # if len(self.lines) >= self.height:
-        #     # remove the topmost line to have space to insert one line
-        #     self.pop(0)
-        self.lines.insert(index, line)
-        line.changed = False
-        self.events.append(('insert', index, line))
-
-    def resize(self, newheight, newwidth):
-        """Resize this container to newheight and all lines to newwidth.
-
-        Return the cursor line change.
-        """
-        # height
-        if self.height > newheight:
-            unneeded_lines = max(0, len(self.lines) - newheight)
-            if unneeded_lines:
-                # remove excessive lines from the top
-                for i in range(unneeded_lines):
-                    self.pop(0)
-
-        else:
-            # increasing the height works 'automatically' through lazy
-            # line rendering (additional lines are created on demand)
-            pass
-
-        self.height = newheight
-
-        # set width for all lines
-        for l in self.lines:
-            l.set_size(newwidth)
-
-        return 0
-
-    def erase_in_display(self, cursor_attrs):
-        # clear the whole display
-        for i, line in enumerate(self.lines):
-            # erase the whole line
-            line.erase_in_line(2, 0, cursor_attrs)
-            line.modified(self, i)
-
-    def remove_history(self, lines_to_remove=None):
-        pass
-
 class TermScreen(pyte.Screen):
 
     def __init__(self, columns, lines):
@@ -604,11 +44,10 @@ class TermScreen(pyte.Screen):
         # terminal dimensions in characters
         self.lines, self.columns = lines, columns
 
-        # switch container implementations in self.set_mode and
-        # self.reset_mode when the DECALTBUF mode is requested
-        self._line_mode_container = LineContainer(self._create_line)
-        self._alt_mode_container = AltContainer(self._create_line)
-        self.linecontainer = self._line_mode_container
+        self.linecontainer = browserscreen.BrowserScreen()
+
+        # list of drawing events for the cljs screen
+        self.events = []
 
         # current iframe_mode,
         # one of None, 'open' or 'closed'
@@ -618,6 +57,9 @@ class TermScreen(pyte.Screen):
         self.iframe_mode = None
         self.iframe_id = None
         self.reset()
+
+    def pop_events(self):
+        return self.linecontainer.pop_events()
 
     # pyte.Screen implementation
 
@@ -650,7 +92,7 @@ class TermScreen(pyte.Screen):
            and tabstops should be reset as well, thanks to
            :manpage:`xterm` -- we now know that.
         """
-        self.linecontainer.reset(self.lines)
+        self.linecontainer.reset(self.lines, self.columns)
 
         if self.iframe_mode:
             self.iframe_leave()
@@ -690,11 +132,8 @@ class TermScreen(pyte.Screen):
         :param int lines: number of lines in the new screen.
         :param int columns: number of columns in the new screen.
         """
-        delta_lines   = (lines   or self.lines)   - self.lines
-        delta_columns = (columns or self.columns) - self.columns
-
-        self.lines   += delta_lines
-        self.columns += delta_columns
+        self.lines   = (lines   or self.lines)
+        self.columns = (columns or self.columns)
 
         if mo.DECALTBUF in self.mode and False:
             # home cursor
@@ -759,8 +198,7 @@ class TermScreen(pyte.Screen):
         # Mark all displayed characters as reverse.
         if mo.DECSCNM in modes:
             # todo: check that iter(self.linecontainer) lazily creates and returns all lines
-            for line in self.linecontainer:
-                line.reverse()
+            linecontainer.reverse_all_lines()
             self.select_graphic_rendition(g._SGR["+reverse"])
 
         # Make the cursor visible.
@@ -772,13 +210,8 @@ class TermScreen(pyte.Screen):
             self.save_cursor()
 
         if mo.DECALTBUF in modes:
-            # enable alternative draw buffer, switch internal
-            # linecontainer while preserving generated events
-            if self.linecontainer is self._line_mode_container:
-                events = self.linecontainer.get_and_clear_events()
-                self.linecontainer = self._alt_mode_container
-                self.linecontainer.append_events(events)
-                self.linecontainer.alt_buffer_mode(True)
+            # enable alternative draw buffer
+            self.linecontainer.enter_altbuf_mode()
 
         # if mo.DECAPPMODE in modes:
         #     self.erase_in_display(2)
@@ -828,8 +261,7 @@ class TermScreen(pyte.Screen):
             self.cursor_position()
 
         if mo.DECSCNM in modes:
-            for line in self.linecontainer:
-                line.reverse()
+            self.linecontainer.reverse_all_lines()
             self.select_graphic_rendition(g._SGR["-reverse"])
 
         # Hide the cursor.
@@ -843,11 +275,7 @@ class TermScreen(pyte.Screen):
         if mo.DECALTBUF in modes:
             # disable alternative draw buffer, switch internal
             # linecontainer while preserving generated events
-            if self.linecontainer is self._alt_mode_container:
-                events = self.linecontainer.get_and_clear_events()
-                self.linecontainer = self._line_mode_container
-                self.linecontainer.append_events(events)
-                self.linecontainer.alt_buffer_mode(False)
+            self.linecontainer.leave_altbuf_mode()
 
     # def draw(self, char):
     #     """Display a character at the current cursor position and advance
@@ -898,12 +326,8 @@ class TermScreen(pyte.Screen):
         String MUST NOT contain any control characters like newlines or carriage-returns.
         """
 
-        cur_attrs = self.cursor.attrs[1:]
         def _write_string(s):
-            self.linecontainer[self.cursor.y] \
-                .replace_characters(self.cursor.x,
-                                    #[self.cursor.attrs._replace(data=ch) for ch in s])
-                                    [Char(ch, *cur_attrs) for ch in s])
+            self.linecontainer.insert_overwrite(self.cursor.y, self.cursor.x, s, self.cursor.attrs)
 
         # iframe mode? just write the string
         if self.iframe_mode:
@@ -957,18 +381,13 @@ class TermScreen(pyte.Screen):
 
         top, bottom = self.margins
         if self.cursor.y == bottom:
-            if bottom == self.lines-1:
-                # default margin
-                self.linecontainer.append(self._create_line())
+            self.linecontainer.insert(bottom+1)
+            if top == 0:
+                # surplus lines move the scrollback if no margin is active
+                self.linecontainer.add_line_origin(1)
             else:
-                self.linecontainer.insert(bottom+1, self._create_line())
-                if top == 0:
-                    # surplus lines move the scrollback if no margin is active
-                    self.linecontainer.add_screen0(1)
-                else:
-                    # delete surplus lines to achieve scrolling within in the margins
-                    self.linecontainer.pop(top)
-
+                # delete surplus lines to achieve scrolling within in the margins
+                self.linecontainer.remove_line(top)
         else:
             self.cursor_down()
 
@@ -980,8 +399,8 @@ class TermScreen(pyte.Screen):
         top, bottom = self.margins
 
         if self.cursor.y == top:
-            self.linecontainer.pop(bottom)
-            self.linecontainer.insert(top, self._create_line())
+            self.linecontainer.remove_line(bottom)
+            self.linecontainer.insert_line(top)
         else:
             self.cursor_up()
 
@@ -1000,8 +419,8 @@ class TermScreen(pyte.Screen):
             # v+1, because range() is exclusive.
             for line in range(self.cursor.y,
                               min(bottom + 1, self.cursor.y + count)):
-                self.linecontainer.pop(bottom)
-                self.linecontainer.insert(line, self._create_line())
+                self.linecontainer.remove_line(bottom)
+                self.linecontainer.insert_line(line, self.cursor.attrs)
 
             self.carriage_return()
 
@@ -1020,8 +439,9 @@ class TermScreen(pyte.Screen):
         if top <= self.cursor.y <= bottom:
             #                v -- +1 to include the bottom margin.
             for _ in range(min(bottom - self.cursor.y + 1, count)):
-                self.linecontainer.pop(self.cursor.y)
-                self.linecontainer.insert(bottom, self._create_line(self.cursor.attrs))
+                self.linecontainer.remove_line(self.cursor.y)
+                # TODO: get and use the attributes for the *last* line
+                self.linecontainer.insert_line(bottom)
 
             self.carriage_return()
 
@@ -1034,10 +454,7 @@ class TermScreen(pyte.Screen):
         :param int count: number of characters to insert.
         """
         count = count or 1
-
-        self.linecontainer[self.cursor.y].insert_characters(self.cursor.x,
-                                                            count,
-                                                            self.cursor.attrs)
+        self.linecontainer.insert(self.cursor.y, self.cursor.x, ' ' * count, self.cursor.attrs)
 
     def delete_characters(self, count=None):
         """Deletes the indicated # of characters, starting with the
@@ -1048,10 +465,10 @@ class TermScreen(pyte.Screen):
         :param int count: number of characters to delete.
         """
         count = count or 1
-
-        self.linecontainer[self.cursor.y].delete_characters(self.cursor.x,
-                                                            count,
-                                                            self.cursor.attrs)
+        # TODO: which style is used for the space characters created
+        # on the left? is it really the cursor attrs or is it the
+        # style of the rightmost character?
+        self.linecontainer.remove(self.cursor.y, self.cursor.x, count, self.cursor.attrs)
 
     def erase_characters(self, count=None):
         """Erases the indicated # of characters, starting with the
@@ -1068,10 +485,7 @@ class TermScreen(pyte.Screen):
            too all ``erase_*()`` and ``delete_*()`` methods.
         """
         count = count or 1
-
-        self.linecontainer[self.cursor.y].erase_characters(self.cursor.x,
-                                                           count,
-                                                           self.cursor.attrs)
+        self.linecontainer.insert_overwrite(self.cursor.y, self.cursor.x, ' ' * count, self.cursor.attrs)
 
     def erase_in_line(self, type_of=0, private=False):
         """Erases a line in a specific way.
@@ -1086,9 +500,17 @@ class TermScreen(pyte.Screen):
         :param bool private: when ``True`` character attributes are left
                              unchanged **not implemented**.
         """
-        self.linecontainer[self.cursor.y].erase_in_line(type_of,
-                                                        self.cursor.x,
-                                                        self.cursor.attrs)
+        if type_of == 0:
+            start = self.cursor.x
+            end = self.colummns
+        elif type_of == 1:
+            start = 0
+            end = self.cursor.x
+        else:
+            start = 0
+            end = self.colummns
+
+        self.linecontainer.insert_overwrite(self.cursor.y, start, ' ' * (end-start), self.cursor.attrs)
 
     def erase_in_display(self, type_of=0, private=False):
         """Erases display in a specific way.
@@ -1115,13 +537,14 @@ class TermScreen(pyte.Screen):
                 range(0, self.cursor.y)
             )[type_of]
 
+            s = ' ' * self.colummns
             for line in interval:
                 # erase the whole line
-                self.linecontainer[line].erase_in_line(2, 0, self.cursor.attrs)
+                self.linecontainer.insert_overwrite(line, 0, s, self.cursor.attrs)
 
-            # In case of 0 or 1 we have to erase the line with the cursor.
-            if type_of in [0, 1]:
-                self.erase_in_line(type_of)
+            # erase the line with the cursor.
+            self.erase_in_line(type_of)
+
         else: # type_of == 2
             # c) erase the whole display ->
             # Push every visible line to the history == add blank
@@ -1129,9 +552,7 @@ class TermScreen(pyte.Screen):
             # top of the term window. (thats what xterm does and
             # linux-term not, try using top in both term emulators and
             # see what happens to the history)
-            self.linecontainer.erase_in_display(self.cursor.attrs)
-
-        self.linecontainer.purge_empty_lines()
+            self.linecontainer.add_line_origin(len(self.lines))
 
     def string(self, string):
         if self.iframe_mode:
@@ -1151,6 +572,10 @@ class TermScreen(pyte.Screen):
     ## xterm title hack
 
     def os_command(self, string):
+        """Parse OS commands.
+
+        Xterm will alter the terminals title according to these commands.
+        """
         res = (string or '').split(';', 1)
         if len(res) == 2:
             command_id, data = res
@@ -1249,10 +674,6 @@ class SchirmStream(pyte.Stream):
         huge, escape-less substrings without having to go through the
         state-machinery (avoiding the function call overhead).
         """
-        # disable the cursor
-        (screen, _) = self.listeners[0]
-        screen.linecontainer.hide_cursor(screen.cursor.y)
-
         string_chunksize = 8192
         stream_chunksize = 128
         src = bytes.decode('utf-8', 'ignore')

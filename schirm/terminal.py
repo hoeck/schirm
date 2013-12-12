@@ -174,11 +174,14 @@ class Terminal(object):
             return
 
         # capture render events
-        events = self.screen.linecontainer.get_and_clear_events()
+        events = self.screen.pop_events()
         if not events:
             return
         else:
-            print events
+            print '-- EVENTS --'
+            for e in events:
+                print '  ', e
+            #self.websocket.respond('(insert "bla")', close=False)
             return
 
         def execute_js(js):
