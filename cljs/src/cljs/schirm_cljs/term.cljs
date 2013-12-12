@@ -22,24 +22,40 @@
      (loop []
        (let [msg (<! input-chan)]
          ;; handle msg by invoking some screen method
-         )
-       (recur)))))
+         (.log js/console (format "setup-screen: %s" msg))
+         (recur))))))
 
-(defn setup-websocket [url]
-
-  )
+(defn setup-websocket [url in out]
+  (let [ws (js/WebSocket. url)]
+    (.log js/console "setup-websocket" ws)
+    (set! (.-onmessage ws)
+          (fn [ev]
+            (.log js/console "recv" ev)
+            (put! out (.-data ev))))
+    (go
+     (loop []
+       (let [msg (<! in)]
+         (.log js/console (format "send msg: %s" msg))
+         (.send ws msg)
+         (recur))))))
 
 (defn setup-terminal
   []
   (let [screen-input-chan (chan)
         ;; setup websocket
         ;; setup resize chan
-        ]
+        ws-send  (chan)
+        ws-recv (chan)
+        ws-url (format "ws://%s" (-> js/window .-location .-host))]
     (setup-screen (dom-utils/select 'body) screen-input-chan)
+    (setup-websocket ws-url ws-send ws-recv)
+    (go (loop [] (.log js/console "-- recv via chan:" (<! ws-recv))))
     ))
 
 (defn init []
-  (set! (.-onreadystatechange js/document)
-        #(when (== (.-readyState js/document) "complete") (setup-terminal))))
+  (.addEventListener js/document "readystatechange"
+                     #(do
+                        (when (== (.-readyState js/document) "complete")
+                          (setup-terminal)))))
 
 (init)
