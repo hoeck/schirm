@@ -4,6 +4,9 @@ import json
 import base64
 import Queue
 import logging
+import socket
+import subprocess
+import time
 
 import pyte
 import utils
@@ -257,17 +260,35 @@ class Terminal(object):
         elif path.startswith(self.clojurescript_repl_url):
             # proxy to the clojurescript repl
             req.disable_timeout()
-            self.clojurescript_proxy_connection = proxyconnection.ProxyTcpConnection(
-                host='localhost',
-                port=9000,
-                req=req,
-            )
-            raw_requestline = "%s %s HTTP 1/1\r\n" % (req.data['method'],
-                                                      req.data['path'][len(self.clojurescript_repl_url):])
-            raw_proxy_req = ''.join([raw_requestline] +
-                                    req.data['raw_headers'] +
-                                    ['\r\n', req.data['data'] or ''])
-            self.clojurescript_proxy_connection.send(raw_proxy_req)
+            proxy_conn_args = {
+                'host':'localhost',
+                'port':9000,
+                'req':req,
+            }
+            if proxyconnection.probe(**proxy_conn_args):
+                self.clojurescript_proxy_connection = proxyconnection.ProxyTcpConnection(**proxy_conn_args)
+            else:
+                # start clojurescript repl and try again
+                print "starting clojurescript repl"
+                subprocess.Popen('rlwrap lein trampoline cljsbuild repl-listen', cwd=os.path.join(os.path.dirname(__file__), '../cljs'), shell=True)
+                for i in range(32):
+                    if proxyconnection.probe(**proxy_conn_args):
+                        self.clojurescript_proxy_connection = proxyconnection.ProxyTcpConnection(**proxy_conn_args)
+                        print "\nconnected!"
+                        break
+                    time.sleep(1)
+
+            if self.clojurescript_proxy_connection:
+                raw_requestline = "%s %s HTTP 1/1\r\n" % (req.data['method'],
+                                                          req.data['path'][len(self.clojurescript_repl_url):])
+                raw_proxy_req = ''.join([raw_requestline] +
+                                        req.data['raw_headers'] +
+                                        ['\r\n', req.data['data'] or ''])
+                self.clojurescript_proxy_connection.send(raw_proxy_req)
+            else:
+                print "not connected to cljs repl"
+                req.notfound()
+
         else:
             # dispatch the request to an iframe and provide a
             # channel for communication with the terminal

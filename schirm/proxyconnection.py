@@ -1,6 +1,21 @@
 import socket
+import errno
 
 import utils
+
+
+def probe(host, port, **ignore):
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        s.connect((host, port))
+        return True
+    except socket.error, e:
+        if e.errno == errno.ECONNREFUSED:
+            pass
+    finally:
+        s.close()
+
+    return False
 
 class ProxyTcpConnection():
 
