@@ -230,10 +230,16 @@ class ThreadedRequest(object):
             self._client.sendall("HTTP/1.1 200 Connection established\r\n\r\n")
             return self._receive('http://%s' % req.path[:-3])
         else:
+            # ignore all chromium google URLs
             if req.path in ("ssl.gstatic.com:443",
+                            "www.gstatic.com:443",
                             "translate.googleapis.com:443",
                             "www.google.com:443",
-                            "clients3.google.com:443"):
+                            "clients3.google.com:443",
+                            "clients2.google.com:443",
+                            "clients.google.com:443",
+                            "safebrowsing.google.com:443",
+                            "alt1-safebrowsing.google.com:443"):
                 pass
             else:
                 logger.error('(%03d) invalid connect path: %r', self.id, req.path)
@@ -254,6 +260,10 @@ class ThreadedRequest(object):
         if not req.requestline:
             # ignore 'empty' google chrome requests
             # TODO: debug
+            return None
+
+        # ignore annoying chromium requests
+        if "clients2.google.com/service" in req.path:
             return None
 
         if req.headers.get("Content-Length"):
