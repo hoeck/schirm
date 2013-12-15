@@ -16,22 +16,39 @@
 ;; events -> chan
 ;; socket-messages -> chan
 
+(defn invoke-screen-method [screen msg]
+  (let [[meth & args] msg]
+    (.log js/console msg)
+    (case meth
+      "set-line-origin" (do (apply screen/set-origin screen args)
+                            (screen/adjust screen))
+      "reset"  (screen/reset screen (nth args 0))
+      "resize" (screen/set-size (nth args 0))
+      "insert-overwrite" (let [[line, col, string, attrs] args]
+                           (screen/update-line screen
+                                               line
+                                               #(screen/line-insert-overwrite
+                                                 %
+                                                 (screen/StyledString. string
+                                                                       (apply screen/->CharacterStyle args))
+                                                 col
+                                                 ))))))
+
 (defn setup-screen [parent-element input-chan]
   (let [screen (screen/create-scrollback-screen parent-element)]
     (go
      (loop []
-       (let [msg (<! input-chan)]
-         ;; handle msg by invoking some screen method
-         (.log js/console (format "setup-screen: %s" msg))
-         (recur))))))
+       (doseq [message (<! input-chan)]
+               (invoke-screen-method screen message))
+       (recur)))))
 
 (defn setup-websocket [url in out]
   (let [ws (js/WebSocket. url)]
     (.log js/console "setup-websocket" ws)
     (set! (.-onmessage ws)
           (fn [ev]
-            (.log js/console "recv" ev)
-            (put! out (.-data ev))))
+            (if (not= "" (.-data ev))
+              (put! out (.parse js/JSON (.-data ev))))))
     (go
      (loop []
        (let [msg (<! in)]
@@ -41,15 +58,15 @@
 
 (defn setup-terminal
   []
-  (let [screen-input-chan (chan)
-        ;; setup websocket
-        ;; setup resize chan
-        ws-send  (chan)
+  (let [ws-send  (chan)
         ws-recv (chan)
         ws-url (format "ws://%s" (-> js/window .-location .-host))]
-    (setup-screen (dom-utils/select 'body) screen-input-chan)
+    (setup-screen (dom-utils/select 'body) ws-recv)
     (setup-websocket ws-url ws-send ws-recv)
-    (go (loop [] (.log js/console "-- recv via chan:" (<! ws-recv))))
+    ;; (go (loop []
+    ;;       (let [msg (<! ws-recv)]
+    ;;         (.log js/console "-- recv via chan:" msg)
+    ;;         (recur))))
     ))
 
 (defn init []

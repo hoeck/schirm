@@ -14,10 +14,13 @@ class BrowserScreen(object):
     def _append(self, ev):
         self._events.append(ev)
 
+    def _compile(self, events):
+        return events
+
     def pop_events(self):
         e = self._events
         self._events = []
-        return e
+        return self._compile(e)
 
     ### events
 
@@ -40,11 +43,21 @@ class BrowserScreen(object):
 
     def insert_overwrite(self, line, col, string, attr):
         """Insert string in line starting at col overwriting existing chars."""
-        self._append(('insert_overwrite', line, col, string, self.char_to_attr(attr)))
+        self._append(('insert-overwrite', line, col, string, self.char_to_attr(attr)))
 
     def remove(self, line, col, n):
         """Delete n characters from line starting at col."""
         self._append(('remove', line, col, n))
+
+    def insert_line(self, y, attrs=None):
+        """Insert a new line at y."""
+        # TODO: attrs ????
+        #       and why do only some line inserts use 'attrs'?
+        self._append(('insert-line', y))
+
+    def remove_line(self, y):
+        """remove the line at index y."""
+        self._append(('remove-line', y))
 
     # modify the line origin
     # TODO: move the resize code into the screen-compiler, so that the
@@ -52,18 +65,18 @@ class BrowserScreen(object):
     #       events
     def set_line_origin(self, line_origin):
         self.line_origin = line_origin
-        self._append(('set_line_origin', line_origin))
+        self._append(('set-line-origin', line_origin))
 
     def add_line_origin(self, delta):
         self.line_origin += delta
-        self._append(('set_line_origin', self.line_origin))
+        self._append(('set-line-origin', self.line_origin))
 
     def reset(self, lines, columns):
         """Reset the browser screen."""
         self.set_line_origin(0)
         self.lines = lines
         self.columns  = columns
-        self._append(('reset', ))
+        self._append(('reset', lines))
 
     def resize(self, lines, columns):
         """Resize the browserscreen to lines height and columns width."""
@@ -81,6 +94,8 @@ class BrowserScreen(object):
         self.lines = lines
         self.columns  = columns
 
+        self._append(('resize', lines))
+
         return cursor_delta # to be able to compute the new cursorpos
 
     def reverse_all_lines(self):
@@ -91,18 +106,6 @@ class BrowserScreen(object):
 
     def leave_altbuf_mode(self):
         TODO
-
-
-    def insert_line(self, y, attrs=None):
-        """Insert a new line at y."""
-        # TODO: attrs ????
-        #       and why do only some line inserts use 'attrs'?
-        self._append(('insert_line', y))
-
-    def remove_line(self, y):
-        """remove the line at index y."""
-        self._append(('remove_line', y))
-
 
     # TODO: iframe_* methods
 

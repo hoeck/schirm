@@ -244,11 +244,12 @@
 
 (defprotocol Screen
   "a terminal screen"
-  (insert [this line pos])
-  (remove [this pos])
-  (update [this pos update-fn])
+  (insert-line [this line pos])
+  (remove-line [this pos])
+  (update-line [this pos update-fn])
   (reset [this])
   (set-origin [this screen0])
+  (set-size [this screen0])
   (adjust [this]))
 
 (def scrollback-screen-markup
@@ -256,38 +257,64 @@
       <pre class=\"terminal-line-container\"></pre>
    </div>")
 
-(deftype ScrollbackScreen [element ^mutable screen0]
+(deftype ScrollbackScreen [;; the DOM element containing the terminal lines
+                           element
+                           ;; line origin
+                           ^mutable screen0
+                           ;; the current terminal  size in lines
+                           size]
   ;; element is the PRE which contains the screens lines as children
   ;; its parent must be a div.terminal-screen
   IIndexed
-  (-nth [this pos] (-> element .-children (aget pos)))
+  (-nth [this pos]
+    (let [child (-> element .-children (aget (+ screen0 pos)))]
+      (if (nil? child)
+        (throw (js/Error. (format "no line at %s" pos)))
+        child)))
   (-nth [this pos default]
-    (if (< pos (-> element .-children .-length))
-      default
-      (-> element .-children (aget pos))))
+    (let [child (-> element .-children (aget (+ screen0 pos)))]
+      (if (nil? child)
+        default
+        child)))
   ICounted
   (-count [_] (-> element .-children .-length))
   Screen
-  (-insert [this line pos]
+  (insert-line [this line pos]
     (if-let [pos-line (nth this pos nil)]
       (.insertBefore element line pos-line)
       (.appendChild element line))
     this)
-  (-remove [this pos]
+  (remove-line [this pos]
     (when-let [line (nth this pos nil)]
       (-> element (.removeChild line)))
     this)
-  (-alter [this pos f]
-    (when-let [line (nth this pos nil)]
-      (f line))
+  (update-line [this pos f]
+    (if-let [line (nth this pos nil)]
+      (f line)
+      (do
+        ;; (.log js/console element)
+        ;; (dotimes [i 1]
+        ;;   (insert-line this (create-line []) nil)
+        ;;   (.log js/console (nth this pos))
+        ;;   (if (not (nth this pos nil))
+        ;;     (.log js/console "YES")
+        ;;     (.log js/console "NO"))
+        ;;   (if (nth this pos nil)
+        ;;     (f (nth this pos))))
+        ;;))
+        (while (not (nth this pos nil)) (insert-line this (create-line []) nil))
+        (f (nth this pos))))
     this)
-  (-reset [this]
+  (reset [this]
     (set! (.-innerHTML element) "")
     this)
   (set-origin [this screen0]
     (set! (.-screen0 this) screen0)
     this)
-  (-adjust [this]
+  (set-size [this new-size]
+    (set! (.-size this) size)
+    this)
+  (adjust [this]
     ;; var adjustTrailingSpace = function() {
     ;;     if (linesElement.childNodes.length && ((linesElement.childNodes.length - screen0) <= self.size.lines)) {
     ;;         var historyHeight = linesElement.childNodes[screen0].offsetTop;
@@ -300,7 +327,7 @@
     ;; };
     ;; this.adjustTrailingSpace = adjustTrailingSpace;
     (let [chlen (-> element .-children .-length)]
-      (if (and chlen (< (- chlen screen0) (:lines size)))
+      (if (and chlen (< (- chlen screen0) size))
         (let [scrollback-height (-> element .-children (aget screen0) .-offsetTop)]
           (-> element .-style (.setProperty "top" (- scrollback-height)))
           (-> element .-parentElement .-style (.setProperty "margin-top" scrollback-height)))))
@@ -311,6 +338,7 @@
   (let [parent-element (or parent-element (.-body js/document))]
     (set! (.-innerHTML parent-element) scrollback-screen-markup)
     (ScrollbackScreen. (-> parent-element (.getElementsByClassName "terminal-line-container") (aget 0))
+                       0
                        0)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

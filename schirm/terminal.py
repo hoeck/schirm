@@ -181,11 +181,10 @@ class Terminal(object):
             print '-- EVENTS --'
             for e in events:
                 print '  ', e
-            #self.websocket.respond('(insert "bla")', close=False)
-            return
 
-        def execute_js(js):
-            self.websocket.respond(''.join(js), False)
+        self.websocket.respond(json.dumps(events), close=False)
+
+        return
 
         # group javascript in chunks for performance
         js = [[]]
