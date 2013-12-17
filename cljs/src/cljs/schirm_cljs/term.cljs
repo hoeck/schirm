@@ -3,6 +3,7 @@
              :refer [<! >! chan close! sliding-buffer put! alts!]]
 
             [schirm-cljs.screen :as screen]
+            [schirm-cljs.keys :as keys]
             [schirm-cljs.dom-utils :as dom-utils])
 
   (:require-macros [cljs.core.async.macros :as m :refer [go alt!]]))
@@ -24,6 +25,16 @@
                            (screen/update-line screen
                                                line
                                                #(screen/line-insert-overwrite % ss col))))))
+
+(def chords {;; browsers have space and shift-space bound to scroll page down/up
+             ["space"] (fn [send] (send {:string " "}) true)
+             ["shift" "space"] (fn [send] (send {:string " "}) true)})
+
+(defn setup-keys [send-chan]
+  (let [send-key (fn [key]
+                   (let [message {:name :keypress :key key}]
+                     (put! send-chan (.stringify js/JSON (clj->js message)))))]
+    (keys/setup-window-key-handlers js/window chords send-key)))
 
 (defn setup-screen [parent-element input-chan]
   (let [screen (screen/create-scrollback-screen parent-element)]
@@ -52,6 +63,7 @@
         ws-recv (chan)
         ws-url (format "ws://%s" (-> js/window .-location .-host))]
     (setup-screen (dom-utils/select 'body) ws-recv)
+    (setup-keys ws-send)
     (setup-websocket ws-url ws-send ws-recv)))
 
 (defn init []
