@@ -1,4 +1,5 @@
-(ns schirm-cljs.keys)
+(ns schirm-cljs.keys
+  (:require [clojure.string :as string]))
 
 ;; map browser key codes to Gtk key names used in schirm
 ;; see termkey.py
@@ -33,24 +34,11 @@
                  122 "F11",
                  123 "F12"})
 
-    ;; var getKeyChordString = function(key) {
-    ;;     var a = [];
-    ;;     if (key.shift) { a.push('shift'); }
-    ;;     if (key.control) { a.push('control'); }
-    ;;     if (key.alt) { a.push('alt'); }
-    ;;     if (key.name) {
-    ;;         a.push(key.name.toLowerCase());
-    ;;     } else {
-    ;;         a.push(String.fromCharCode(key.code).toLowerCase());
-    ;;     }
-    ;;     return a.join('-');
-    ;; };
-
 (defn get-key-chord [key]
   (->> [(when (:shift key) 'shift),
         (when (:control key) 'control),
         (when (:alt key ) 'alt),
-        (.lowercase (or (:name key) (.fromCharCode js/String (:code key))))]
+        (string/lower-case (or (:name key) (.fromCharCode js/String (:code key))))]
        (filter identity)))
 
 (defn handle-key-down [chords send key]
