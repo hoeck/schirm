@@ -381,7 +381,7 @@ class TermScreen(pyte.Screen):
 
         top, bottom = self.margins
         if self.cursor.y == bottom:
-            self.linecontainer.insert(bottom+1)
+            self.linecontainer.insert_line(bottom+1, self.cursor.attrs)
             if top == 0:
                 # surplus lines move the scrollback if no margin is active
                 self.linecontainer.add_line_origin(1)
@@ -441,7 +441,7 @@ class TermScreen(pyte.Screen):
             for _ in range(min(bottom - self.cursor.y + 1, count)):
                 self.linecontainer.remove_line(self.cursor.y)
                 # TODO: get and use the attributes for the *last* line
-                self.linecontainer.insert_line(bottom)
+                self.linecontainer.insert_line(bottom, self.cursor.attrs)
 
             self.carriage_return()
 
@@ -502,13 +502,13 @@ class TermScreen(pyte.Screen):
         """
         if type_of == 0:
             start = self.cursor.x
-            end = self.colummns
+            end = self.columns
         elif type_of == 1:
             start = 0
             end = self.cursor.x
         else:
             start = 0
-            end = self.colummns
+            end = self.columns
 
         self.linecontainer.insert_overwrite(self.cursor.y, start, ' ' * (end-start), self.cursor.attrs)
 
@@ -537,7 +537,7 @@ class TermScreen(pyte.Screen):
                 range(0, self.cursor.y)
             )[type_of]
 
-            s = ' ' * self.colummns
+            s = ' ' * self.columns
             for line in interval:
                 # erase the whole line
                 self.linecontainer.insert_overwrite(line, 0, s, self.cursor.attrs)

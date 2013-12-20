@@ -15,6 +15,7 @@ class BrowserScreen(object):
         self._events.append(ev)
 
     def _compile(self, events):
+        events.append(('adjust',))
         return events
 
     def pop_events(self):

@@ -13,7 +13,7 @@
 
 (defn invoke-screen-method [screen msg]
   (let [[meth & args] msg]
-    (.log js/console msg)
+    (.log js/console meth args)
     (case meth
       "set-line-origin" (do (apply screen/set-origin screen args)
                             (screen/adjust screen))
@@ -24,7 +24,9 @@
                                ss (screen/StyledString. string style)]
                            (screen/update-line screen
                                                line
-                                               #(screen/line-insert-overwrite % ss col))))))
+                                               #(screen/line-insert-overwrite % ss col)))
+      "insert-line" (apply screen/insert-line screen args)
+      "adjust" (screen/adjust screen))))
 
 (def chords {;; browsers have space and shift-space bound to scroll page down/up
              ["space"] (fn [send] (send {:string " "}) true)
@@ -46,7 +48,6 @@
 
 (defn setup-websocket [url in out]
   (let [ws (js/WebSocket. url)]
-    (.log js/console "setup-websocket" ws)
     (set! (.-onmessage ws)
           (fn [ev]
             (if (not= "" (.-data ev))
@@ -54,7 +55,6 @@
     (go
      (loop []
        (let [msg (<! in)]
-         (.log js/console (format "send msg: %s" msg))
          (.send ws msg)
          (recur))))))
 

@@ -257,6 +257,14 @@
       <pre class=\"terminal-line-container\"></pre>
    </div>")
 
+(defn -append-missing-lines [screen pos]
+  (let [existing-lines (- (-> screen .-element .-children .-length) (.-screen0 screen))
+        delta (- (+ 1 pos) existing-lines)]
+    (.log js/console "existing-lines" existing-lines "delta" delta)
+    (when (< 0 delta)
+      (dotimes [_ delta]
+        (.appendChild (.-element screen) (create-line []))))))
+
 (deftype ScrollbackScreen [;; the DOM element containing the terminal lines
                            element
                            ;; line origin
@@ -280,9 +288,9 @@
   (-count [_] (-> element .-children .-length))
   Screen
   (insert-line [this line pos]
-    (if-let [pos-line (nth this pos nil)]
-      (.insertBefore element line pos-line)
-      (.appendChild element line))
+    (if (= pos size)
+      (.appendChild element line)
+      (.insertBefore element line (nth this pos)))
     this)
   (remove-line [this pos]
     (when-let [line (nth this pos nil)]
@@ -292,17 +300,7 @@
     (if-let [line (nth this pos nil)]
       (f line)
       (do
-        ;; (.log js/console element)
-        ;; (dotimes [i 1]
-        ;;   (insert-line this (create-line []) nil)
-        ;;   (.log js/console (nth this pos))
-        ;;   (if (not (nth this pos nil))
-        ;;     (.log js/console "YES")
-        ;;     (.log js/console "NO"))
-        ;;   (if (nth this pos nil)
-        ;;     (f (nth this pos))))
-        ;;))
-        (while (not (nth this pos nil)) (insert-line this (create-line []) nil))
+        (-append-missing-lines this pos)
         (f (nth this pos))))
     this)
   (reset [this]
