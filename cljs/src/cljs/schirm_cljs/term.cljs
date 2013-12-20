@@ -15,10 +15,9 @@
   (let [[meth & args] msg]
     (.log js/console meth args)
     (case meth
-      "set-line-origin" (do (apply screen/set-origin screen args)
-                            (screen/adjust screen))
-      "reset"  (screen/reset screen (nth args 0))
-      "resize" (screen/set-size (nth args 0))
+      "set-line-origin" (apply screen/set-origin screen args)
+      "reset"  (screen/reset screen)
+      "resize" (screen/set-size screen (nth args 0))
       "insert-overwrite" (let [[line, col, string, attrs] args
                                style (apply screen/->CharacterStyle attrs)
                                ss (screen/StyledString. string style)]

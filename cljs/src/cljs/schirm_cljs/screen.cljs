@@ -261,7 +261,6 @@
 (defn -append-missing-lines [screen pos]
   (let [existing-lines (- (-> screen .-element .-children .-length) (.-screen0 screen))
         delta (- (+ 1 pos) existing-lines)]
-    (.log js/console "existing-lines" existing-lines "delta" delta)
     (when (< 0 delta)
       (dotimes [_ delta]
         (.appendChild (.-element screen) (create-line []))))))
@@ -311,7 +310,7 @@
     (set! (.-screen0 this) screen0)
     this)
   (set-size [this new-size]
-    (set! (.-size this) size)
+    (set! (.-size this) new-size)
     this)
   (adjust [this]
     ;; var adjustTrailingSpace = function() {
@@ -326,7 +325,7 @@
     ;; };
     ;; this.adjustTrailingSpace = adjustTrailingSpace;
     (let [chlen (-> element .-children .-length)]
-      (if (and chlen (< (- chlen screen0) size))
+      (if (and chlen (<= (- chlen screen0) size))
         (let [scrollback-height (-> element .-children (aget screen0) .-offsetTop)]
           (-> element .-style (.setProperty "top" (- scrollback-height)))
           (-> element .-parentElement .-style (.setProperty "margin-top" scrollback-height)))))

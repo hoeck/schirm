@@ -552,7 +552,7 @@ class TermScreen(pyte.Screen):
             # top of the term window. (thats what xterm does and
             # linux-term not, try using top in both term emulators and
             # see what happens to the history)
-            self.linecontainer.add_line_origin(len(self.lines))
+            self.linecontainer.add_line_origin(self.lines)
 
     def string(self, string):
         if self.iframe_mode:
