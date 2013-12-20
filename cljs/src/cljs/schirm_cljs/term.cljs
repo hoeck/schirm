@@ -25,7 +25,8 @@
                            (screen/update-line screen
                                                line
                                                #(screen/line-insert-overwrite % ss col)))
-      "insert-line" (apply screen/insert-line screen args)
+      "insert-line" (screen/insert-line screen (screen/create-line []) (nth args 0))
+      "append-line" (screen/append-line screen (screen/create-line []))
       "adjust" (screen/adjust screen))))
 
 (def chords {;; browsers have space and shift-space bound to scroll page down/up

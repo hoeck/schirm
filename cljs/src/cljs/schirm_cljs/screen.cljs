@@ -245,6 +245,7 @@
 (defprotocol Screen
   "a terminal screen"
   (insert-line [this line pos])
+  (append-line [this line])
   (remove-line [this pos])
   (update-line [this pos update-fn])
   (reset [this])
@@ -288,10 +289,10 @@
   (-count [_] (-> element .-children .-length))
   Screen
   (insert-line [this line pos]
-    (if (= pos size)
-      (.appendChild element line)
-      (.insertBefore element line (nth this pos)))
+    (.insertBefore element line (nth this pos))
     this)
+  (append-line [this line]
+    (.appendChild element line))
   (remove-line [this pos]
     (when-let [line (nth this pos nil)]
       (-> element (.removeChild line)))
