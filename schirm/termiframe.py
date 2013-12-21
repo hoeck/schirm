@@ -49,7 +49,15 @@ class Iframes(object):
                 self.iframe_websockets[res] = self.iframes[iframe_id]
             return res
         else:
-            req.notfound()
+            if req.data['method'] == 'HEAD' and \
+               re.match("http://[a-z]{10}/", req.data['path']):
+                # looks like a chromium HEAD request trying to determine
+                # whether the network is up -> ignore
+                return True
+            else:
+                return False
+
+        req.notfound()
 
     def websocket(self, ch, val):
         iframe = self.iframe_websockets.get(ch)
