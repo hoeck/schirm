@@ -265,12 +265,49 @@
       (dotimes [_ delta]
         (.appendChild (.-element screen) (create-line []))))))
 
+;; auto-scroll:
+;;   automatically keep the bottom visible unless the user actively
+;;   scrolls to the top
+
+(def auto-scroll-activation-height 10)
+
+(defn -auto-scroll
+  "Scroll screen to the bottom if auto-scroll is active."
+  [screen]
+  (if (.-auto-scroll-active screen)
+    (let [parent (-> screen .-element .-parentElement .-parentElement)]
+      (set! (.-scrollTop parent)
+            (- (.-scrollHeight parent)
+               (.-clientHeight parent))))))
+
+(defn -auto-scroll-check
+  "Set the auto-scroll-active flag of screen"
+  [screen]
+  (let [parent (-> screen .-element .-parentElement .-parentElement)]
+    (if (= (.-auto-scroll-last-height screen) (.-scrollHeight parent))
+      ;; Whenever the user scrolls withing
+      ;; autoScrollActivationAreaHeight pixels to the bottom,
+      ;; automatically keep bottom content visible (==
+      ;; scroll automatically)
+      (set! (.-auto-scroll-active screen)
+            (< (- (.-scrollHeight parent) auto-scroll-activation-height)
+               (+ (.-scrollTop parent) (.-clientHeight parent))))
+      ;; scroll event had been fired as result of adding lines
+      ;; to the terminal and thus increasing its size, do not
+      ;; deactivate autoscroll in that case
+      (set! (.-auto-scroll-last-height screen)
+            (.-scrollHeight parent)))))
+
 (deftype ScrollbackScreen [;; the DOM element containing the terminal lines
                            element
                            ;; line origin
                            ^mutable screen0
-                           ;; the current terminal  size in lines
-                           size]
+                           ;; the current terminal size in lines
+                           size
+                           ;; auto scroll
+                           auto-scroll-active
+                           auto-scroll-last-height
+                           ]
   ;; element is the PRE which contains the screens lines as children
   ;; its parent must be a div.terminal-screen
   IIndexed
@@ -328,16 +365,21 @@
       (if (and chlen (<= (- chlen screen0) size))
         (let [scrollback-height (-> element .-children (aget screen0) .-offsetTop)]
           (-> element .-style (.setProperty "top" (- scrollback-height)))
-          (-> element .-parentElement .-style (.setProperty "margin-top" scrollback-height)))))
+          (-> element .-parentElement .-style (.setProperty "margin-top" scrollback-height))
+          (-auto-scroll this))))
     this
     ))
 
 (defn create-scrollback-screen [parent-element]
   (let [parent-element (or parent-element (.-body js/document))]
     (set! (.-innerHTML parent-element) scrollback-screen-markup)
-    (ScrollbackScreen. (-> parent-element (.getElementsByClassName "terminal-line-container") (aget 0))
-                       0
-                       0)))
+    (let [screen (ScrollbackScreen. (-> parent-element (.getElementsByClassName "terminal-line-container") (aget 0))
+                                    0
+                                    0
+                                    true
+                                    0)]
+      (set! (.-onscroll js/window) #(-auto-scroll-check screen))
+      screen)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
