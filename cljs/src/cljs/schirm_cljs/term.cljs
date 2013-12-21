@@ -13,7 +13,7 @@
 
 (defn invoke-screen-method [screen msg]
   (let [[meth & args] msg]
-    (.log js/console meth args)
+    ;;(.log js/console meth args)
     (case meth
       "set-line-origin" (apply screen/set-origin screen args)
       "reset"  (screen/reset screen)
@@ -44,7 +44,15 @@
      (loop []
        (doseq [message (<! input-chan)]
                (invoke-screen-method screen message))
-       (recur)))))
+       (recur)))
+    screen))
+
+(defn setup-resize [container ws-send]
+  (let [resize-screen #(let [new-size (screen/container-size container)
+                             message (clj->js (assoc new-size :name :resize))]
+                         (put! ws-send (.stringify js/JSON message)))]
+    (set! (.-onresize js/window) resize-screen)
+    (resize-screen)))
 
 (defn setup-websocket [url in out]
   (let [ws (js/WebSocket. url)]
@@ -52,18 +60,21 @@
           (fn [ev]
             (if (not= "" (.-data ev))
               (put! out (.parse js/JSON (.-data ev))))))
-    (go
-     (loop []
-       (let [msg (<! in)]
-         (.send ws msg)
-         (recur))))))
+    (set! (.-onopen ws)
+          #(go
+            (loop []
+              (let [msg (<! in)]
+                (.send ws msg)
+                (recur)))))))
 
 (defn setup-terminal []
   (let [ws-send  (chan)
         ws-recv (chan)
-        ws-url (format "ws://%s" (-> js/window .-location .-host))]
-    (setup-screen (dom-utils/select 'body) ws-recv)
+        ws-url (format "ws://%s" (-> js/window .-location .-host))
+        container (dom-utils/select 'body)]
+    (setup-screen container ws-recv)
     (setup-keys ws-send)
+    (setup-resize container ws-send)
     (setup-websocket ws-url ws-send ws-recv)))
 
 (defn init []

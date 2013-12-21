@@ -134,9 +134,9 @@ class Terminal(object):
         keycode = self.decode_keypress(key)
         self.client.write(keycode)
 
-    def resize(self, width, height):
-        w = int(width)
-        h = int(height)
+    def resize(self, cols, lines):
+        w = int(cols)
+        h = int(lines)
         assert w > 0
         assert h > 0
         self.screen.resize(h, w)
