@@ -56,6 +56,13 @@ class BrowserScreen(object):
         #       and why do only some line inserts use 'attrs'?
         self._append(('insert-line', y))
 
+    def append_line(self, attrs):
+        """Append a new line (increments the origin)."""
+        # TODO: attrs ????
+        #       and why do only some line inserts use 'attrs'?
+        self._append(('append-line', ))
+        self.add_line_origin(1)
+
     def remove_line(self, y):
         """remove the line at index y."""
         self._append(('remove-line', y))
@@ -77,7 +84,8 @@ class BrowserScreen(object):
         self.set_line_origin(0)
         self.lines = lines
         self.columns  = columns
-        self._append(('reset', lines))
+        self._append(('reset', ))
+        self._append(('resize', lines))
 
     def resize(self, lines, columns):
         """Resize the browserscreen to lines height and columns width."""
