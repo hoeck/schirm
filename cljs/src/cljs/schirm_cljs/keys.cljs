@@ -63,7 +63,8 @@
           )))
 
 (defn setup-window-key-handlers [element chords send]
-  (let [key-down-processed (atom false)]
+  (let [key-down-processed (atom false)
+        chords (into {} (map (fn [[k,v]] [(map string/lower-case k) v]) chords))]
     (set! (.-onkeydown element)
           (fn [e]
             (let [key {:name (get known-keys (.-keyCode e))
