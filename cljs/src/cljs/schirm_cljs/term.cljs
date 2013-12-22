@@ -49,8 +49,8 @@
        (recur)))
     screen))
 
-(defn setup-resize [container ws-send]
-  (let [resize-screen #(let [new-size (screen/container-size container)
+(defn setup-resize [container screen ws-send]
+  (let [resize-screen #(let [new-size (screen/container-size container (.-element screen))
                              message (clj->js (assoc new-size :name :resize))]
                          (put! ws-send (.stringify js/JSON message)))]
     (set! (.-onresize js/window) resize-screen)
@@ -73,10 +73,10 @@
   (let [ws-send  (chan)
         ws-recv (chan)
         ws-url (format "ws://%s" (-> js/window .-location .-host))
-        container (dom-utils/select 'body)]
-    (setup-screen container ws-recv)
+        container (dom-utils/select 'body)
+        screen (setup-screen container ws-recv)]
     (setup-keys ws-send)
-    (setup-resize container ws-send)
+    (setup-resize container screen ws-send)
     (setup-websocket ws-url ws-send ws-recv)))
 
 (defn init []

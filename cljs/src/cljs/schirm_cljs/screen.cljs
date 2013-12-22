@@ -233,11 +233,11 @@
                            pos)))
 
 (defn container-size
-  "Compute the size in cols and lines of a pre element."
-  [e]
-  (let [blocksize (dom-utils/char-size e)
-        cols  (.floor js/Math (/ (.-clientWidth e)  (:width blocksize)))
-        lines (.floor js/Math (/ (.-clientHeight e) (+ (:height blocksize) (:gap blocksize))))]
+  "Compute the size in cols and lines of a pre element in container"
+  [container pre]
+  (let [blocksize (dom-utils/char-size pre)
+        cols  (.floor js/Math (/ (.-clientWidth container)  (:width blocksize)))
+        lines (.floor js/Math (/ (.-clientHeight container) (+ (:height blocksize) (:gap blocksize))))]
     {:lines lines, :cols cols}))
 
 ;; container
