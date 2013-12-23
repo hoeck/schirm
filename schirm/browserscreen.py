@@ -41,8 +41,19 @@ class BrowserScreen(object):
     def char_to_attr(self, char):
         """Convert cursor attributes to the format used in schirm-cljs."""
         # TODO: reduce the number of attributes in pyte.Char!!! so we do not need this function any more
-        data, fg, bg, bold, italics, underscore, reverse, strikethrough = char
-        return (fg, bg, bold, italics, underscore, strikethrough, False)
+        data, fg, bg, bold, italics, underscore, strikethrough, reverse = char
+        # TODO: consider moving the details of the reverse
+        #       implementation to the clojurescript client
+        if reverse:
+            _fg = bg
+            _bg = fg
+            if _fg == "default":
+                _fg = "default-reversed"
+            if _bg == "default":
+                _bg = "default-reversed"
+            return (_fg, _bg, bold, italics, underscore, strikethrough, False)
+        else:
+            return (fg, bg, bold, italics, underscore, strikethrough, False)
 
     ### events
 
