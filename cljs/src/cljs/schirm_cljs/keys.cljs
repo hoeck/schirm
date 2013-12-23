@@ -72,7 +72,7 @@
                        :string "",
                        :shift (.-shiftKey e)
                        :alt (.-altKey e)
-                       :control (.-controlKey e)}
+                       :control (.-ctrlKey e)}
                   processed (handle-key-down chords send key)]
               (reset! key-down-processed processed)
               (not processed))))
@@ -82,7 +82,7 @@
                        :string (.fromCharCode js/String (.-charCode e)),
                        :shift (.-shiftKey e)
                        :alt (.-altKey e)
-                       :control (.-controlKey e)}]
+                       :control (.-ctrlKey e)}]
               (if (and (:string key) (not @key-down-processed))
                 (do (send key)
                     true)
