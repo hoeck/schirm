@@ -97,7 +97,7 @@ class BrowserScreen(object):
     #       when a resize happens, compile a previous events to
     #       determine the current state of the screen
     def set_line_origin(self, line_origin):
-        self.line_origin = line_origin
+        self.line_origin = max(0, min(self.total_lines, line_origin))
         self._append(('set-line-origin', self.line_origin))
 
     def add_line_origin(self, delta):
