@@ -2,6 +2,8 @@
   (:require [cljs.core.async :as async
              :refer [<! >! chan close! sliding-buffer put! alts!]]
 
+            [schirm-cljs.screen-tests :as tests]
+
             [schirm-cljs.screen :as screen]
             [schirm-cljs.keys :as keys]
             [schirm-cljs.dom-utils :as dom-utils])
@@ -26,7 +28,9 @@
                                                #(screen/line-insert-overwrite % ss col)))
       "insert-line" (screen/insert-line screen (screen/create-line []) (nth args 0))
       "append-line" (screen/append-line screen (screen/create-line []))
-      "adjust" (screen/adjust screen))))
+      "adjust" (screen/adjust screen)
+      "cursor" (let [[line, col] args]
+                 (screen/set-cursor screen line col)))))
 
 (def chords {;; browsers have space and shift-space bound to scroll page down/up
              ["space"] (fn [send] (send {:string " "}) true)
@@ -80,9 +84,11 @@
     (setup-websocket ws-url ws-send ws-recv)))
 
 (defn init []
-  (.addEventListener js/document "readystatechange"
-                     #(do
-                        (when (== (.-readyState js/document) "complete")
-                          (setup-terminal)))))
+  (dom-utils/document-ready setup-terminal))
+
+(defn tests []
+  (dom-utils/document-ready (fn []
+                              (doseq [result (tests/run-tests)]
+                                (.log js/console (str result))))))
 
 (init)

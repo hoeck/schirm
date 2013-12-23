@@ -59,6 +59,7 @@ class TermScreen(pyte.Screen):
         self.reset()
 
     def pop_events(self):
+        self.linecontainer.cursor(self.cursor.y, self.cursor.x)
         return self.linecontainer.pop_events()
 
     # pyte.Screen implementation

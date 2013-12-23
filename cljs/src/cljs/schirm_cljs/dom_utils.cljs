@@ -133,3 +133,12 @@
           [(first args) (rest args)]
           [js/document args])]
     (-> element (.querySelector (string/join \  (map name selector))))))
+
+(defn document-ready
+  "Execute f when the documents readyState changes to complete or is ready."
+  [f]
+  (if (= (.-readyState js/document) "complete")
+    (f)
+    (.addEventListener js/document "readystatechange"
+                       (fn [] (when (= (.-readyState js/document) "complete")
+                                (f))))))

@@ -28,6 +28,15 @@
 ;; same as the attribute part of pyte.screens.Char
 (defrecord CharacterStyle [fg, bg, bold, italics, underscore, strikethrough, cursor])
 
+(def character-style-defaults
+  {:fg "default"
+   :bg "default"
+   :bold false
+   :italics false
+   :underscore false
+   :strikethrough false
+   :cursor false})
+
 (defn get-class-string [character-style]
   (let [cs character-style]
     (string/join \ (remove nil? [(when (:fg cs) (format "f-%s" (:fg cs)))
@@ -50,7 +59,7 @@
                     (when-let [color (second (re-matches #"f-(.*)" name))] [:fg color])
                     (when-let [color (second (re-matches #"b-(.*)" name))] [:bg color]))))
          (remove nil?)
-         (into {})
+         (into character-style-defaults)
          (map->CharacterStyle))))
 
 (defn segment-style [segment]
@@ -59,7 +68,7 @@
 (defrecord StyledString [string style])
 
 (defn default-styled-string [len]
-  (StyledString. (apply str (repeat len \ )) (map->CharacterStyle {})))
+  (StyledString. (apply str (repeat len \ )) (map->CharacterStyle character-style-defaults)))
 
 (defn create-segment [styled-string]
   (let [elem (-> js/document (.createElement "span"))]
@@ -215,11 +224,15 @@
   "Highlight char at pos using cursor styles."
   [line pos]
   (let [[segment localpos] (dom-utils/element-at-pos line pos)]
-    (line-insert-overwrite line
-                           (StyledString.
-                            (-> segment .-textContent (nth localpos))
-                            (assoc (segment-style segment) :cursor true))
-                           pos)))
+    (if segment
+      (line-insert-overwrite line
+                             (StyledString.
+                              (-> segment .-textContent (nth localpos))
+                              (assoc (segment-style segment) :cursor true))
+                             pos)
+      (line-insert-overwrite line
+                             (StyledString. " " {:cursor true})
+                             pos))))
 
 (defn line-remove-cursor
   "Remove any cursor highlights from line."
@@ -229,7 +242,7 @@
     (line-insert-overwrite line
                            (StyledString.
                             (-> line .-textContent (nth pos))
-                            (assoc (segment-style segment) :cursor nil))
+                            (assoc (segment-style segment) :cursor false))
                            pos)))
 
 (defn container-size
@@ -369,6 +382,15 @@
           (-auto-scroll this))))
     this
     ))
+
+(defn remove-cursor [screen]
+  (let [segment (dom-utils/select (.-element screen) '.cursor)]
+    (when segment
+      (line-remove-cursor (.-parentElement segment)))))
+
+(defn set-cursor [screen line-number pos]
+  (remove-cursor screen)
+  (update-line screen line-number #(line-set-cursor % pos)))
 
 (defn create-scrollback-screen [parent-element]
   (let [parent-element (or parent-element (.-body js/document))]

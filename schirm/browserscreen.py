@@ -87,6 +87,9 @@ class BrowserScreen(object):
         self._update_total_lines(y)
         self._append(('remove-line', y))
 
+    def cursor(self, line, col):
+        self._append(('cursor', line, col))
+
     # modify the line origin
     # TODO: move the resize code into the screen-compiler, so that the
     #       BrowserScreen does not have any state except the list of

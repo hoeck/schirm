@@ -115,14 +115,35 @@
    (test-dom-line-op [["ABC" :f-blue] ["DEF" :f-red]]
                      [["Axxx" :f-blue] ["EF" :f-red]]
                      #(screen/line-insert-overwrite % (into-styled-string "xxx" :f-blue) 1))
+
    (test-dom-line-op [["ABC" :f-blue] ["DEF" :f-red]]
                      [["A" :f-blue] ["xxxEF" :f-red]]
                      #(screen/line-insert-overwrite % (into-styled-string "xxx" :f-red) 1))
+
+   (test-dom-line-op [["foo:" :f-green :b-default] ["$ " :f-default :b-default]]
+                     [["foo:" :f-green :b-default] ["$ wxyz" :f-default :b-default]]
+                     #(do
+                        (screen/line-insert-overwrite % (into-styled-string "w" :f-default :b-default) 6)
+                        (screen/line-insert-overwrite % (into-styled-string "x" :f-default :b-default) 7)
+                        (screen/line-insert-overwrite % (into-styled-string "y" :f-default :b-default) 8)
+                        (screen/line-insert-overwrite % (into-styled-string "z" :f-default :b-default) 9)))
+
+   ;; cursor
    
    (test-dom-line-op [["ABCDEF" :f-blue]]
                      [["AB" :f-blue] ["C" :f-blue :cursor] ["DEF" :f-blue]]
                      #(screen/line-set-cursor % 2))
-   
+
+   (test-dom-line-op [["112233 " :f-blue]]
+                     [["1122" :f-blue] ["3" :f-blue :cursor] ["3 " :f-blue]]
+                     #(do
+                        ;;(.log js/console "foo")
+                        (screen/line-set-cursor % 6)
+                        (screen/line-remove-cursor %)
+                        (screen/line-set-cursor % 5)
+                        (screen/line-remove-cursor %)
+                        (screen/line-set-cursor % 4)))
+
    (test-dom-line-op [["AB" :f-blue] ["C" :f-blue :cursor] ["DEF" :f-blue]]
                      [["ABCDEF" :f-blue]]
                      #(screen/line-remove-cursor %))
