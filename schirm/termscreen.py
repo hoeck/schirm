@@ -57,10 +57,20 @@ class TermScreen(pyte.Screen):
         self.iframe_mode = None
         self.iframe_id = None
         self.reset()
+        self.events = []
+
+    def _flush_events(self):
+        self.events.extend(self.linecontainer.pop_events())
 
     def pop_events(self):
         self.linecontainer.cursor(self.cursor.y, self.cursor.x)
-        return self.linecontainer.pop_events()
+        if self.events:
+            self.events.extend(self.linecontainer.pop_events())
+            ev = self.events
+            self.events = []
+            return ev
+        else:
+            return self.linecontainer.pop_events()
 
     # pyte.Screen implementation
 
@@ -93,7 +103,8 @@ class TermScreen(pyte.Screen):
            and tabstops should be reset as well, thanks to
            :manpage:`xterm` -- we now know that.
         """
-        self.linecontainer.reset(self.lines, self.columns)
+        self._flush_events()
+        self.linecontainer.reset(self.lines)
 
         if self.iframe_mode:
             self.iframe_leave()
@@ -133,6 +144,10 @@ class TermScreen(pyte.Screen):
         :param int lines: number of lines in the new screen.
         :param int columns: number of columns in the new screen.
         """
+        self._flush_events()
+
+        old_lines = self.lines
+
         self.lines   = (lines   or self.lines)
         self.columns = (columns or self.columns)
 
@@ -141,7 +156,7 @@ class TermScreen(pyte.Screen):
             self.reset_mode(mo.DECOM)
         else:
             # cursor: make sure that it 'stays' on its current line
-            cursor_delta = self.linecontainer.resize(self.lines, self.columns)
+            cursor_delta = self.linecontainer.resize(old_lines, self.lines)
             self.cursor.y += cursor_delta
             self.cursor.x = min(max(self.cursor.x, 0), self.columns-1)
 
@@ -212,6 +227,7 @@ class TermScreen(pyte.Screen):
 
         if mo.DECALTBUF in modes:
             # enable alternative draw buffer
+            self._flush_events()
             self.linecontainer.enter_altbuf_mode()
 
         # if mo.DECAPPMODE in modes:
@@ -276,6 +292,7 @@ class TermScreen(pyte.Screen):
         if mo.DECALTBUF in modes:
             # disable alternative draw buffer, switch internal
             # linecontainer while preserving generated events
+            self._flush_events()
             self.linecontainer.leave_altbuf_mode()
 
     # def draw(self, char):
@@ -469,7 +486,7 @@ class TermScreen(pyte.Screen):
         # TODO: which style is used for the space characters created
         # on the left? is it really the cursor attrs or is it the
         # style of the rightmost character?
-        self.linecontainer.remove(self.cursor.y, self.cursor.x, count, self.cursor.attrs)
+        self.linecontainer.remove(self.cursor.y, self.cursor.x, count)
 
     def erase_characters(self, count=None):
         """Erases the indicated # of characters, starting with the

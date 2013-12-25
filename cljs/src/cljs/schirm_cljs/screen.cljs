@@ -81,13 +81,34 @@
   [segment]
   (StyledString. (.-textContent segment) (segment-style segment)))
 
+;; debugging lines
+
+(defn readable-styled-string [styled-string]
+  (apply vector
+         (:string styled-string)
+         (sort (map keyword (remove empty? (-> styled-string :style get-class-string (string/split \ )))))))
+
+(defn into-styled-string [s & properties]
+  (StyledString. s (get-style-from-classnames (map name properties))))
+
+(defn line->readable [line]
+  (->> line
+       (map readable-styled-string)
+       (into [])))
+
+(defn readable->line
+  [readable-line]
+  (vec (map #(apply into-styled-string %) readable-line)))
+
 ;; line dom operations
 
 (defn create-line
   "Create and return a line DOM element."
   [line]
   (let [line-element (.createElement js/document "div")]
-    (doseq [s line]
+    (doseq [s (if (empty? line)
+                [(default-styled-string 1)]
+                line)]
       (.appendChild line-element (create-segment s)))
     line-element))
 
@@ -261,22 +282,27 @@
   (append-line [this line])
   (remove-line [this pos])
   (update-line [this pos update-fn])
-  (reset [this])
+  (reset [this new-size])
   (set-origin [this screen0])
   (set-size [this screen0])
+  (show [this show])
   (adjust [this]))
 
-(def scrollback-screen-markup
-  "<div class=\"terminal-screen\">
-      <pre class=\"terminal-line-container\"></pre>
+(def screen-markup
+  "<div class=\"schirm-terminal\">
+     <div class=\"terminal-screen\">
+       <pre class=\"terminal-line-container\"></pre>
+     </div>
+     <pre class=\"terminal-alt-container\"></pre>
+     <div class=\"terminal-alt-iframe-container\"></div>
    </div>")
 
 (defn -append-missing-lines [screen pos]
-  (let [existing-lines (- (-> screen .-element .-children .-length) (.-screen0 screen))
+  (let [existing-lines (- (-> screen .-element .-children .-length) (or (.-screen0 screen) 0))
         delta (- (+ 1 pos) existing-lines)]
     (when (< 0 delta)
       (dotimes [_ delta]
-        (.appendChild (.-element screen) (create-line []))))))
+        (.appendChild (.-element screen) (create-line [(default-styled-string 1)]))))))
 
 ;; auto-scroll:
 ;;   automatically keep the bottom visible unless the user actively
@@ -288,7 +314,7 @@
   "Scroll screen to the bottom if auto-scroll is active."
   [screen]
   (if (.-auto-scroll-active screen)
-    (let [parent (-> screen .-element .-parentElement .-parentElement)]
+    (let [parent (-> screen .-element .-parentElement .-parentElement .-parentElement)]
       (set! (.-scrollTop parent)
             (- (.-scrollHeight parent)
                (.-clientHeight parent))))))
@@ -316,11 +342,12 @@
                            ;; line origin
                            ^mutable screen0
                            ;; the current terminal size in lines
-                           size
+                           ^mutable size
+                           ;; visibility
+                           ^mutable visible
                            ;; auto scroll
-                           auto-scroll-active
-                           auto-scroll-last-height
-                           ]
+                           ^mutable auto-scroll-active
+                           ^mutable auto-scroll-last-height]
   ;; element is the PRE which contains the screens lines as children
   ;; its parent must be a div.terminal-screen
   IIndexed
@@ -341,7 +368,8 @@
     (.insertBefore element line (nth this pos))
     this)
   (append-line [this line]
-    (.appendChild element line))
+    (.appendChild element line)
+    this)
   (remove-line [this pos]
     (when-let [line (nth this pos nil)]
       (-> element (.removeChild line)))
@@ -353,8 +381,10 @@
         (-append-missing-lines this pos)
         (f (nth this pos))))
     this)
-  (reset [this]
+  (reset [this new-size]
     (set! (.-innerHTML element) "")
+    (set! (.-size this) new-size)
+    (set! (.-screen0 this) 0)
     this)
   (set-origin [this screen0]
     (set! (.-screen0 this) screen0)
@@ -362,6 +392,9 @@
   (set-size [this new-size]
     (set! (.-size this) new-size)
     this)
+  (show [this show]
+    (set! (.-visible this) show)
+    (dom-utils/show (.-parentElement element) show))
   (adjust [this]
     ;; var adjustTrailingSpace = function() {
     ;;     if (linesElement.childNodes.length && ((linesElement.childNodes.length - screen0) <= self.size.lines)) {
@@ -392,16 +425,81 @@
   (remove-cursor screen)
   (update-line screen line-number #(line-set-cursor % pos)))
 
-(defn create-scrollback-screen [parent-element]
+(deftype AltScreen [;; the DOM element containing the terminal lines
+                    element
+                    ;; the current terminal size in lines
+                    ^mutable size
+                    ;; visibility
+                    ^mutable visible]
+  ;; element is the PRE which contains the screens lines as children
+  ;; its parent must be a div.terminal-screen
+  IIndexed
+  (-nth [this pos]
+    (let [child (-> element .-children (aget pos))]
+      (if (nil? child)
+        (throw (js/Error. (format "no line at %s" pos)))
+        child)))
+  (-nth [this pos default]
+    (let [child (-> element .-children (aget pos))]
+      (if (nil? child)
+        default
+        child)))
+  ICounted
+  (-count [_] (-> element .-children .-length))
+  Screen
+  (insert-line [this line pos]
+    (.insertBefore element line (nth this pos))
+    this)
+  (append-line [this line]
+    (when-let [ch (nth this 0 nil)]
+      (.removeChild element ch))
+    (.appendChild element line))
+  (remove-line [this pos]
+    (when-let [line (nth this pos nil)]
+      (-> element (.removeChild line)))
+    this)
+  (update-line [this pos f]
+    (if-let [line (nth this pos nil)]
+      (f line)
+      (do
+        (-append-missing-lines this pos)
+        (f (nth this pos))))
+    this)
+  (reset [this new-size]
+    (set! (.-innerHTML element) "")
+    (set! (.-size this) new-size)
+    this)
+  (set-origin [this screen0]
+    this)
+  (set-size [this new-size]
+    (set! (.-size this) new-size)
+    this)
+  (show [this show]
+    (set! (.-visible this) show)
+    (dom-utils/show element show))
+  (adjust [this]
+    this))
+
+(defn create-scrollback-screen [element]
+  (let [screen (ScrollbackScreen. (-> element (.getElementsByClassName "terminal-line-container") (aget 0))
+                                  0
+                                  0
+                                  true
+                                  true
+                                  0)]
+    (set! (.-onscroll js/window) #(-auto-scroll-check screen))
+    screen))
+
+(defn create-alt-screen [element]
+  (AltScreen. (-> element (.getElementsByClassName "terminal-alt-container") (aget 0))
+              0
+              true))
+
+(defn create-screens [parent-element]
   (let [parent-element (or parent-element (.-body js/document))]
-    (set! (.-innerHTML parent-element) scrollback-screen-markup)
-    (let [screen (ScrollbackScreen. (-> parent-element (.getElementsByClassName "terminal-line-container") (aget 0))
-                                    0
-                                    0
-                                    true
-                                    0)]
-      (set! (.-onscroll js/window) #(-auto-scroll-check screen))
-      screen)))
+    (set! (.-innerHTML parent-element) screen-markup)
+    [(create-scrollback-screen parent-element)
+     (create-alt-screen parent-element)]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 

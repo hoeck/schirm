@@ -13,24 +13,55 @@
 ;; events -> chan
 ;; socket-messages -> chan
 
-(defn invoke-screen-method [screen msg]
-  (let [[meth & args] msg]
-    ;;(.log js/console meth args)
+(defn invoke-screen-method [state scrollback-screen alt-screen msg]
+  (let [[meth & args] msg
+        screen (if (:alt-mode state) alt-screen scrollback-screen)]
+    ;; (.log js/console meth (clj->js args))
     (case meth
-      "set-line-origin" (apply screen/set-origin screen args)
-      "reset"  (screen/reset screen)
-      "resize" (screen/set-size screen (nth args 0))
+      "set-line-origin" (do (apply screen/set-origin screen args)
+                            state)
+      "reset"  (do (screen/reset scrollback-screen (nth args 0))
+                   (screen/reset alt-screen (nth args 0))
+                   state)
+      "resize" (do (screen/set-size scrollback-screen (nth args 0))
+                   (screen/set-size alt-screen (nth args 0))
+                   state)
+      "insert" (let [[line, col, string, attrs] args
+                     style (apply screen/->CharacterStyle attrs)
+                     ss (screen/StyledString. string style)]
+                 (screen/update-line screen
+                                     line
+                                     #(screen/line-insert % ss col))
+                 state)
       "insert-overwrite" (let [[line, col, string, attrs] args
                                style (apply screen/->CharacterStyle attrs)
                                ss (screen/StyledString. string style)]
                            (screen/update-line screen
                                                line
-                                               #(screen/line-insert-overwrite % ss col)))
-      "insert-line" (screen/insert-line screen (screen/create-line []) (nth args 0))
-      "append-line" (screen/append-line screen (screen/create-line []))
-      "adjust" (screen/adjust screen)
+                                               #(screen/line-insert-overwrite % ss col))
+                           state)
+      "remove" (let [[line, col, n] args]
+                 (screen/update-line screen
+                                     line
+                                     #(screen/line-remove % col n))
+                 state)
+      "insert-line" (do (screen/insert-line screen (screen/create-line []) (nth args 0))
+                        state)
+      "append-line" (do (screen/append-line screen (screen/create-line []))
+                        state)
+      "remove-line" (do (screen/remove-line screen (nth args 0))
+                        state)
+      "adjust" (do (screen/adjust screen)
+                   state)
       "cursor" (let [[line, col] args]
-                 (screen/set-cursor screen line col)))))
+                 (screen/set-cursor screen line col)
+                 state)
+      "enter-alt-mode" (do (screen/show scrollback-screen false)
+                           (screen/show alt-screen true)
+                           (assoc state :alt-mode true))
+      "leave-alt-mode" (do (screen/show scrollback-screen true)
+                           (screen/show alt-screen false)
+                           (assoc state :alt-mode false)))))
 
 (def chords {;; browsers have space and shift-space bound to scroll page down/up
              ["space"] (fn [send] (send {:string " "}) true)
@@ -44,19 +75,22 @@
                      (put! send-chan (.stringify js/JSON (clj->js message)))))]
     (keys/setup-window-key-handlers js/window chords send-key)))
 
-(defn setup-screen [parent-element input-chan]
-  (let [screen (screen/create-scrollback-screen parent-element)]
+(defn setup-screens [parent-element input-chan]
+  (let [[scrollback-screen alt-screen :as screens] (screen/create-screens parent-element)
+        state (atom {})]
+    (screen/show alt-screen false)
     (go
      (loop []
        (doseq [message (<! input-chan)]
-               (invoke-screen-method screen message))
+         (reset! state (invoke-screen-method @state scrollback-screen alt-screen message)))
        (recur)))
-    screen))
+    screens))
 
-(defn setup-resize [container screen ws-send]
-  (let [resize-screen #(let [new-size (screen/container-size container (.-element screen))
-                             message (clj->js (assoc new-size :name :resize))]
-                         (put! ws-send (.stringify js/JSON message)))]
+(defn setup-resize [container ws-send screens]
+  (let [resize-screen (fn [] (let [pre (.-element (first (filter #(.-visible %) screens)))
+                                   new-size (screen/container-size container pre)
+                                   message (clj->js (assoc new-size :name :resize))]
+                               (put! ws-send (.stringify js/JSON message))))]
     (set! (.-onresize js/window) resize-screen)
     (resize-screen)))
 
@@ -78,9 +112,9 @@
         ws-recv (chan)
         ws-url (format "ws://%s" (-> js/window .-location .-host))
         container (dom-utils/select 'body)
-        screen (setup-screen container ws-recv)]
+        screens (setup-screens container ws-recv)]
     (setup-keys ws-send)
-    (setup-resize container screen ws-send)
+    (setup-resize container ws-send screens)
     (setup-websocket ws-url ws-send ws-recv)))
 
 (defn init []

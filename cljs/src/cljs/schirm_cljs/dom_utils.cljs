@@ -142,3 +142,9 @@
     (.addEventListener js/document "readystatechange"
                        (fn [] (when (= (.-readyState js/document) "complete")
                                 (f))))))
+
+(defn show
+  "Show or hide the given DOM element."
+  [element show]
+  (set! (-> element .-style .-display)
+        (if show "block" "none")))
