@@ -140,12 +140,16 @@ def map_key(keyname, modifiers, app_key_mode=False):
     keydef = _keycodes.get(keyname)
     if keydef:
         if isinstance(keydef, tuple):
+            # one of two esc seqs depending on the mode
             if app_key_mode:
                 return _add_modifier(keydef[1])
             else:
                 return _add_modifier(keydef[0])
-        else:
+        elif keydef.startswith('\x1b'):
+            # an esc seq
             return _add_modifier(keydef)
+        else:
+            return keydef
 
     else:
         shift, alt, control = modifiers
