@@ -35,10 +35,10 @@
                  123 "F12"})
 
 (defn get-key-chord [key]
-  (->> [(when (:shift key) 'shift),
-        (when (:control key) 'control),
-        (when (:alt key ) 'alt),
-        (string/lower-case (or (:name key) (.fromCharCode js/String (:code key))))]
+  (->> [(when (:shift key) :shift),
+        (when (:control key) :control),
+        (when (:alt key ) :alt),
+        (string/lower-case (when-let [k (or (:name key) (.fromCharCode js/String (:code key)))] (keyword k)))]
        (filter identity)))
 
 (defn handle-key-down [chords send key]

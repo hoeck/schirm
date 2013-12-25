@@ -64,10 +64,10 @@
                            (assoc state :alt-mode false)))))
 
 (def chords {;; browsers have space and shift-space bound to scroll page down/up
-             ["space"] (fn [send] (send {:string " "}) true)
-             ["shift" "space"] (fn [send] (send {:string " "}) true)
+             [:space] (fn [send] (send {:string " "}) true)
+             [:shift :space] (fn [send] (send {:string " "}) true)
              ;; ignore F12 as this opens the browsers devtools
-             ["F12"] (fn [send] false)})
+             [:F12] (fn [send] false)})
 
 (defn setup-keys [send-chan]
   (let [send-key (fn [key]
