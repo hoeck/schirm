@@ -495,7 +495,9 @@
               0
               true))
 
-(defn create-screens [parent-element]
+(defn create-screens
+  "Create and return a ScrollbackScreen and an AltScreen."
+  [parent-element]
   (let [parent-element (or parent-element (.-body js/document))]
     (set! (.-innerHTML parent-element) screen-markup)
     [(create-scrollback-screen parent-element)

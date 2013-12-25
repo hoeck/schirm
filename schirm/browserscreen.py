@@ -21,10 +21,17 @@ class BrowserScreen(object):
     def __init__(self):
         self._events = []
         # the number of rendered lines on the screen and in the scrollback
+        # we need to keep track of this on the server to be able to
+        # compute the cursor offset when resizing the terminal scren
         self.total_lines = 0
         # offset splitting the line buffer in a scrollback and screen part
         self.line_origin = 0
-        # rendered lines on the screen
+
+        # Save total lines and origin when switching to alt-mode.
+        # In alt-mode, the screen has no scrollback and uses a
+        # different element to draw lines on (screen/AltScreen).
+        self._saved_line_origin = 0
+        self._saved_total_lines = 0
 
     def _compile(self, events):
         events.append(('adjust',))
@@ -119,7 +126,7 @@ class BrowserScreen(object):
 
     def resize(self, old_lines, new_lines):
         """Resize the browserscreen from old_lines to new_lines height."""
-        assert not self._events
+        assert not self._events # events must have been flushed before
 
         line_delta = new_lines - old_lines
         remaining_empty_lines = old_lines - (self.total_lines - self.line_origin)
@@ -140,11 +147,17 @@ class BrowserScreen(object):
         TODO
 
     def enter_altbuf_mode(self):
-        assert not self._events
+        assert not self._events # events must have been flushed before
+        self._saved_total_lines = self.total_lines
+        self._saved_line_origin = self.line_origin
+        self.total_lines = 0
+        self.line_origin = 0
         self._append(('enter-alt-mode',))
 
     def leave_altbuf_mode(self):
-        assert not self._events
+        assert not self._events # events must have been flushed before
+        self.total_lines = self._saved_total_lines
+        self.line_origin = self._saved_line_origin
         self._append(('leave-alt-mode',))
 
     # TODO: iframe_* methods
