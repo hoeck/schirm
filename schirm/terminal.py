@@ -135,10 +135,9 @@ class Terminal(object):
         self.client.write(keycode)
 
     def resize(self, cols, lines):
-        w = int(cols)
-        h = int(lines)
-        assert w > 0
-        assert h > 0
+        # enforce sensible bounds
+        w = min(2**14, max(1, int(cols)))
+        h = min(2**14, max(1, int(lines)))
         self.screen.resize(h, w)
         self.client.set_size(h, w)
 
