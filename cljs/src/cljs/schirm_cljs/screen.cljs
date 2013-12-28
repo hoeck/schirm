@@ -416,8 +416,8 @@
       (if (and chlen (<= (- chlen screen0) size))
         (let [scrollback-height (-> element .-children (aget screen0) .-offsetTop)]
           (-> element .-style (.setProperty "top" (- scrollback-height)))
-          (-> element .-parentElement .-style (.setProperty "margin-top" scrollback-height))
-          (-auto-scroll this))))
+          (-> element .-parentElement .-style (.setProperty "margin-top" scrollback-height))))
+      (-auto-scroll this))
     this
     ))
 
