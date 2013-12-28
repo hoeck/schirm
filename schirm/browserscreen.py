@@ -71,11 +71,13 @@ def compact_insert_overwrites(insert_events, cols):
 
     return res
 
-def compile_appends(events):
+def compile_appends(events, max_lines=256):
     """Merge append-lines and insert-overwrites into a single operation.
 
     This reduces the client overhead in case a process is appending
     *lots* of lines to the terminal.
+
+    Merge at most max_lines into a single append operation.
     """
 
     # a state machine to look for [append-line set-line-origin insert-overwrite*] event patterns
@@ -110,7 +112,7 @@ def compile_appends(events):
 
                 group = []
 
-                if cmd == 'append-line':
+                if cmd == 'append-line' and len(lines) < max_lines:
                     # directly append another line
                     pass
                 else:
@@ -118,8 +120,12 @@ def compile_appends(events):
                     res.append(line_origin)
                     lines = []
                     line_origin = None
-                    state = None
-                    res.append(e)
+
+                    if cmd == 'append-line':
+                        cols = e[1]
+                    else:
+                        state = None
+                        res.append(e)
 
     return res
 
