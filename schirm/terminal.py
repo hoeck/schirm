@@ -177,10 +177,13 @@ class Terminal(object):
         events = self.screen.pop_events()
         if not events:
             return
-        else:
-            print '-- EVENTS --'
-            for e in events:
-                print '  ', e
+
+        print '    # -- EVENTS --'
+        for e in events:
+            if e[0] == 'append-many-lines':
+                print "    APPEND-MANY-LINES (%s)" % len(e[1])
+            else:
+                print '    %r,' % (e,)
 
         self.websocket.respond(json.dumps(events), close=False)
 

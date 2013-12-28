@@ -6,6 +6,7 @@ import termios
 import signal
 import subprocess
 import logging
+import select
 
 import chan
 import utils
@@ -81,7 +82,13 @@ class PseudoTerminal(object):
     def read(self):
         """Read data from the pty and return it."""
         try:
-            return os.read(self.master, 8192)
+            res = [os.read(self.master, 4096)]
+            # Read more than 4k (the default unchangeble linux buffer
+            # size) of data at once, to be able to deliver bigger
+            # chunks to the emulator
+            while select.select([self.master],[],[],0) == ([self.master],[],[]):
+                res.append(os.read(self.master, 4096))
+            return "".join(res)
         except OSError, e:
             # self.master was closed or reading interrupted by a
             # signal -> application exit

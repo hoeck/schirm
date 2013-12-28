@@ -2,6 +2,8 @@
   (:require [cljs.core.async :as async
              :refer [<! >! chan close! sliding-buffer put! alts!]]
 
+            [clojure.string :as string]
+
             [schirm-cljs.screen-tests :as tests]
 
             [schirm-cljs.screen :as screen]
@@ -13,10 +15,29 @@
 ;; events -> chan
 ;; socket-messages -> chan
 
+(defn create-styled-string [string attrs]
+  (screen/StyledString. string (apply screen/->CharacterStyle attrs)))
+
+(defn create-fragment-from-lines
+  "Create a document fragment from a seq of seqs of raw segments.
+
+  Raw segments are tuples of (string, class-string) forming the basic
+  parts of a line."
+  [lines]
+  (let [fragment (.createDocumentFragment js/document)]
+    (doseq [raw-segments lines]
+      (let [line (.createElement js/document "div")]
+        (doseq [[string class] raw-segments]
+          (let [segment (.createElement js/document "span")]
+            (set! (.-className segment) class)
+            (set! (.-textContent segment) string)
+            (.appendChild line segment)))
+        (.appendChild fragment line)))
+    fragment))
+
 (defn invoke-screen-method [state scrollback-screen alt-screen msg]
   (let [[meth & args] msg
         screen (if (:alt-mode state) alt-screen scrollback-screen)]
-    ;; (.log js/console meth (clj->js args))
     (case meth
       "set-line-origin" (do (apply screen/set-origin screen args)
                             state)
@@ -27,15 +48,13 @@
                    (screen/set-size alt-screen (nth args 0))
                    state)
       "insert" (let [[line, col, string, attrs] args
-                     style (apply screen/->CharacterStyle attrs)
-                     ss (screen/StyledString. string style)]
+                     ss (create-styled-string string attrs)]
                  (screen/update-line screen
                                      line
                                      #(screen/line-insert % ss col))
                  state)
       "insert-overwrite" (let [[line, col, string, attrs] args
-                               style (apply screen/->CharacterStyle attrs)
-                               ss (screen/StyledString. string style)]
+                               ss (create-styled-string string attrs)]
                            (screen/update-line screen
                                                line
                                                #(screen/line-insert-overwrite % ss col))
@@ -49,6 +68,9 @@
                         state)
       "append-line" (do (screen/append-line screen (screen/create-line []))
                         state)
+      "append-many-lines" (let [lines (nth args 0 [])]
+                            (screen/append-line screen (create-fragment-from-lines lines))
+                            state)
       "remove-line" (do (screen/remove-line screen (nth args 0))
                         state)
       "adjust" (do (screen/adjust screen)

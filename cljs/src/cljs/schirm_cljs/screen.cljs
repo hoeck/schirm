@@ -37,15 +37,20 @@
    :strikethrough false
    :cursor false})
 
-(defn get-class-string [character-style]
+(defn get-classes [character-style]
   (let [cs character-style]
-    (string/join \ (remove nil? [(when (:fg cs) (format "f-%s" (:fg cs)))
-                                 (when (:bg cs) (format "b-%s" (:bg cs)))
-                                 (when (:bold cs) "bold")
-                                 (when (:italics cs) "italics")
-                                 (when (:underscore cs) "underscore")
-                                 (when (:strikethrough cs) "strikethrough")
-                                 (when (:cursor cs) "cursor")]))))
+    (remove nil? [(when (:fg cs) (format "f-%s" (:fg cs)))
+                  (when (:bg cs) (format "b-%s" (:bg cs)))
+                  (when (:bold cs) "bold")
+                  (when (:italics cs) "italics")
+                  (when (:underscore cs) "underscore")
+                  (when (:strikethrough cs) "strikethrough")
+                  (when (:cursor cs) "cursor")])))
+
+(defn get-class-string [character-style]
+  (string/join \ (get-classes character-style)))
+
+(def get-class-string-memoized (memoize get-class-string))
 
 (defn get-style-from-classnames [classnames]
   (let [simple-classnames {"bold" :bold
@@ -72,7 +77,7 @@
 
 (defn create-segment [styled-string]
   (let [elem (-> js/document (.createElement "span"))]
-    (set! (.-className elem) (get-class-string (:style styled-string)))
+    (set! (.-className elem) (get-class-string-memoized (:style styled-string)))
     (set! (.-textContent elem) (:string styled-string))
     elem))
 
@@ -103,7 +108,7 @@
 ;; line dom operations
 
 (defn create-line
-  "Create and return a line DOM element."
+  "Create and return a line DOM element from a list of styled strings."
   [line]
   (let [line-element (.createElement js/document "div")]
     (doseq [s (if (empty? line)
