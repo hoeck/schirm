@@ -79,16 +79,40 @@ class PseudoTerminal(object):
                 os.write(self.master, data)
         # flush???
 
-    def read(self):
-        """Read data from the pty and return it."""
+    def read(self, timeout=None, additional_fd=None):
+        """Read data from the pty and return it.
+
+        Optionally provide a timeout of 0 or more seconds. Return None
+        if no data is available after the timeout. Return also None
+        when an OSError occurs.
+
+        If additional_fd is not None, it should be an int denoting a
+        file descriptor to select on in addition of the master pty.
+
+        Preferably return the additional_fd integer if there is data
+        on it.
+        """
         try:
-            res = [os.read(self.master, 4096)]
-            # Read more than 4k (the default unchangeble linux buffer
-            # size) of data at once, to be able to deliver bigger
-            # chunks to the emulator
-            while select.select([self.master],[],[],0) == ([self.master],[],[]):
-                res.append(os.read(self.master, 4096))
-            return "".join(res)
+            if additional_fd is not None:
+                select_on = [self.master, additional_fd]
+            else:
+                select_on = [self.master]
+
+            res, _, _  = select.select(select_on,[],[],timeout)
+            if res == []:
+                return None # closed???
+            elif additional_fd in res:
+                return additional_fd
+            else:
+                # read
+                res = [os.read(self.master, 4096)]
+
+                # Read more than 4k (the default unchangeble linux buffer
+                # size) of data at once, to be able to deliver bigger
+                # chunks to the emulator
+                while select.select([self.master],[],[],0) == ([self.master],[],[]):
+                    res.append(os.read(self.master, 4096))
+                return "".join(res)
         except OSError, e:
             # self.master was closed or reading interrupted by a
             # signal -> application exit
@@ -106,6 +130,7 @@ class PseudoTerminal(object):
             win = struct.pack('HHHH', l, c, x, y)
             fcntl.ioctl(self.master, termios.TIOCSWINSZ, win)
             self.size = [c, l]
+            return True
 
 class SubprocessTerminal(object):
 
@@ -145,7 +170,7 @@ class SubprocessTerminal(object):
                     self.proc.stdin.write(data)
             self.proc.stdin.flush()
 
-    def read(self):
+    def read(self, timeout=None, additional_fd=None):
         """Read data from the pty and return it."""
         try:
             data = os.read(self.proc.stdout.fileno(), 8192)
@@ -161,7 +186,8 @@ class SubprocessTerminal(object):
             return None
 
     def set_size(self, lines, columns):
-        pass
+        return False
+
 
 class AsyncResettableTerminal(object):
 
@@ -173,6 +199,12 @@ class AsyncResettableTerminal(object):
         self._cmd = cmd
 
         self._client = None
+
+        # use a pipe to send resize requests to the client_read thread,
+        # to be able to select on both, this pipe and the master pty
+        r,w = os.pipe()
+        self._resize_read  = os.fdopen(r, 'r', 0)
+        self._resize_write = os.fdopen(w, 'w', 0)
 
         def _in_handler():
             while True:
@@ -190,11 +222,31 @@ class AsyncResettableTerminal(object):
         # read from the client and push onto outgoing
         def _client_read():
             while True:
-                data = self._client.read()
-                if data is None:
+
+                # receive resize events from the resize pipe,
+                # terminal writes from the master pty
+                data = self._client.read(additional_fd=self._resize_read.fileno())
+
+                if data == self._resize_read.fileno():
+                    new_size = self._resize_read.read(10)
+                    lines = int(new_size[:5])
+                    cols  = int(new_size[5:])
+
+                    # read & propagate remaining data
+                    data = self._client.read(timeout=0, additional_fd=None)
+                    if data is not None:
+                        self.out.put(data)
+
+                    # resize
+                    if self._client.set_size(lines, cols):
+                        # inform screen of the new size
+                        self.out.put(('resize', lines, cols))
+
+                elif data is None:
                     # terminal client closed
                     self.out.put(None)
                     return
+
                 else:
                     self.out.put(data)
 
@@ -208,8 +260,13 @@ class AsyncResettableTerminal(object):
     def _write(self, data):
         self._client.write(data)
 
-    def _set_size(self, lines, columns):
-        self._client.set_size(lines, columns)
+    def _set_size(self, lines, cols):
+        # write sth to the resize interrupt pipe to sync client and
+        # screen resize
+        assert 0 < lines and lines < 99999
+        assert 0 < cols  and cols  < 99999
+        self._resize_write.write('%05d%05d' % (int(lines), int(cols)))
+        self._resize_write.flush()
 
     # API
 
@@ -217,7 +274,7 @@ class AsyncResettableTerminal(object):
         self._in.put(self._reset)
 
     def kill(self):
-        self._in.put(self._kil)
+        self._in.put(self._kill)
 
     def write(self, data):
         self._in.put(lambda : self._write(data))

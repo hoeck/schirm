@@ -138,7 +138,9 @@ class Terminal(object):
         # enforce sensible bounds
         w = min(2**14, max(1, int(cols)))
         h = min(2**14, max(1, int(lines)))
-        self.screen.resize(h, w)
+        # The client will put a special 'resize' message on its
+        # output channel after the receive happened.
+        # Once we receive this, we will resize the client too.
         self.client.set_size(h, w)
 
     def remove_history(self, n):
@@ -305,13 +307,18 @@ class Terminal(object):
         return True
 
     def input(self, data):
-        # input from the terminal process
-        if data is None:
-            return False # quit
-        else:
+        # input or resize events from the terminal process
+        if isinstance(data, basestring):
             self.stream.feed(data)
             self.render()
             return True
+        elif isinstance(data, tuple) and data[0] == 'resize':
+            self.screen.resize(lines=data[1], columns=data[2])
+            self.render()
+        elif data is None:
+            return False # quit
+        else:
+            assert False
 
     valid_msg_names = set(['keypress',
                            'resize',
