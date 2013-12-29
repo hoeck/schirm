@@ -83,6 +83,7 @@
                            (assoc state :alt-mode true))
       "leave-alt-mode" (do (screen/show scrollback-screen true)
                            (screen/show alt-screen false)
+                           (screen/reset alt-screen)
                            (assoc state :alt-mode false)))))
 
 (def chords {;; browsers have space and shift-space bound to scroll page down/up
