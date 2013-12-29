@@ -20,10 +20,10 @@ def create_terminal(size=(80,25), use_pty=True, cmd=None):
         # start the current users default login shell
         cmd = pwd.getpwuid(os.getuid()).pw_shell
 
-    env = {'TERM': 'xterm',
-           'COLORTERM': 'Terminal',
-           'COLUMNS': str(size[0]),
-           'LINES': str(size[1])}
+    env = {
+        'TERM': 'xterm',
+        'COLORTERM': 'Terminal'
+    }
 
     if use_pty:
         return PseudoTerminal(cmd, size, env)
