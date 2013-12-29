@@ -136,7 +136,11 @@ class Terminal(object):
 
     def resize(self, cols, lines):
         # enforce sensible bounds
-        w = min(2**14, max(1, int(cols)))
+        # It looks like my bash prompt will get corrupted once I
+        # resize it to 10 cols or below and then back to a normal
+        # size. The same happens on other emulators too (xterm,
+        # gnome-terminal).
+        w = min(2**14, max(11, int(cols)))
         h = min(2**14, max(1, int(lines)))
         # The client will put a special 'resize' message on its
         # output channel after the receive happened.
