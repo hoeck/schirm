@@ -161,13 +161,13 @@
          (let [before (subs (.-textContent segment) 0 localpos)
                after (subs (.-textContent segment) localpos)]
            (set! (.-textContent segment) before)
-           (.insertBefore line (create-segment styled-string) (.-nextSegmentSibling segment))
            (.insertBefore line
                           (let [e (.createElement js/document "span")]
                             (set! (.-className e) (.-className segment))
                             (set! (.-textContent e) after)
                             e)
-                          (.-nextSegmentSibling segment))))))))
+                          (.-nextElementSibling segment))
+           (.insertBefore line (create-segment styled-string) (.-nextElementSibling segment))))))))
 
 ;; remove-line
 

@@ -128,6 +128,16 @@
                         (screen/line-insert-overwrite % (into-styled-string "y" :f-default :b-default) 8)
                         (screen/line-insert-overwrite % (into-styled-string "z" :f-default :b-default) 9)))
 
+   (test-dom-line-op [["pre" :f-default :b-default]
+                      ["ABC" :f-blue :b-default]
+                      ["suf" :f-default :b-default]]
+                     [["pre" :f-default :b-default]
+                      ["A" :f-blue :b-default]
+                      ["+" :f-red :b-default]
+                      ["C" :f-blue :b-default]
+                      ["suf" :f-default :b-default]]
+                     (fn [line] (screen/line-insert-overwrite line (into-styled-string "+", :f-red) 4)))
+
    ;; cursor
    
    (test-dom-line-op [["ABCDEF" :f-blue]]
