@@ -194,45 +194,6 @@ class Terminal(object):
 
         return
 
-        # group javascript in chunks for performance
-        js = [[]]
-        def js_flush():
-            if js[0]:
-                execute_js(js[0])
-            js[0] = []
-
-        def js_append(x):
-            if x:
-                js[0].append(x)
-
-        # issue the screen0 as the last event
-        screen0 = None
-
-        for e in events:
-
-            name = e[0]
-            args = e[1:]
-
-            if name.startswith('iframe_'):
-                # iframes:
-                js_flush()
-                js_append(self.iframes.dispatch(e))
-            elif name == 'set_title':
-                js_flush()
-                # TODO: implement
-            elif name == 'set_screen0':
-                screen0 = args[0]
-            elif name in htmlterm.Events.__dict__:
-                # sth. to be translated to js
-                js_append(getattr(htmlterm.Events,name)(*args))
-            else:
-                logger.error('unknown event: %r', name)
-
-        if screen0 is not None:
-            js_append(htmlterm.Events.set_screen0(screen0))
-
-        js_flush()
-
     # handlers
 
     def request(self, req):
