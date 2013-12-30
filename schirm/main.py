@@ -105,6 +105,7 @@ def run(use_pty=True, cmd=None):
             if res == 'reload':
                 pass
             else:
+                browser_process.kill()
                 return res
 
     utils.create_thread(run_emulation)
