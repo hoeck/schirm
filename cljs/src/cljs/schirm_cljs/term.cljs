@@ -27,7 +27,9 @@
   (let [fragment (.createDocumentFragment js/document)]
     (doseq [raw-segments lines]
       (let [line (.createElement js/document "div")]
-        (doseq [[string class] raw-segments]
+        (doseq [[string class] (if (empty? raw-segments)
+                                 [[" " ""]] ;; empty line
+                                 raw-segments)]
           (let [segment (.createElement js/document "span")]
             (set! (.-className segment) class)
             (set! (.-textContent segment) string)

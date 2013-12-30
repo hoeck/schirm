@@ -209,6 +209,7 @@ class BrowserScreen(object):
 
     def append_line(self, columns):
         """Append a new line (increments the origin)."""
+        self.total_lines += 1
         self._append(('append-line', columns))
         self.add_line_origin(1) # total lines do not change as we increase the origin
 
@@ -244,20 +245,28 @@ class BrowserScreen(object):
         assert not self._events # events must have been flushed before
 
         line_delta = new_lines - old_lines
-        remaining_empty_lines = old_lines - (self.total_lines - self.line_origin)
+        remaining_empty_lines = old_lines - (self.total_lines - self.line_origin) - 1
 
-        if line_delta < remaining_empty_lines:
-            # when resizing and there are empty lines below the last visible line,
-            # keep this line in same place (measured from the top of the terminal window)
-            cursor_delta = 0
+        delta = 0
+        if line_delta > 0:
+            # enlarge, try pulling additional lines from the scrollback first
+            if self.line_origin > line_delta:
+                delta = line_delta
+            else:
+                delta = self.line_origin
+
+        elif line_delta < 0:
+            # shrink, remove remaining_empty_lines first (a no-op),
+            # then push lines to the history
+            if remaining_empty_lines < abs(line_delta):
+                delta = line_delta + remaining_empty_lines
+
         else:
-            line_origin = self.line_origin
-            self.set_line_origin(self.total_lines - new_lines)
-            cursor_delta = line_origin - self.line_origin
+            return 0
 
-        self.lines = new_lines
+        self.add_line_origin(-delta)
         self._append(('resize', new_lines))
-        return cursor_delta # to be able to compute the new cursorpos
+        return delta # used to compute the new cursor pos
 
     def reverse_all_lines(self):
         TODO
