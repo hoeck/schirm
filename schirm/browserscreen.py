@@ -247,8 +247,11 @@ class BrowserScreen(object):
         line_delta = new_lines - old_lines
         remaining_empty_lines = old_lines - (self.total_lines - self.line_origin) - 1
 
-        delta = 0
-        if line_delta > 0:
+        if self._alt_mode:
+            # no scrollback
+            delta = 0
+
+        elif line_delta > 0:
             # enlarge, try pulling additional lines from the scrollback first
             if self.line_origin > line_delta:
                 delta = line_delta
@@ -260,12 +263,18 @@ class BrowserScreen(object):
             # then push lines to the history
             if remaining_empty_lines < abs(line_delta):
                 delta = line_delta + remaining_empty_lines
+            else:
+                delta = 0
 
         else:
+            # no resize necessary
             return 0
 
-        self.add_line_origin(-delta)
+        if delta != 0:
+            self.add_line_origin(-delta)
+
         self._append(('resize', new_lines))
+
         return delta # used to compute the new cursor pos
 
     def reverse_all_lines(self):

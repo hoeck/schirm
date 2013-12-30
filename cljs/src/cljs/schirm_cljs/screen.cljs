@@ -373,6 +373,7 @@
     (.insertBefore element line (nth this pos))
     this)
   (append-line [this line]
+    (-append-missing-lines this (dec size))
     (.appendChild element line)
     this)
   (remove-line [this pos]
@@ -456,9 +457,23 @@
     (.insertBefore element line (nth this pos))
     this)
   (append-line [this line]
-    (when-let [ch (nth this 0 nil)]
-      (.removeChild element ch))
-    (.appendChild element line))
+    (-append-missing-lines this (dec size))
+    (condp = (.-nodeType line)
+      (.-DOCUMENT_FRAGMENT_NODE js/document) ;; insert many lines
+      (do
+        ;; as there is no scrollback in this screen,
+        ;; remove unneeded lines from the top
+        (dotimes [i (min (-> element .-children .-length)
+                           (-> line .-children .-length))]
+          (.removeChild element (.-firstChild element)))
+        ;; insert the DocumentFragment
+        (.appendChild element line)
+        ;; clean up superflous lines at the top
+        (dotimes [i (max 0 (- (-> element .-children .-length) size))]
+          (.removeChild element (.-firstChild element))))
+      (.-ELEMENT_NODE js/document) ;; a single line
+      (do (when-let [ch (nth this 0 nil)] (.removeChild element ch))
+          (.appendChild element line))))
   (remove-line [this pos]
     (when-let [line (nth this pos nil)]
       (-> element (.removeChild line)))
