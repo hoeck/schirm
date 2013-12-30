@@ -302,5 +302,4 @@ class BrowserScreen(object):
         TODO
 
     def set_title(self, string):
-        # TODO
-        pass
+        self._append(('set-title', string))

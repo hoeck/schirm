@@ -86,7 +86,9 @@
       "leave-alt-mode" (do (screen/show scrollback-screen true)
                            (screen/show alt-screen false)
                            (screen/reset alt-screen)
-                           (assoc state :alt-mode false)))))
+                           (assoc state :alt-mode false))
+      "set-title" (do (set! (.-title js/document) (nth args 0))
+                      state))))
 
 (def chords {;; browsers have space and shift-space bound to scroll page down/up
              [:space] (fn [send] (send {:string " "}) true)
