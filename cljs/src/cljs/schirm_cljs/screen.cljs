@@ -429,7 +429,12 @@
 
 (defn set-cursor [screen line-number pos]
   (remove-cursor screen)
-  (update-line screen line-number #(line-set-cursor % pos)))
+  (let [line (nth screen line-number nil)]
+    (if (and line (-> line (.getElementsByTagName "iframe") .-length (> 0)))
+      ;; iframe-line do not set the cursor here
+      :todo
+      ;; plain terminal line
+      (update-line screen line-number #(line-set-cursor % pos)))))
 
 (deftype AltScreen [;; the DOM element containing the terminal lines
                     element

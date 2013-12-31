@@ -607,8 +607,7 @@ class TermScreen(pyte.Screen):
         return base64.b32encode(os.urandom(35)).lower()
 
     def _insert_iframe_line(self):
-        self.linecontainer.iframe_enter(self.iframe_id)
-        self.linecontainer[self.cursor.y] = IframeLine(self.iframe_id)
+        self.linecontainer.iframe_enter(self.iframe_id, self.cursor.y)
 
     def _iframe_close_document(self):
         # add some html to the iframe document for registering ctr-c and ctrl-d key handlers
@@ -668,6 +667,8 @@ class TermScreen(pyte.Screen):
         # just hand of the event to the linecontainer
         self.linecontainer.close_stream()
 
+    def iframe_resize(self, iframe_id, height):
+        self.linecontainer.iframe_resize(iframe_id, height)
 
 class SchirmStream(pyte.Stream):
 

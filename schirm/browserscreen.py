@@ -302,13 +302,33 @@ class BrowserScreen(object):
 
         self._append(('leave-alt-mode',))
 
-    # TODO: iframe_* methods
-
-    # def iframe_*(self):
-    #     pass
+    # screen managing methods
 
     def remove_history(self, lines):
         TODO
 
     def set_title(self, string):
         self._append(('set-title', string))
+
+    # iframe_* methods
+
+    def iframe_enter(self, iframe_id, line):
+        self._update_total_lines(line)
+        self._append(('iframe-enter', iframe_id, line))
+
+    def iframe_close(self, iframe_id):
+        self._append(('iframe-close', iframe_id))
+
+    def iframe_leave(self, iframe_id):
+        self._append(('iframe-leave', iframe_id))
+
+    # sending data
+
+    def iframe_write(self, iframe_id, data):
+        self._append(('iframe-write', iframe_id, data))
+
+    def iframe_string(self, iframe_id, data):
+        self._append(('iframe-string', iframe_id, data))
+
+    def iframe_resize(self, iframe_id, height):
+        self._append(('iframe-resize', iframe_id, height))

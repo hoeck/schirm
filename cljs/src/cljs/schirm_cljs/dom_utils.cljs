@@ -64,6 +64,8 @@
     (when-let [styles (:style attrs)]
       (doseq [[k v] styles]
         (aset (.-style e) (camelcasify (name k)) v)))
+    (doseq [[k v] (filter #(not (contains? #{:inner-text :inner-html :style})) attrs)]
+      (aset e (camelcasify (name k)) v))
     e))
 
 (defn char-size

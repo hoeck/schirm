@@ -37,6 +37,20 @@
         (.appendChild fragment line)))
     fragment))
 
+(defn create-iframe [id]
+  (let [scroll-size (dom-utils/scrollbar-size)
+        uri (format "http://%s.localhost" id)
+        iframe (dom-utils/create-element
+                "iframe"
+                {:style {:width "100%",
+                         :min-height (:vertical scroll-size)
+                         :height (:vertical scroll-size)}
+                 :src uri
+                 :id id})]
+    ;; (.addEventListener iframe "webkitTransitionEnd" #(screen/auto-scroll screen)) ???
+    iframe
+    ))
+
 (defn invoke-screen-method [state scrollback-screen alt-screen msg]
   (let [[meth & args] msg
         screen (if (:alt-mode state) alt-screen scrollback-screen)]
@@ -88,7 +102,24 @@
                            (screen/reset alt-screen)
                            (assoc state :alt-mode false))
       "set-title" (do (set! (.-title js/document) (nth args 0))
-                      state))))
+                      state)
+
+      ;; iframe
+      "iframe-enter" (let [[iframe-id pos] args
+                           iframe (create-iframe iframe-id)]
+                       (screen/update-line screen pos
+                                           (fn [l]
+                                             (set! (.-innerHTML l) "")
+                                             (.appendChild l iframe)
+                                             (.focus iframe)))
+                       state)
+
+      "iframe-resize" (let [[iframe-id height] args
+                            iframe (.getElementById js/document iframe-id)
+                            height-style (if (==  height "fullscreen") "100%" (str height))]
+                        (when iframe (-> iframe .-style .-height (set! height-style)))
+                        state)
+      )))
 
 (def chords {;; browsers have space and shift-space bound to scroll page down/up
              [:space] (fn [send] (send {:string " "}) true)

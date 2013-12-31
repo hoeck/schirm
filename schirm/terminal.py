@@ -183,14 +183,26 @@ class Terminal(object):
         if not events:
             return
 
-        print '    # -- EVENTS --'
+        # dispatch iframe-* events
+        term_events = []
         for e in events:
-            if e[0] == 'append-many-lines':
-                print "    APPEND-MANY-LINES (%s)" % len(e[1])
+            if e[0].startswith("iframe-"):
+                res = self.iframes.dispatch(e)
+                if res is not None:
+                    term_events.append(res)
             else:
-                print '    %r,' % (e,)
+                term_events.append(e)
 
-        self.websocket.respond(json.dumps(events), close=False)
+        # print '    # -- EVENTS --'
+        # for e in events:
+        #     if e[0] == 'append-many-lines':
+        #         print "    APPEND-MANY-LINES (%s)" % len(e[1])
+        #         for l in e[1]:
+        #             print "        %r" % (l, )
+        #     else:
+        #         print '    %r,' % (e,)
+
+        self.websocket.respond(json.dumps(term_events), close=False)
 
         return
 
@@ -264,7 +276,9 @@ class Terminal(object):
             # dispatch the request to an iframe and provide a
             # channel for communication with the terminal
             res = self.iframes.request(req)
-            if res:
+            if isinstance(res, dict):
+                self.dispatch_msg(res)
+            elif res:
                 return res
             else:
                 logger.error("Could not handle request %r." % req)
@@ -285,12 +299,17 @@ class Terminal(object):
         else:
             assert False
 
+    def iframe_resize(self, iframe_id, height):
+        self.screen.iframe_resize(iframe_id, height)
+        self.render()
+
     valid_msg_names = set(['keypress',
                            'resize',
                            'remove_history',
                            'paste_xsel',
                            'focus',
-                           'hide_cursor'])
+                           'hide_cursor',
+                           'iframe_resize'])
     def dispatch_msg(self, msg):
         """Dispatch websocket messages."""
         name = msg.get('name')

@@ -463,7 +463,6 @@ class ThreadedRequest(object):
 
     def gone(self, msg=""):
         """Respond with a 410 Gone and close the connection."""
-        assert self.data['protocol'] == 'http'
         response = '\r\n'.join([
             "HTTP/1.1 410 Gone",
             "Content-Length: " + str(len(msg)),
