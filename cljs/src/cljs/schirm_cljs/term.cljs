@@ -98,6 +98,9 @@
                            (screen/show alt-screen false)
                            (screen/reset alt-screen)
                            (assoc state :alt-mode false))
+
+      "scrollback-cleanup" (do (screen/scrollback-cleanup screen (nth args 0))
+                               state)
       "set-title" (do (set! (.-title js/document) (nth args 0))
                       state)
 

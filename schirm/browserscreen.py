@@ -131,6 +131,13 @@ def compile_appends(events, max_lines=256):
 
 class BrowserScreen(object):
 
+    # The number of lines which are kept in the scrollback buffer
+    # should be larger than the biggest imaginable terminal height.
+    # The larger the scrollback, the more lines and thus DOM elements
+    # have to be kept in the browser, making layout ops more
+    # expensive and eating more memory.
+    SCROLLBACK_SIZE = 4000 # conservative setting
+
     def __init__(self):
         self._events = []
         # the number of rendered lines on the screen and in the scrollback
@@ -304,8 +311,13 @@ class BrowserScreen(object):
 
     # screen managing methods
 
-    def remove_history(self, lines):
-        TODO
+    def check_scrollback(self):
+        surplus_lines = self.total_lines - self.SCROLLBACK_SIZE
+        if surplus_lines > 0:
+            # remove them
+            self._append(('scrollback-cleanup', surplus_lines))
+            self.total_lines -= surplus_lines
+            self.add_line_origin(-surplus_lines)
 
     def set_title(self, string):
         self._append(('set-title', string))

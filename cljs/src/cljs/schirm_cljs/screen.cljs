@@ -288,6 +288,7 @@
   (remove-line [this pos])
   (update-line [this pos update-fn])
   (reset [this new-size])
+  (scrollback-cleanup [this lines])
   (set-origin [this screen0])
   (set-size [this screen0])
   (show [this show])
@@ -386,6 +387,11 @@
       (do
         (-append-missing-lines this pos)
         (f (nth this pos))))
+    this)
+  (scrollback-cleanup [this lines]
+    (let [lines (min lines (-> element .-children .-length))]
+      (dotimes [_ lines]
+        (.removeChild element (.-firstChild element))))
     this)
   (reset [this new-size]
     (set! (.-innerHTML element) "")
@@ -503,6 +509,9 @@
       (do
         (-append-missing-lines this pos)
         (f (nth this pos))))
+    this)
+  (scrollback-cleanup [this lines]
+    ;; no scrollback -> no cleanup
     this)
   (reset [this new-size]
     (set! (.-innerHTML element) "")

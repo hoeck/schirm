@@ -147,10 +147,6 @@ class Terminal(object):
         # Once we receive this, we will resize the client too.
         self.client.set_size(h, w)
 
-    def remove_history(self, n):
-        n = int(n)
-        self.screen.linecontainer.remove_history(n)
-
     def paste_xsel(self):
         self.client.write(utils.get_xselection())
 
@@ -305,7 +301,6 @@ class Terminal(object):
 
     valid_msg_names = set(['keypress',
                            'resize',
-                           'remove_history',
                            'paste_xsel',
                            'focus',
                            'hide_cursor',

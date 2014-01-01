@@ -64,6 +64,7 @@ class TermScreen(pyte.Screen):
 
     def pop_events(self):
         self.linecontainer.cursor(self.cursor.y, self.cursor.x)
+        self.linecontainer.check_scrollback()
         if self.events:
             self.events.extend(self.linecontainer.pop_events())
             ev = self.events
@@ -580,12 +581,6 @@ class TermScreen(pyte.Screen):
         else:
             # ignore strings (xterm behaviour) in plain terminal mode
             self.draw_string(string)
-
-    ## cutting the terminal scrollback
-
-    def remove_history(self, lines):
-        """Remove the first n lines from the history."""
-        self.linecontainer.remove_history(lines)
 
     ## xterm title hack
 
