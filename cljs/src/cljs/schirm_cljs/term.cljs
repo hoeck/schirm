@@ -39,17 +39,14 @@
 
 (defn create-iframe [id]
   (let [scroll-size (dom-utils/scrollbar-size)
-        uri (format "http://%s.localhost" id)
-        iframe (dom-utils/create-element
-                "iframe"
-                {:style {:width "100%",
-                         :min-height (:vertical scroll-size)
-                         :height (:vertical scroll-size)}
-                 :src uri
-                 :id id})]
-    ;; (.addEventListener iframe "webkitTransitionEnd" #(screen/auto-scroll screen)) ???
-    iframe
-    ))
+        uri (format "http://%s.localhost" id)]
+    (dom-utils/create-element
+     "iframe"
+     {:style {:width "100%",
+              :min-height (:vertical scroll-size)
+              :height (:vertical scroll-size)}
+      :src uri
+      :id id})))
 
 (defn invoke-screen-method [state scrollback-screen alt-screen msg]
   (let [[meth & args] msg
@@ -112,12 +109,14 @@
                                              (set! (.-innerHTML l) "")
                                              (.appendChild l iframe)
                                              (.focus iframe)))
+                       (.addEventListener iframe "webkitTransitionEnd" #(screen/auto-scroll screen))
                        state)
 
       "iframe-resize" (let [[iframe-id height] args
                             iframe (.getElementById js/document iframe-id)
                             height-style (if (==  height "fullscreen") "100%" (str height))]
                         (when iframe (-> iframe .-style .-height (set! height-style)))
+                        (.setTimeout js/window (screen/auto-scroll screen))
                         state)
       )))
 

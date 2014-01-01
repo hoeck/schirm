@@ -315,7 +315,7 @@
 
 (def auto-scroll-activation-height 10)
 
-(defn -auto-scroll
+(defn auto-scroll
   "Scroll screen to the bottom if auto-scroll is active."
   [screen]
   (if (.-auto-scroll-active screen)
@@ -418,7 +418,7 @@
         (let [scrollback-height (-> element .-children (aget screen0) .-offsetTop)]
           (-> element .-style (.setProperty "top" (- scrollback-height)))
           (-> element .-parentElement .-style (.setProperty "margin-top" scrollback-height))))
-      (-auto-scroll this))
+      (auto-scroll this))
     this
     ))
 

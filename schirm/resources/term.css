@@ -58,8 +58,3 @@ body {
     left:0px;
     right:2px;
 }
-
-iframe {
-    -webkit-transition-property: height;
-    -webkit-transition-duration: 0.1s;
-}
