@@ -294,7 +294,7 @@
   (adjust [this]))
 
 (def screen-markup
-  "<div class=\"schirm-terminal\">
+  "<div class=\"schirm-terminal\" tabindex=\"1\">
      <div class=\"terminal-screen\">
        <pre class=\"terminal-line-container\"></pre>
      </div>
@@ -422,6 +422,19 @@
     this
     ))
 
+(defn focus
+  "Focus the schirm terminal containing screen."
+  [screen]
+  (let [parent (-> screen .-element .-parentElement)
+        grandparent (.-parentElement parent)
+        container (cond (-> parent .-classList (.contains "schirm-terminal"))
+                        parent
+                        (-> grandparent .-classList (.contains "schirm-terminal"))
+                        grandparent
+                        :else
+                        (assert false))]
+    (.focus container)))
+
 (defn remove-cursor [screen]
   (let [segment (dom-utils/select (.-element screen) '.cursor)]
     (when segment
@@ -434,7 +447,8 @@
       ;; iframe-line do not set the cursor here
       :todo
       ;; plain terminal line
-      (update-line screen line-number #(line-set-cursor % pos)))))
+      (do (update-line screen line-number #(line-set-cursor % pos))
+          (focus screen)))))
 
 (deftype AltScreen [;; the DOM element containing the terminal lines
                     element

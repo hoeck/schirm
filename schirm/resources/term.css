@@ -1,4 +1,8 @@
 
+div.schirm-terminal:focus {
+    outline:none;
+}
+
 /* DEBUG */
 /* div.schirm-terminal span { */
 /*   border: solid 1px #ccc; */
