@@ -327,7 +327,7 @@
 (defn -auto-scroll-check
   "Set the auto-scroll-active flag of screen"
   [screen]
-  (let [parent (-> screen .-element .-parentElement .-parentElement)]
+  (let [parent (-> screen .-element .-parentElement .-parentElement .-parentElement)]
     (if (= (.-auto-scroll-last-height screen) (.-scrollHeight parent))
       ;; Whenever the user scrolls withing
       ;; autoScrollActivationAreaHeight pixels to the bottom,
