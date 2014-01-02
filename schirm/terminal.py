@@ -62,8 +62,6 @@ class Terminal(object):
         self.stream.attach(self.screen)
         self.iframes = termiframe.Iframes(self.client)
 
-        self.focus = False
-
         # terminal websocket
         self.websocket = None
         self.state = None # None -> 'ready' -> 'closed'
@@ -153,14 +151,6 @@ class Terminal(object):
 
     def paste_xsel(self):
         self.client.write(utils.get_xselection())
-
-    def focus(self, focus=True):
-        self.focus = bool(focus)
-        self.render()
-
-    def hide_cursor(self):
-        # turn off the cursor
-        self.screen.linecontainer.hide_cursor(self.screen.cursor.y)
 
     def render(self, msg=None):
 
@@ -306,8 +296,6 @@ class Terminal(object):
     valid_msg_names = set(['keypress',
                            'resize',
                            'paste_xsel',
-                           'focus',
-                           'hide_cursor',
                            'iframe_resize'])
     def dispatch_msg(self, msg):
         """Dispatch websocket messages."""
