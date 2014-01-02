@@ -343,6 +343,18 @@
       (set! (.-auto-scroll-last-height screen)
             (.-scrollHeight parent)))))
 
+(defn scroll
+  "Scroll the window by amount.
+
+  Available amounts are: :page-up :page-down :top and :bottom."
+  [amount]
+  (let [page-size (* (.-innerHeight js/window) 0.95)]
+    (condp = amount
+      :page-up   (.scrollBy js/window 0 (- page-size))
+      :page-down (.scrollBy js/window 0 page-size)
+      :top    (.scrollTo js/window 0 0)
+      :bottom (.scrollTo js/window 0 99999999999))))
+
 (deftype ScrollbackScreen [;; the DOM element containing the terminal lines
                            element
                            ;; line origin

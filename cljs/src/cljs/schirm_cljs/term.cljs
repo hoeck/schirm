@@ -129,7 +129,12 @@
                                      state)
       )))
 
-(def chords {;; browsers have space and shift-space bound to scroll page down/up
+(def chords {;; scrolling
+             [:shift :page_up]   (fn [send] (screen/scroll :page-up)   true)
+             [:shift :page_down] (fn [send] (screen/scroll :page-down) true)
+             [:shift :home] (fn [send] (screen/scroll :top)    true)
+             [:shift :end]  (fn [send] (screen/scroll :bottom) true)
+             ;; browsers have space and shift-space bound to scroll page down/up
              [:space] (fn [send] (send {:string " "}) true)
              [:shift :space] (fn [send] (send {:string " "}) true)
              ;; ignore F12 as this opens the browsers devtools
