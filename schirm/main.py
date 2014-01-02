@@ -34,6 +34,7 @@ def setup_and_dispatch(server,
                        terminal_url,
                        use_pty,
                        cmd,
+                       start_clojurescript_repl=False,
                        initial_request=None):
 
     # client process (pty or plain process)
@@ -43,7 +44,9 @@ def setup_and_dispatch(server,
     )
 
     # terminal
-    term = terminal.Terminal(client, url=terminal_url)
+    term = terminal.Terminal(client,
+                             url=terminal_url,
+                             start_clojurescript_repl=start_clojurescript_repl)
     if initial_request:
         term.request(initial_request)
 
@@ -87,7 +90,7 @@ def setup_and_dispatch(server,
         elif res is False:
             return False, None
 
-def run(use_pty=True, cmd=None):
+def run(use_pty=True, cmd=None, start_clojurescript_repl=False):
 
     # threaded webserver acting as a proxy+webserver
     server = webserver.Server().start()
@@ -101,6 +104,7 @@ def run(use_pty=True, cmd=None):
                                           cmd=cmd,
                                           use_pty=use_pty,
                                           terminal_url=terminal_url,
+                                          start_clojurescript_repl=start_clojurescript_repl,
                                           initial_request=req)
             if res == 'reload':
                 pass
@@ -130,6 +134,7 @@ def main():
     parser.add_argument("--no-pty", help="Do not use a pty (pseudo terminal) device.", action="store_true")
     parser.add_argument("--command", help="The command to execute within the terminal instead of the current users default shell.")
     parser.add_argument("--rpdb", help="Start the Remote Python debugger using this password.")
+    parser.add_argument("--repl", "--start-clojurescript-repl", help="Start Clojurescript REPL to debug the Schirm client code.", action="store_true")
     args = parser.parse_args()
 
     if args.rpdb:
@@ -151,7 +156,8 @@ def main():
     run_args = dict
 
     run(use_pty=not args.no_pty,
-        cmd=args.command or None)
+        cmd=args.command or None,
+        start_clojurescript_repl=args.repl)
 
 if __name__ == '__main__':
     main()

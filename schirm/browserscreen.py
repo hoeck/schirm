@@ -344,3 +344,8 @@ class BrowserScreen(object):
 
     def iframe_resize(self, iframe_id, height):
         self._append(('iframe-resize', iframe_id, height))
+
+    # debug
+
+    def start_clojurescript_repl(self):
+        self._append(('start-clojurescript-repl', ))

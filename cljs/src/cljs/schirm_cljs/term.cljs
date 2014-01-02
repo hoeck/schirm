@@ -4,6 +4,8 @@
 
             [clojure.string :as string]
 
+            [clojure.browser.repl :as repl]
+
             [schirm-cljs.screen-tests :as tests]
 
             [schirm-cljs.screen :as screen]
@@ -121,6 +123,10 @@
                         (when iframe (-> iframe .-style .-height (set! height-style)))
                         (.setTimeout js/window (screen/auto-scroll screen))
                         state)
+
+      ;; debug
+      "start-clojurescript-repl" (do (repl/connect "http://localhost:9000/repl")
+                                     state)
       )))
 
 (def chords {;; browsers have space and shift-space bound to scroll page down/up

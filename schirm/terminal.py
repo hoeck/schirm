@@ -46,9 +46,10 @@ class Terminal(object):
     def create_url(self, id=None):
         return "http://%s.localhost" % (id or roll_id())
 
-    def __init__(self, client, size=(80,25), url=None):
+    def __init__(self, client, size=(80,25), url=None, start_clojurescript_repl=False):
         self.client = client
         self.size = size
+        self._start_clojurescript_repl = start_clojurescript_repl
         self.reset()
 
         # unique random id to hide the terminals url
@@ -66,6 +67,9 @@ class Terminal(object):
         # terminal websocket
         self.websocket = None
         self.state = None # None -> 'ready' -> 'closed'
+
+        if self._start_clojurescript_repl:
+            self.screen.start_clojurescript_repl()
 
     # helpers
 

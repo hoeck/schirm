@@ -665,6 +665,9 @@ class TermScreen(pyte.Screen):
     def iframe_resize(self, iframe_id, height):
         self.linecontainer.iframe_resize(iframe_id, height)
 
+    def start_clojurescript_repl(self):
+        self.linecontainer.start_clojurescript_repl()
+
 class SchirmStream(pyte.Stream):
 
     """An optimized (for the usage in this project) verison pyte.Stream."""
