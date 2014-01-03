@@ -10,9 +10,9 @@ import tempfile
 import uuid
 import atexit
 import json
+import time
 
-import schirm
-import webserver
+__all__ = ('start_browser', )
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +61,42 @@ def firefox_configure_profile(config_dir, host, port):
 </RDF:RDF>
 """)
 
-def start_browser(proxy_port):
+class BrowserProcess(object):
+
+    def __init__(self, proc, profilepath):
+        self.proc = proc
+        self.profilepath = profilepath
+        self.state = 'running'
+
+    def kill(self, *args, **kwargs):
+        if self.state != 'killed':
+            self.state = 'killed'
+            self.proc.kill(*args, **kwargs)
+
+    def wait_and_cleanup(self):
+        try:
+            self.proc.wait()
+        except KeyboardInterrupt, e:
+            pass
+
+        logger.debug('removing profile: %r', self.profilepath)
+        for _ in range(10):
+            try:
+                shutil.rmtree(self.profilepath)
+                logger.debug('removing profile: done')
+                return
+            except OSError, e:
+                logger.debug('removing profile: error (%s)', e)
+                time.sleep(0.1)
+
+def start_browser(url,
+                  proxy_host,
+                  proxy_port):
+    """Start firefox, chromium or google-chrome.
+
+    Use a temporary profile, set proxy host and port and try to run the browser
+    in a minimal-chrome configuration.
+    """
 
     commands = ['chromium-browser', 'google-chrome', 'firefox', 'firefox-bin']
     available = (filter(is_available, commands) or [None])[0]
@@ -70,8 +105,7 @@ def start_browser(proxy_port):
     # once on exit
     os.setpgid(os.getpid(), os.getpid())
 
-    proxy = 'localhost:%s' % proxy_port
-    url = 'http://termframe.localhost/term.html'
+    proxy_url = '%s:%s' % (proxy_host, proxy_port)
 
     ensure_dir('~/.schirm')
 
@@ -80,76 +114,31 @@ def start_browser(proxy_port):
         # setup a temporary profile for each browser
         config_dir = tempfile.mkdtemp(prefix='chrome_profile',
                                       dir=os.path.join(os.path.expanduser('~/.schirm')))
-        atexit.register(lambda: shutil.rmtree(config_dir))
 
         args = ['--user-data-dir=%s' % config_dir, # google-chrome has no --temp-profile option
-                '--proxy-server=%s' % proxy,
+                '--proxy-server=%s' % proxy_url,
                 '--app=%s' % url]
         cmd = [available] + args
         logger.info("starting browser: %s", ' '.join(cmd))
         p = subprocess.Popen(cmd)
-        return p
+        return BrowserProcess(proc=p, profilepath=config_dir)
 
     elif available and 'fire' in available:
         # firefox
         config_dir = tempfile.mkdtemp(prefix='firefox_profile',
                                       dir=os.path.join(os.path.expanduser('~/.schirm')))
-        atexit.register(lambda: shutil.rmtree(config_dir))
 
         # create a temporary profile in .schirm to be able to find and manipulate it
         profile = "schirm-%s" %  uuid.uuid4()
         subprocess.check_call([available] + ['-no-remote', '-CreateProfile', "%s %s" % (profile, config_dir)])
-        firefox_configure_profile(config_dir, host='localhost', port=proxy_port)
+        firefox_configure_profile(config_dir, host=proxy_host, port=proxy_port)
 
         cmd = [available] + ['-no-remote',
                              '-profile', config_dir,
                              '-new-window', url]
         logger.info("starting browser: %s" % cmd)
         p = subprocess.Popen(cmd)
-        return p
+        return BrowserProcess(proc=p, profilepath=config_dir)
 
     else:
         raise Exception("No suitable browser found!")
-
-class UIProxy(object):
-
-    def __init__(self, quit_cb=None):
-        self.quit_cb = quit_cb
-
-    def execute_script(self, src):
-        print "execute script", repr(src)
-
-    def load_uri(self, uri):
-        print "load_uri", uri
-
-    def respond(self, requestid, data, close=True):
-        ws.respond(requestid, data, close)
-
-    def set_title(self, title):
-        print "uh oh"
-
-    def close(self):
-        # close the tab
-        print "close"
-
-    def quit(self):
-        if self.quit_cb:
-            self.quit_cb()
-
-# TODO: sort this out
-ws = None
-
-def start(use_pty=True, cmd=None):
-    global ws
-
-    p = None
-    def _quit():
-        p.kill()
-
-    s = schirm.Schirm(UIProxy(_quit),
-                      websocket_proxy_hack=False,
-                      use_pty=use_pty,
-                      cmd=cmd)
-    ws = webserver.Server(s)
-    p = start_browser(ws.getport())
-    p.wait()

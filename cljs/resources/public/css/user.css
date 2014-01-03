@@ -53,15 +53,11 @@
     text-decoration: line-through;
 }
 
-:focus .cursor {
+.cursor {
     background-color: #ff00b0;
-    border: none;
-    width: none;
-    height: none;
 }
 
-.cursor {
-    background-color: transparent;
+.cursor-inactive {
     border: solid 1px #ff00b0;
     display: inline-block;
     width: 7px;

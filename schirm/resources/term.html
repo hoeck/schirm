@@ -28,17 +28,18 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 <script type="text/javascript">
 
-var term;
-function termInit() {
-  term = new SchirmTerminal(document.body, null, %(websocket_url)s);
-  document.body.onresize = term.resize;
-};
+//var term;
+//function termInit() {
+//  term = new SchirmTerminal(document.body, null);
+//  document.body.onresize = term.resize;
+//};
+//
+//document.onreadystatechange = function () {
+//    if (document.readyState == "complete") {
+//        termInit();
+//    }
+//}
 
-document.onreadystatechange = function () {
-    if (document.readyState == "complete") {
-        termInit();
-    }
-}
 </script>
 
 </head>
@@ -49,5 +50,16 @@ document.onreadystatechange = function () {
   <!--   </div> -->
   <!--   <pre class="terminal-app-container"></pre> -->
   <!-- </div> -->
+
+
+<pre style="position:relative">
+<span class="line"><span class="f-white b-green">A</span><span class="b-brown bold">-B-</span><span class="b-default-reversed f-default-reversed cursor">C</span><span class="">D</span></span>
+<span class="meter">012345678901234567890123456789012345678901234567890123456789012345678901234567890</span>
+<span class="meter">          10        20        30         40       50        60        70</span>
+<span class="empty"></span>
+</pre>
+
+
+
 </body>
 </html>

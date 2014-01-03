@@ -82,10 +82,10 @@ class Char(_Char):
     for most of the attributes.
     """
     def __new__(cls, data, fg="default", bg="default", bold=False,
-                italics=False, underscore=False, reverse=False,
-                strikethrough=False):
+                italics=False, underscore=False, strikethrough=False,
+                reverse=False):
         return _Char.__new__(cls, data, fg, bg, bold, italics, underscore,
-                             reverse, strikethrough)
+                             strikethrough, reverse)
 
 
 class Cursor(object):

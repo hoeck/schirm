@@ -1,3 +1,8 @@
 *.pyc
 build
 dist
+
+cljs/target
+cljs/repl
+cljs/out
+cljs/resources/public/js/term.js

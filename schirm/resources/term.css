@@ -1,4 +1,8 @@
 
+div.schirm-terminal:focus {
+    outline:none;
+}
+
 /* DEBUG */
 /* div.schirm-terminal span { */
 /*   border: solid 1px #ccc; */
@@ -53,9 +57,4 @@ body {
     bottom:2px;
     left:0px;
     right:2px;
-}
-
-iframe {
-    -webkit-transition-property: height;
-    -webkit-transition-duration: 0.1s;
 }
