@@ -9,7 +9,6 @@ import email.Message
 
 import chan
 
-import htmlterm
 import utils
 from webserver import guess_type
 

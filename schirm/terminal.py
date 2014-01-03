@@ -13,7 +13,6 @@ import utils
 import termkey
 import termscreen
 import termiframe
-import htmlterm
 import proxyconnection
 
 logger = logging.getLogger(__name__)
@@ -34,8 +33,6 @@ class Terminal(object):
 
     static_resources = {
         '/term.html': 'term.html',
-        #'/term.js': 'term.js',
-        #'/term.js': 'term-debug.js',
         '/term.js': 'term-cljs.js',
         '/term.css': 'term.css',
         '/default-user.css': 'user.css',
