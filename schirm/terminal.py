@@ -149,8 +149,10 @@ class Terminal(object):
         # Once we receive this, we will resize the client too.
         self.client.set_size(h, w)
 
-    def paste_xsel(self):
-        self.client.write(utils.get_xselection())
+    def paste_selection(self, string=None):
+        """Unless None, write the given string to the client."""
+        if string is not None:
+            self.client.write(string)
 
     def render(self, msg=None):
 
@@ -295,7 +297,7 @@ class Terminal(object):
 
     valid_msg_names = set(['keypress',
                            'resize',
-                           'paste_xsel',
+                           'paste_selection',
                            'iframe_resize'])
     def dispatch_msg(self, msg):
         """Dispatch websocket messages."""

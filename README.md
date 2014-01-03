@@ -16,9 +16,6 @@ Get the source:
 
     $ git clone https://github.com/hoeck/schirm.git
 
-Optionally, install xsel (<https://github.com/kfish/xsel> or `apt-get install xsel`)
-to be able to paste the current X selection using Shift-Insert.
-
 Run:
 
     $ cd schirm

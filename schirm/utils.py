@@ -27,16 +27,6 @@ def put_nowait_sleep(queue, data):
             time.sleep(wait_f(times))
             times += 1
 
-def get_xselection():
-    try:
-        return subprocess.check_output(['xsel', '-o'])
-    except OSError, e:
-        if e.errno == 2:
-            logger.error("Install xsel to use the 'paste x selection' feature")
-            return ""
-        else:
-            raise e
-
 class Profile(object):
 
     def __init__(self, path):

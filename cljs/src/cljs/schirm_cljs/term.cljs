@@ -129,22 +129,29 @@
                                      state)
       )))
 
-(def chords {;; scrolling
-             [:shift :page_up]   (fn [send] (screen/scroll :page-up)   true)
-             [:shift :page_down] (fn [send] (screen/scroll :page-down) true)
-             [:shift :home] (fn [send] (screen/scroll :top)    true)
-             [:shift :end]  (fn [send] (screen/scroll :bottom) true)
+(def chords {;; paste xselection
+             [:shift :insert]
+             (fn [{:keys [send]}] (send {:name "paste_selection" :string (-> js/document .getSelection .toString)}) true)
+             ;; scrolling
+             [:shift :page_up]   (fn [env] (screen/scroll :page-up)   true)
+             [:shift :page_down] (fn [env] (screen/scroll :page-down) true)
+             [:shift :home] (fn [env] (screen/scroll :top)    true)
+             [:shift :end]  (fn [env] (screen/scroll :bottom) true)
              ;; browsers have space and shift-space bound to scroll page down/up
-             [:space] (fn [send] (send {:string " "}) true)
-             [:shift :space] (fn [send] (send {:string " "}) true)
+             [:space] (fn [{:keys [send-key]}] (send-key {:string " "}) true)
+             [:shift :space] (fn [{:keys [send-key]}] (send-key {:string " "}) true)
              ;; ignore F12 as this opens the browsers devtools
-             [:F12] (fn [send] false)})
+             [:F12] (fn [env] false)})
 
 (defn setup-keys [send-chan]
-  (let [send-key (fn [key]
+  (let [send (fn [message] (put! send-chan (.stringify js/JSON (clj->js message))))
+        send-key (fn [key]
                    (let [message {:name :keypress :key key}]
-                     (put! send-chan (.stringify js/JSON (clj->js message)))))]
-    (keys/setup-window-key-handlers js/window chords send-key)))
+                     (send message)))
+        ;; an environment to implement key-chord actions
+        env {:send-key send-key
+             :send send}]
+    (keys/setup-window-key-handlers js/window chords env)))
 
 (defn setup-screens [parent-element input-chan]
   (let [[scrollback-screen alt-screen :as screens] (screen/create-screens parent-element)

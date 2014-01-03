@@ -41,28 +41,29 @@
         (string/lower-case (when-let [k (or (:name key) (.fromCharCode js/String (:code key)))] (keyword k)))]
        (filter identity)))
 
-(defn handle-key-down [chords send key]
+(defn handle-key-down [chords env key]
   (let [ascii-a 65
         ascii-z 90
         chord (get-key-chord key)
-        handler (get chords chord)]
+        handler (get chords chord)
+        send-key (:send-key env)]
     (cond ;; key chords
           handler
-          (handler send)
+          (handler env)
           ;; catch (control|alt)-* sequences
           (and (or (:control key) (:alt key))
                (<= ascii-a (:code key) ascii-z))
-          (do (send (assoc key :name (.fromCharCode js/String (:code key))))
+          (do (send-key (assoc key :name (.fromCharCode js/String (:code key))))
               true)
           ;; special keys
           (:name key)
-          (do (send key)
+          (do (send-key key)
               true)
 
           :else false
           )))
 
-(defn setup-window-key-handlers [element chords send]
+(defn setup-window-key-handlers [element chords env]
   (let [key-down-processed (atom false)
         chords (into {} (map (fn [[k,v]] [(map string/lower-case k) v]) chords))]
     (set! (.-onkeydown element)
@@ -73,7 +74,7 @@
                        :shift (.-shiftKey e)
                        :alt (.-altKey e)
                        :control (.-ctrlKey e)}
-                  processed (handle-key-down chords send key)]
+                  processed (handle-key-down chords env key)]
               (reset! key-down-processed processed)
               (not processed))))
     (set! (.-onkeypress element)
@@ -84,7 +85,7 @@
                        :alt (.-altKey e)
                        :control (.-ctrlKey e)}]
               (if (and (:string key) (not @key-down-processed))
-                (do (send key)
+                (do ((:send-key env) key)
                     true)
                 false))))
     (set! (.-onkeyup element)
