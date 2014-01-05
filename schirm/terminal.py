@@ -33,7 +33,7 @@ class Terminal(object):
 
     static_resources = {
         '/term.html': 'term.html',
-        '/term.js': 'term-cljs.js',
+        '/term.js': 'term.js',
         '/term.css': 'term.css',
         '/default-user.css': 'user.css',
         '/favicon.ico': 'schirm.png',
