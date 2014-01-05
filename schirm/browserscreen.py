@@ -1,4 +1,3 @@
-
 import array
 
 from pyte.screens import Char
@@ -311,9 +310,11 @@ class BrowserScreen(object):
 
     # screen managing methods
 
+    SCROLLBACK_CLEANUP_THRESHOLD = 64
+
     def check_scrollback(self):
         surplus_lines = self.total_lines - self.SCROLLBACK_SIZE
-        if surplus_lines > 0:
+        if surplus_lines > self.SCROLLBACK_CLEANUP_THRESHOLD:
             # remove them
             self._append(('scrollback-cleanup', surplus_lines))
             self.total_lines -= surplus_lines

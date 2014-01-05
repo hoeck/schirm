@@ -401,9 +401,14 @@
         (f (nth this pos))))
     this)
   (scrollback-cleanup [this lines]
+    ;; efficiently get rid of many lines using a DOM range
     (let [lines (min lines (-> element .-children .-length))]
-      (dotimes [_ lines]
-        (.removeChild element (.-firstChild element))))
+      (when (< 0 lines)
+        (let [range (.createRange js/document)]
+          (.setStartBefore range (.-firstChild element))
+          (.setEndAfter range (-> element .-children (aget (dec lines))))
+          (.deleteContents range)
+          (.detach range))))
     this)
   (reset [this new-size]
     (set! (.-innerHTML element) "")
