@@ -10,7 +10,8 @@
 
             [schirm-cljs.screen :as screen]
             [schirm-cljs.keys :as keys]
-            [schirm-cljs.dom-utils :as dom-utils])
+            [schirm-cljs.dom-utils :as dom-utils]
+            [schirm-cljs.word-select :as word-select])
 
   (:require-macros [cljs.core.async.macros :as m :refer [go alt!]]))
 
@@ -59,8 +60,8 @@
       "reset"  (do (screen/reset scrollback-screen (nth args 0))
                    (screen/reset alt-screen (nth args 0))
                    state)
-      "resize" (do (screen/set-size scrollback-screen (nth args 0))
-                   (screen/set-size alt-screen (nth args 0))
+      "resize" (do (screen/set-size scrollback-screen (nth args 0) (nth args 1))
+                   (screen/set-size alt-screen (nth args 0) (nth args 1))
                    state)
       "insert" (let [[line, col, string, attrs] args
                      ss (create-styled-string string attrs)]
@@ -172,6 +173,12 @@
     (set! (.-onresize js/window) resize-screen)
     (resize-screen)))
 
+(defn setup-word-select [screens]
+  (doseq [s screens]
+    (.addEventListener (.-element s)
+                       "dblclick"
+                       #(word-select/select-word % s))))
+
 (defn setup-websocket [url in out]
   (let [ws (js/WebSocket. url)]
     (set! (.-onmessage ws)
@@ -192,6 +199,7 @@
         container (dom-utils/select 'body)
         screens (setup-screens container ws-recv)]
     (setup-keys ws-send)
+    (setup-word-select screens)
     (setup-resize container ws-send screens)
     (setup-websocket ws-url ws-send ws-recv)))
 

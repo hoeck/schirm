@@ -246,7 +246,7 @@ class BrowserScreen(object):
         self.total_lines = 0
         self._append(('reset', lines))
 
-    def resize(self, old_lines, new_lines):
+    def resize(self, old_lines, new_lines, new_columns):
         """Resize the browserscreen from old_lines to new_lines height."""
         assert not self._events # events must have been flushed before
 
@@ -279,7 +279,7 @@ class BrowserScreen(object):
         if delta != 0:
             self.add_line_origin(-delta)
 
-        self._append(('resize', new_lines))
+        self._append(('resize', new_lines, new_columns))
 
         return delta # used to compute the new cursor pos
 

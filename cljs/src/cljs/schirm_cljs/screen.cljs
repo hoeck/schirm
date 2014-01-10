@@ -290,7 +290,7 @@
   (reset [this new-size])
   (scrollback-cleanup [this lines])
   (set-origin [this screen0])
-  (set-size [this screen0])
+  (set-size [this height width])
   (show [this show])
   (adjust [this]))
 
@@ -360,7 +360,9 @@
                            ;; line origin
                            ^mutable screen0
                            ;; the current terminal size in lines
-                           ^mutable size
+                           ^mutable height
+                           ;; the current terminal width in columns
+                           ^mutable width
                            ;; visibility
                            ^mutable visible
                            ;; auto scroll
@@ -386,7 +388,7 @@
     (.insertBefore element line (nth this pos))
     this)
   (append-line [this line]
-    (-append-missing-lines this (dec size))
+    (-append-missing-lines this (dec height))
     (.appendChild element line)
     this)
   (remove-line [this pos]
@@ -410,16 +412,17 @@
           (.deleteContents range)
           (.detach range))))
     this)
-  (reset [this new-size]
+  (reset [this new-height]
     (set! (.-innerHTML element) "")
-    (set! (.-size this) new-size)
+    (set! (.-height this) new-height)
     (set! (.-screen0 this) 0)
     this)
   (set-origin [this screen0]
     (set! (.-screen0 this) screen0)
     this)
-  (set-size [this new-size]
-    (set! (.-size this) new-size)
+  (set-size [this height width]
+    (set! (.-height this) height)
+    (set! (.-width this) width)
     this)
   (show [this show]
     (set! (.-visible this) show)
@@ -437,7 +440,7 @@
     ;; };
     ;; this.adjustTrailingSpace = adjustTrailingSpace;
     (let [chlen (-> element .-children .-length)]
-      (if (and chlen (< 0 (- chlen screen0) size))
+      (if (and chlen (< 0 (- chlen screen0) height))
         (let [scrollback-height (-> element .-children (aget screen0) .-offsetTop)]
           (-> element .-style (.setProperty "top" (- scrollback-height)))
           (-> element .-parentElement .-style (.setProperty "margin-top" scrollback-height))))
@@ -476,7 +479,9 @@
 (deftype AltScreen [;; the DOM element containing the terminal lines
                     element
                     ;; the current terminal size in lines
-                    ^mutable size
+                    ^mutable height
+                    ;; the current terminal width in columns
+                    ^mutable width
                     ;; visibility
                     ^mutable visible]
   ;; element is the PRE which contains the screens lines as children
@@ -499,7 +504,7 @@
     (.insertBefore element line (nth this pos))
     this)
   (append-line [this line]
-    (-append-missing-lines this (dec size))
+    (-append-missing-lines this (dec height))
     (condp = (.-nodeType line)
       (.-DOCUMENT_FRAGMENT_NODE js/document) ;; insert many lines
       (do
@@ -511,7 +516,7 @@
         ;; insert the DocumentFragment
         (.appendChild element line)
         ;; clean up superflous lines at the top
-        (dotimes [i (max 0 (- (-> element .-children .-length) size))]
+        (dotimes [i (max 0 (- (-> element .-children .-length) height))]
           (.removeChild element (.-firstChild element))))
       (.-ELEMENT_NODE js/document) ;; a single line
       (do (when-let [ch (nth this 0 nil)] (.removeChild element ch))
@@ -530,14 +535,15 @@
   (scrollback-cleanup [this lines]
     ;; no scrollback -> no cleanup
     this)
-  (reset [this new-size]
+  (reset [this new-height]
     (set! (.-innerHTML element) "")
-    (set! (.-size this) new-size)
+    (set! (.-height this) new-height)
     this)
   (set-origin [this screen0]
     this)
-  (set-size [this new-size]
-    (set! (.-size this) new-size)
+  (set-size [this height width]
+    (set! (.-height this) height)
+    (set! (.-width this) width)
     this)
   (show [this show]
     (set! (.-visible this) show)
@@ -549,6 +555,7 @@
   (let [screen (ScrollbackScreen. (-> element (.getElementsByClassName "terminal-line-container") (aget 0))
                                   0
                                   0
+                                  0
                                   true
                                   true
                                   0)]
@@ -557,6 +564,7 @@
 
 (defn create-alt-screen [element]
   (AltScreen. (-> element (.getElementsByClassName "terminal-alt-container") (aget 0))
+              0
               0
               true))
 

@@ -157,7 +157,7 @@ class TermScreen(pyte.Screen):
             self.reset_mode(mo.DECOM)
         else:
             # cursor: make sure that it 'stays' on its current line
-            cursor_delta = self.linecontainer.resize(old_lines, self.lines)
+            cursor_delta = self.linecontainer.resize(old_lines, self.lines, self.columns)
             self.cursor.y += cursor_delta
             self.cursor.x = min(max(self.cursor.x, 0), self.columns-1)
 
