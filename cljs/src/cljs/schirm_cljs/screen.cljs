@@ -330,7 +330,7 @@
   [screen]
   (let [parent (-> screen .-element .-parentElement .-parentElement .-parentElement)]
     (if (= (.-auto-scroll-last-height screen) (.-scrollHeight parent))
-      ;; Whenever the user scrolls withing
+      ;; Whenever the user scrolls within
       ;; autoScrollActivationAreaHeight pixels to the bottom,
       ;; automatically keep bottom content visible (==
       ;; scroll automatically)
@@ -390,6 +390,7 @@
   (append-line [this line]
     (-append-missing-lines this (dec height))
     (.appendChild element line)
+    (-auto-scroll-check this)
     this)
   (remove-line [this pos]
     (when-let [line (nth this pos nil)]

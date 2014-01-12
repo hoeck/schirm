@@ -122,7 +122,7 @@
                             iframe (.getElementById js/document iframe-id)
                             height-style (if (==  height "fullscreen") "100%" (str height))]
                         (when iframe (-> iframe .-style .-height (set! height-style)))
-                        (.setTimeout js/window (screen/auto-scroll screen))
+                        (.setTimeout js/window #(screen/auto-scroll screen))
                         state)
 
       ;; debug
