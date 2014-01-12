@@ -44,8 +44,10 @@ pre.terminal-alt-container {
 }
 
 iframe {
-    border: None;
-    /* -webkit-transition: all 5s; */
+    /* transparent border to allow setting a border for focused
+     * iframes (.focus class) */
+    border: 1px solid transparent;
+    box-sizing: border-box;
 }
 
 body {

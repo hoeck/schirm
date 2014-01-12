@@ -179,6 +179,16 @@
                        "dblclick"
                        #(word-select/select-word % s))))
 
+(defn setup-iframe-focus []
+  (.addEventListener js/window "focus" (fn []
+                                         (when-let [e (-> js/document (.querySelector "iframe.focus"))]
+                                           (-> e .-classList (.remove "focus")))))
+  (.addEventListener js/window "blur" (fn []
+                                        (.setTimeout js/window (fn []
+                                                                 (when (-> js/document .-activeElement .-tagName (= "IFRAME"))
+                                                                   (-> js/document .-activeElement .-classList (.add "focus"))))
+                                                     0))))
+
 (defn setup-websocket [url in out]
   (let [ws (js/WebSocket. url)]
     (set! (.-onmessage ws)
@@ -200,6 +210,7 @@
         screens (setup-screens container ws-recv)]
     (setup-keys ws-send)
     (setup-word-select screens)
+    (setup-iframe-focus)
     (setup-resize container ws-send screens)
     (setup-websocket ws-url ws-send ws-recv)))
 
