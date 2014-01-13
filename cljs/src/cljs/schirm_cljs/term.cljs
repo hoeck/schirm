@@ -11,7 +11,8 @@
             [schirm-cljs.screen :as screen]
             [schirm-cljs.keys :as keys]
             [schirm-cljs.dom-utils :as dom-utils]
-            [schirm-cljs.word-select :as word-select])
+            [schirm-cljs.word-select :as word-select]
+            [schirm-cljs.copy-n-paste-hack :as copy-n-paste-hack])
 
   (:require-macros [cljs.core.async.macros :as m :refer [go alt!]]))
 
@@ -133,6 +134,8 @@
 (def chords {;; paste xselection
              [:shift :insert]
              (fn [{:keys [send]}] (send {:name "paste_selection" :string (-> js/document .getSelection .toString)}) true)
+             [:control :v]
+             (fn [{:keys [send]}] (copy-n-paste-hack/key-paste #(send {:name "paste_selection" :string %})))
              ;; scrolling
              [:shift :page_up]   (fn [env] (screen/scroll :page-up)   true)
              [:shift :page_down] (fn [env] (screen/scroll :page-down) true)
@@ -202,6 +205,13 @@
                 (.send ws msg)
                 (recur)))))))
 
+(defn setup-right-click
+  "Use a nearly invisible pixel-size textarea to be able to paste text."
+  [container ws-send]
+  (copy-n-paste-hack/setup-mouse-paste
+   container
+   #(put! ws-send (.stringify js/JSON (clj->js {:name "paste_selection" :string %})))))
+
 (defn setup-terminal []
   (let [ws-send  (chan)
         ws-recv (chan)
@@ -211,6 +221,7 @@
     (setup-keys ws-send)
     (setup-word-select screens)
     (setup-iframe-focus)
+    (setup-right-click container ws-send)
     (setup-resize container ws-send screens)
     (setup-websocket ws-url ws-send ws-recv)))
 

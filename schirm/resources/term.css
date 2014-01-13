@@ -60,3 +60,19 @@ body {
     left:0px;
     right:2px;
 }
+
+textarea.paste {
+    width: 1px;
+    height: 1px;
+    position: absolute;
+    z-index: 1000;
+    border: none;
+    margin: 0;
+    padding: 0;
+    resize: none;
+    display: none
+}
+
+textarea.paste:focus {
+    outline: none;
+}
