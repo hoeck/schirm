@@ -48,7 +48,9 @@
                                y (.-y e)
                                sel (.getSelection js/document)
                                sel-bounds (when-let [s (< 0 (.-rangeCount sel))]
-                                            (-> sel (.getRangeAt 0) .getBoundingClientRect))]
+                                            (-> sel (.getRangeAt 0) .getBoundingClientRect))
+                               scroll-top  (-> js/document .-body .-scrollTop)
+                               scroll-left (-> js/document .-body .-scrollLeft)]
                            (when (and
                                   ;; right click
                                   (= (.-button e) 2)
@@ -62,7 +64,7 @@
                                     true))
                              ;; display and move the pixel sized textarea to the current mouse position
                              (set! (-> ta .-style .-display) "block")
-                             (set! (-> ta .-style .-top)  y)
-                             (set! (-> ta .-style .-left) x)
+                             (set! (-> ta .-style .-top)  (+ scroll-top  y))
+                             (set! (-> ta .-style .-left) (+ scroll-left x))
                              (.focus ta)
                              (.preventDefault e)))))))

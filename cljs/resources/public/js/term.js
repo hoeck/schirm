@@ -22848,6 +22848,8 @@ schirm_cljs.copy_n_paste_hack.setup_mouse_paste = function setup_mouse_paste(con
         return null
       }
     }();
+    var scroll_top = document.body.scrollTop;
+    var scroll_left = document.body.scrollLeft;
     if(function() {
       var and__3941__auto__ = cljs.core._EQ_.call(null, e.button, 2);
       if(and__3941__auto__) {
@@ -22885,8 +22887,8 @@ schirm_cljs.copy_n_paste_hack.setup_mouse_paste = function setup_mouse_paste(con
       }
     }()) {
       ta.style.display = "block";
-      ta.style.top = y;
-      ta.style.left = x;
+      ta.style.top = scroll_top + y;
+      ta.style.left = scroll_left + x;
       ta.focus();
       return e.preventDefault()
     }else {
