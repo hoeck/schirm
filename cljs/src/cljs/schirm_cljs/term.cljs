@@ -149,9 +149,10 @@
              ;; ignore F12 as this opens the browsers devtools
              [:F12] (fn [env] false)})
 
-(defn setup-keys [send-chan]
+(defn setup-keys [send-chan send-callback]
   (let [send (fn [message] (put! send-chan (.stringify js/JSON (clj->js message))))
         send-key (fn [key]
+                   (when send-callback (send-callback))
                    (let [message {:name :keypress :key key}]
                      (send message)))
         ;; an environment to implement key-chord actions
@@ -220,7 +221,10 @@
         ws-url (format "ws://%s" (-> js/window .-location .-host))
         container (dom-utils/select 'body)
         screens (setup-screens container ws-recv)]
-    (setup-keys ws-send)
+    (setup-keys ws-send
+                ;; enable auto-scroll when typing non-chord keys
+                ;; == sending keystrokes to the terminal
+                #(screen/auto-scroll (nth screens 0) true))
     (setup-word-select screens)
     (setup-iframe-focus)
     (setup-right-click container ws-send)

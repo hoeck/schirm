@@ -318,8 +318,8 @@
 
 (defn auto-scroll
   "Scroll screen to the bottom if auto-scroll is active."
-  [screen]
-  (if (.-auto-scroll-active screen)
+  [screen force]
+  (if (or (.-auto-scroll-active screen) force)
     (let [parent (-> screen .-element .-parentElement .-parentElement .-parentElement)]
       (set! (.-scrollTop parent)
             (- (.-scrollHeight parent)
