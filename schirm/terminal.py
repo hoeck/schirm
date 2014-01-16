@@ -147,8 +147,16 @@ class Terminal(object):
         self.client.set_size(h, w)
 
     def paste_selection(self, string=None):
-        """Unless None, write the given string to the client."""
-        if string is not None:
+        """Unless None, write the given string to the client.
+
+        When None, try to use utils.get_xselection to grab the primary
+        X selection.
+        """
+        if string is None:
+            s = utils.get_xselection()
+            if s:
+                self.client.write(s)
+        else:
             self.client.write(string)
 
     def render(self, msg=None):

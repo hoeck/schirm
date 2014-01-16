@@ -133,7 +133,9 @@
 
 (def chords {;; paste xselection
              [:shift :insert]
-             (fn [{:keys [send]}] (send {:name "paste_selection" :string (-> js/document .getSelection .toString)}) true)
+             (fn [{:keys [send]}]
+               ;; paste the primary x selection using `xsel`
+               (send {:name "paste_selection"}))
              [:control :v]
              (fn [{:keys [send]}] (copy-n-paste-hack/key-paste #(send {:name "paste_selection" :string %})))
              ;; scrolling

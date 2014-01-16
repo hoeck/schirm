@@ -16,6 +16,13 @@ Get the source:
 
     $ git clone https://github.com/hoeck/schirm.git
 
+Optionally install xsel (<https://github.com/kfish/xsel> or
+`apt-get install xsel`) to be able to paste the current X
+selection using Shift-Insert. Middle-click selection works without
+additional programs.
+
+Make sure that you have either chromium, chrome or firefox installed.
+
 Run:
 
     $ cd schirm
