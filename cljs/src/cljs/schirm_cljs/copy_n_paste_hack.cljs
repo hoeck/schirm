@@ -52,8 +52,9 @@
                                scroll-top  (-> js/document .-body .-scrollTop)
                                scroll-left (-> js/document .-body .-scrollLeft)]
                            (when (and
-                                  ;; right click
-                                  (= (.-button e) 2)
+                                  ;; right or middle click
+                                  (or (= (.-button e) 2)
+                                      (= (.-button e) 1))
                                   ;; on the first 25 pixels, present the normal, non-input
                                   ;; contextmenu to allow accessing the 'reload' and 'inspect element' items
                                   (< 25 x)
