@@ -35,42 +35,59 @@ or install and then run it:
 
 Runs all your favorite commandline applications, including:
 
-  mc, htop, vim, grep --color ...
+    mc, htop, vim, grep --color ...
 
-HTML Demos
-==========
+Example Programs
+================
 
 See the demos in `support/`
 
-  - add them to your `PATH`::
+  - they use the schirmclient.py lib to show HTML documents in the terminal
 
-      $ PATH="$PATH:<path-to-schirm>/support"
+  - add them to your `PATH`:
+
+        $ PATH="$PATH:<path-to-schirm>/support"
 
     or invoke them with `<path-to-schirm>/support/<sXXX>`
 
   - get and view some html:
 
-    $ curl news.ycombinator.com | sview
+        $ curl news.ycombinator.com | sview
 
-  - preview a document::
+  - preview a Markdown document:
 
-    $ markdown README.md | sview
+        $ markdown README.md | sview
 
-  - show a tree of a directory (uses d3.js, slow/crashing for large directories)::
+  - show a tree of a directory (uses d3.js, slow/crashing for large directories):
 
-    $ stree .
+        $ stree .
 
-  - view an image::
+    or
 
-    $ sview schirm-logo.png
+        $ stree --circle
+
+  - view an image:
+
+        $ sview schirm-logo.png
 
     with interactive rescaling buttons:
 
-    $ sview -i schirm-logo.png
+        $ sview -i schirm-logo.png
 
   - edit text using codemirror:
 
-    $ sedit README.md
+        $ sedit README.md
+
+Styling
+=======
+
+Place your own styles into `~/.schirm/user.css` and restart the terminal.
+See `schirm/resources/user.css` for the default stylesheet.
+In the terminal window, press F12 to open the chrome/firefox devtools
+or right click to open the browsers contextmenu.
+Right-clicking on the very left of the terminal window (first 25
+pixels) opens a contextmenu containing the `reload` item - use this to
+quickly restart the terminal without closing the window.
 
 Client API
 ==========
@@ -81,12 +98,11 @@ stdout. See ``support/schirmclient.py``.
 Missing Features/Defects
 ========================
 
-- Application mode (fullscreen ncurses apps use this) is not implemented properly.
-- Slower than any other terminal emulator, becomes slower with each
-  page of terminal output due to the overhead of rendering the HTML
-  document.
+- no terminal mouse click support
+- only 16 colors
 - UTF-8 only
-- Alpha Software (expect lots of bugs)
+- slow Application mode
+- emulation glitches (e.g. when resizing htop)
 
 Similar Programs
 ================
