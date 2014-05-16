@@ -26,7 +26,7 @@ import base64
 import time
 import logging
 import urlparse
-import pkg_resources
+import pkgutil
 import mimetypes
 import itertools
 import email.parser
@@ -497,7 +497,7 @@ class ThreadedRequest(object):
 
     def found_resource(self, path, resource_module_name='schirm.resources', modify_fn=None):
         """Respond with a 200 to a request with a resource file."""
-        res_string = pkg_resources.resource_string(resource_module_name, path)
+        res_string = pkgutil.get_data(resource_module_name, path)
         if modify_fn:
             res_string = modify_fn(res_string)
         self.found(body=res_string,

@@ -3,7 +3,6 @@ import json
 import urlparse
 import logging
 import base64
-import pkg_resources
 import email.parser
 import email.Message
 

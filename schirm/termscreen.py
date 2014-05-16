@@ -19,9 +19,9 @@
 from UserList import UserList
 import os
 import logging
-import pkg_resources
 import re
 import base64
+import pkgutil
 
 import pyte
 from pyte.screens import Char, Margins, Cursor
@@ -606,7 +606,7 @@ class TermScreen(pyte.Screen):
 
     def _iframe_close_document(self):
         # add some html to the iframe document for registering ctr-c and ctrl-d key handlers
-        iframe_close_snippet = pkg_resources.resource_string('schirm.resources', 'iframe_close_snippet.html')
+        iframe_close_snippet = pkgutil.get_data('schirm.resources', 'iframe_close_snippet.html')
         self.linecontainer.iframe_write(self.iframe_id, iframe_close_snippet)
         self.linecontainer.iframe_close(self.iframe_id)
 
