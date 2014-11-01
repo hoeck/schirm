@@ -130,7 +130,7 @@ def setup_and_dispatch(server_chan,
         if isinstance(res, chan.Chan):
             channels.append(res)
         elif res == 'reload':
-            return 'reload', val
+            return 'reload', val[1] # the initial request
         elif res is False:
             return False, None
 
