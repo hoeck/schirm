@@ -4,13 +4,17 @@ import sys
 import logging
 import argparse
 import warnings
+import itertools
+import signal
+
 import chan
 
 import terminal
 import terminalio
-import webserver
-import browser
 import utils
+
+import sys; sys.path.append('../webkitwindow') # TODO: fix
+import webkitwindow
 
 logger = logging.getLogger('schirm')
 
@@ -30,7 +34,39 @@ def init_logger(level=logging.ERROR, filters=[]):
         l.setLevel(level)
     return l
 
-def setup_and_dispatch(server,
+
+class SchirmHandler(object):
+
+    _ids = itertools.count()
+
+    def __init__(self, dest_chan, startup_fn):
+        self._dest_chan = dest_chan
+        self._startup_fn = startup_fn
+
+    def startup(self, window):
+        signal.signal(signal.SIGINT, signal.SIG_DFL) # exit on CTRL-C
+        self._startup_fn()
+
+    def request(self, req):
+        # non blocking
+        req.id = self._ids.next()
+        utils.create_thread(lambda: self._dest_chan.put(('request', req)))
+
+    def connect(self, websocket):
+        # non blocking
+        utils.create_thread(lambda: self._dest_chan.put(('websocket_connect', websocket)))
+        # websocket.connected()
+
+    def receive(self, websocket, data):
+        # print "Websocket recv", websocket, data
+        # websocket.send('my'+data) # echo
+        utils.create_thread(lambda: self._dest_chan.put(('websocket_receive', websocket, data)))
+
+    def close(self, websocket):
+        print "Websocket closed", websocket
+
+
+def setup_and_dispatch(server_chan,
                        terminal_url,
                        use_pty,
                        cmd,
@@ -47,12 +83,15 @@ def setup_and_dispatch(server,
     term = terminal.Terminal(client,
                              url=terminal_url,
                              start_clojurescript_repl=start_clojurescript_repl)
+
     if initial_request:
         term.request(initial_request)
 
-    channels = [client.out, server.chan]
+    channels = [client.out, server_chan]
 
     while True:
+        res = True
+
         try:
             ch, val = chan.chanselect(consumers=channels, producers=[])
             closed = False
@@ -62,22 +101,27 @@ def setup_and_dispatch(server,
             closed = True
 
         if ch == client.out:
-            if closed:
-                assert False # TODO
+            assert not closed
 
             # output from the terminal process
             res = term.input(val)
 
-        elif ch == server.chan:
-            if ch == closed:
-                assert False
-
-            # webserver incoming request
-            res = term.request(val)
+        elif ch == server_chan:
+            assert not closed
+            msgtype = val[0]
+            if msgtype == 'request':
+                # webserver incoming request
+                res = term.request(val[1])
+            elif msgtype == 'websocket_connect':
+                res = term.websocket_connect(val[1])
+            elif msgtype == 'websocket_receive':
+                res = term.websocket_receive(val[1], val[2])
+            else:
+                assert 'unknown msgtype: %r' % (msgtype, )
 
         else:
             if closed:
-                channels.pop(ch)
+                channels.remove(ch)
             else:
                 # webserver incoming websocket message
                 res = term.websocket_msg(ch, val)
@@ -92,15 +136,15 @@ def setup_and_dispatch(server,
 
 def run(use_pty=True, cmd=None, start_clojurescript_repl=False):
 
-    # threaded webserver acting as a proxy+webserver
-    server = webserver.Server().start()
+    # pyqt embedded webkit
+    server_chan = chan.Chan()
 
     terminal_url = terminal.Terminal.create_url()
 
     def run_emulation():
         req = None
         while True:
-            res, req = setup_and_dispatch(server,
+            res, req = setup_and_dispatch(server_chan=server_chan,
                                           cmd=cmd,
                                           use_pty=use_pty,
                                           terminal_url=terminal_url,
@@ -109,20 +153,12 @@ def run(use_pty=True, cmd=None, start_clojurescript_repl=False):
             if res == 'reload':
                 pass
             else:
-                browser_process.kill()
                 return res
 
-    utils.create_thread(run_emulation)
-
-    # browser process to display the terminal
-    browser_process = browser.start_browser(
-        proxy_host='localhost',
-        proxy_port=server.port,
-        url=terminal_url,
-    )
-
-    # wait for the browser to be closed and rm the temporary profile
-    browser_process.wait_and_cleanup()
+    # pyqt embedded webkit takes over now
+    # puts all requests into server_chan
+    webkitwindow.WebkitWindow.run(handler=SchirmHandler(server_chan, lambda:utils.create_thread(run_emulation)),
+                                  url=terminal_url + '/term.html')
 
 def main():
 

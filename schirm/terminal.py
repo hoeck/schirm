@@ -7,6 +7,7 @@ import logging
 import socket
 import subprocess
 import time
+import urlparse
 
 import pyte
 import utils
@@ -41,6 +42,7 @@ class Terminal(object):
 
     @classmethod
     def create_url(self, id=None):
+        """Return a non-guessable localhost subdomain url for this terminal."""
         return "http://%s.localhost" % (id or roll_id())
 
     def __init__(self, client, size=(80,25), url=None, start_clojurescript_repl=False):
@@ -75,20 +77,20 @@ class Terminal(object):
             js = src
 
         data = ''.join(js)
-        self.websocket.respond(data, False)
+        self.websocket.send(data)
 
-    def respond_document(self, req, path):
+    def respond_document(self, req):
         """Respond to requests to the main terminal root url."""
-        logger.info("respond-document: %r %r" % (req.id, path))
+        logger.info("respond-document: %r %r" % (req.id, req.url))
 
-        if path in self.static_resources:
-            req.found_resource(self.static_resources[path])
-        elif path == '/user.css':
-            req.found(body=get_config_file_contents('user.css') or "", content_type="text/css")
-        elif path.startswith('/localfont/') and (path.endswith('.ttf') or path.endswith('.otf')):
+        if req.url_path in self.static_resources:
+            req.found_resource(self.static_resources[req.url_path], module_name='schirm.resources')
+        elif req.url_path == '/user.css':
+            req.found(get_config_file_contents('user.css') or "", content_type="text/css")
+        elif req.url_path.startswith('/localfont/') and (req.url_path.endswith('.ttf') or req.url_path.endswith('.otf')):
             # serve font files to allow using any local font in user.css via @font-face
-            req.found_file(path[len('/localfont'):])
-        elif path in ('', '/'):
+            req.found_file(req.url_path[len('/localfont'):])
+        elif req.url_path in ('', '/'):
             req.redirect(url='/term.html')
         else:
             req.notfound()
@@ -199,47 +201,61 @@ class Terminal(object):
         #     else:
         #         print '    %r,' % (e,)
 
-        self.websocket.respond(json.dumps(term_events), close=False)
+        self.websocket.send(json.dumps(term_events))
 
         return
 
     # handlers
 
-    def request(self, req):
-        # todo: A GET of the main terminal page when state != None should result in a terminal reset
-        term_root = self.url
-        protocol = req.data.get('protocol')
-        path     = req.data.get('path', '')
+    def websocket_connect(self, ws):
+        # open exactly one websocket request for webkit <-> schirm communication
 
-        if path.startswith(term_root):
-            if protocol == 'http':
-                if self.state == 'ready' and path == term_root + '/term.html':
-                    # main terminal url loaded a second time - reset terminal ??
-                    #self.respond_document(req, path[len(term_root):])
-                    self.websocket.respond(None, close=True)
-                    self.state = 'reloading'
-                    return 'reload' # quit, TODO: reload
-                else:
-                    self.respond_document(req, path[len(term_root):])
-
-            elif protocol == 'websocket':
-                if req.data.get('upgrade'):
-                    # open exactly one websocket request for webkit <-> schirm communication
-                    if not self.websocket:
-                        req.websocket_upgrade()
-                        self.websocket = req
-                        # communication set up, render the emulator state
-                        self.state = 'ready'
-                        self.render()
-                        return req.data['in_chan'] # listen to this add channel in the main dispatch loop
-                    else:
-                        req.notfound()
+        if ('http://' + ws.url_netloc).startswith(self.url):
+            if not self.websocket:
+                ws.connected()
+                self.websocket = ws
+                # communication set up, render the emulator state
+                self.state = 'ready'
+                self.render()
             else:
-                assert False
+                # ???
+                ws.close()
+        else:
+            # dispatch to self.iframes
+            self.iframes.websocket_connect(ws)
 
-        elif path.startswith(self.clojurescript_repl_url):
+    def websocket_receive(self, ws, data):
+        if ws == self.websocket:
+            # termframe websocket connection, used for RPC
+            try:
+                msg = json.loads(data)
+            except Exception, e:
+                logger.error("JSON decode error in websocket message: %r" % (data,))
+                return
+
+            return self.dispatch_msg(msg)
+        else:
+            # dispatch to self.iframes
+            return self.iframes.websocket_receive(ws, data)
+
+    def request(self, req):
+
+        print "REQ", req.url
+
+        # todo: A GET of the main terminal page when state != None should result in a terminal reset
+        if req.url.startswith(self.url):
+            if self.state == 'ready' and req.url_path == '/term.html':
+                # main terminal url loaded a second time - reset terminal
+                self.websocket.close()
+                self.state = 'reloading'
+                return 'reload' # quit, TODO: reload
+            else:
+                self.respond_document(req)
+
+        elif req.url.startswith(self.clojurescript_repl_url):
+            # TODO: use new req
+
             # proxy to the clojurescript repl
-            req.disable_timeout()
             proxy_conn_args = {
                 'host':'localhost',
                 'port':9000,
@@ -270,8 +286,9 @@ class Terminal(object):
                 req.notfound()
 
         else:
-            # dispatch the request to an iframe and provide a
-            # channel for communication with the terminal
+            # dispatch the request to an iframe and provide a channel
+            # for communication with this terminal instance via
+            # returning commands as dicts
             res = self.iframes.request(req)
             if isinstance(res, dict):
                 self.dispatch_msg(res)
@@ -304,6 +321,7 @@ class Terminal(object):
                            'resize',
                            'paste_selection',
                            'iframe_resize'])
+
     def dispatch_msg(self, msg):
         """Dispatch websocket messages."""
         name = msg.get('name')
@@ -312,18 +330,3 @@ class Terminal(object):
             getattr(self, name)(**msg)
         else:
             logger.error("Unknown name: %r in message %r" % (name, msg))
-
-    def websocket_msg(self, ch, data):
-        if ch == self.websocket.data['in_chan']:
-            # termframe websocket connection, used for RPC
-            try:
-                msg = json.loads(data)
-            except Exception, e:
-                logger.error("JSON decode error in websocket message: %r" % (data,))
-                return
-
-            return self.dispatch_msg(msg)
-
-        else:
-            # dispatch to self.iframes
-            return self.iframes.websocket(ch, data)
