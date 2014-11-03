@@ -9,12 +9,12 @@ import signal
 
 import chan
 
+import sys; sys.path.append('../webkitwindow') # TODO: fix
+import webkitwindow
+
 import terminal
 import terminalio
 import utils
-
-import sys; sys.path.append('../webkitwindow') # TODO: fix
-import webkitwindow
 
 logger = logging.getLogger('schirm')
 
@@ -120,16 +120,10 @@ def setup_and_dispatch(server_chan,
                 assert 'unknown msgtype: %r' % (msgtype, )
 
         else:
-            if closed:
-                channels.remove(ch)
-            else:
-                # webserver incoming websocket message
-                res = term.websocket_msg(ch, val)
+            assert False
 
         # deal with the returnvalue
-        if isinstance(res, chan.Chan):
-            channels.append(res)
-        elif res == 'reload':
+        if res == 'reload':
             return 'reload', val[1] # the initial request
         elif res is False:
             return False, None

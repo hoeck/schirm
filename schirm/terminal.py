@@ -240,7 +240,7 @@ class Terminal(object):
 
     def request(self, req):
 
-        print "REQ", req.url
+        logger.info("%s %s", req.method, req.url)
 
         # todo: A GET of the main terminal page when state != None should result in a terminal reset
         if req.url.startswith(self.url):
