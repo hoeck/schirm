@@ -110,7 +110,6 @@ def setup_and_dispatch(server_chan,
             assert not closed
             msgtype = val[0]
             if msgtype == 'request':
-                # webserver incoming request
                 res = term.request(val[1])
             elif msgtype == 'websocket_connect':
                 res = term.websocket_connect(val[1])
@@ -159,7 +158,7 @@ def main():
     # configure logging and the Schirm class
     parser = argparse.ArgumentParser(description="A linux compatible terminal emulator providing modes for rendering (interactive) html documents.")
     parser.add_argument("-v", "--verbose", help="be verbose, -v for info, -vv for debug log level", action="count")
-    parser.add_argument("--log-filter", help="Only show log messages for this module, e.g. schirm-webserver", nargs="+")
+    parser.add_argument("--log-filter", help="Only show log messages for this module, e.g. schirm.terminal", nargs="+")
     parser.add_argument("-d", "--iframe-debug", help="Let iframes use the same domain as the main term frame to be able to access them with javascript from the webkit inspector", action="store_true")
     parser.add_argument("--no-pty", help="Do not use a pty (pseudo terminal) device.", action="store_true")
     parser.add_argument("--command", help="The command to execute within the terminal instead of the current users default shell.")

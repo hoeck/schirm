@@ -10,7 +10,6 @@ import chan
 import webkitwindow
 
 import utils
-from webserver import guess_type
 
 logger = logging.getLogger(__name__)
 
@@ -191,7 +190,7 @@ class Iframe(object):
             name = "/" + name
 
         if mimetype is None:
-            mimetype = guess_type(name)
+            mimetype = webkitwindow.guess_type(name)
 
         self.resources[name] = {'body': data, 'content_type': mimetype}
 
@@ -207,7 +206,7 @@ class Iframe(object):
         m = email.Message.Message()
 
         # cgi-like: use the 'status' header to indicate which status
-        # the webserver should respond with
+        # the we should respond with
         http_status = "HTTP/1.1 %s\n" % header.get('Status', header.get('status', '200'))
 
         for k,v in header.items():
@@ -285,7 +284,7 @@ class Iframe(object):
         else:
             self._unknown(data)
 
-    # methods called by webserver to respond to http requests to the iframes subdomain ???
+    # methods called by parent terminal to respond to http requests to the iframes subdomain ???
     def request(self, req):
         GET  = (req.method == 'GET')
         POST = (req.method == 'POST')
@@ -344,13 +343,13 @@ class Iframe(object):
                     req_ok()
                     return {'name': 'iframe_resize', 'iframe_id': self.id, 'height':height}
                 elif cmd == 'control-c': # TODO: return a 'msg' and decode in terminal.handlers.request
-                    #self.webserver.keypress({'name': 'C', 'control': True})
+                    #terminal.keypress({'name': 'C', 'control': True})
                     req_ok()
                 elif cmd == 'control-d':
-                    #self.webserver.keypress({'name': 'D', 'control': True})
+                    #terminal.keypress({'name': 'D', 'control': True})
                     req_ok()
                 elif cmd == 'control-z':
-                    #self.webserver.keypress({'name': 'Z', 'control': True})
+                    #terminal.keypress({'name': 'Z', 'control': True})
                     req_ok()
                 else:
                     req_bad("Invalid command: %r" % (cmd, ))
