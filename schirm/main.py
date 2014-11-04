@@ -8,8 +8,6 @@ import itertools
 import signal
 
 import chan
-
-import sys; sys.path.append('../webkitwindow') # TODO: fix
 import webkitwindow
 
 import terminal
