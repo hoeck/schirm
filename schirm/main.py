@@ -43,7 +43,12 @@ class SchirmHandler(object):
 
     def startup(self, window):
         signal.signal(signal.SIGINT, signal.SIG_DFL) # exit on CTRL-C
-        self._startup_fn()
+
+        def _thread():
+            self._startup_fn()
+            window.close()
+
+        utils.create_thread(_thread)
 
     def request(self, req):
         # non blocking
@@ -148,7 +153,7 @@ def run(use_pty=True, cmd=None, start_clojurescript_repl=False):
 
     # pyqt embedded webkit takes over now
     # puts all requests into server_chan
-    webkitwindow.WebkitWindow.run(handler=SchirmHandler(server_chan, lambda:utils.create_thread(run_emulation)),
+    webkitwindow.WebkitWindow.run(handler=SchirmHandler(server_chan, run_emulation),
                                   url=terminal_url + '/term.html')
 
 def main():

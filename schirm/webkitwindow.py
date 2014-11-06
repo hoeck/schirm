@@ -459,30 +459,9 @@ class WebSocketBackend(QtCore.QObject):
         self.onmessage.emit(id, data)
 
 
-class WebkitWindow(QtGui.QMainWindow):
+class _WebkitWindow(QtGui.QMainWindow):
 
-    @classmethod
-    def run(self, handler, url="http://localhost", exit=True):
-        """Open a window displaying a single webkit instance.
-
-        handler must be an object implementing the NetworkHandler
-        interface (or deriving from it).
-
-        Navigate the webkit to url after opening it.
-
-        If exit is true, sys.exit after closing the window.
-        """
-        app = QtGui.QApplication(sys.argv)
-        win = self(handler, url)
-        win.show()
-
-        if getattr(handler, 'startup', None):
-            QtCore.QTimer.singleShot(0, lambda: handler.startup(win))
-
-        if exit:
-            sys.exit(app.exec_())
-        else:
-            return app.exec_()
+    _close_window = QtCore.pyqtSignal()
 
     def __init__(self, network_handler, url=None):
         self.url = url or "http://localhost"
@@ -529,6 +508,14 @@ class WebkitWindow(QtGui.QMainWindow):
         QtGui.QApplication.setApplicationName("Panel")
         QtGui.QApplication.setOrganizationName("Panel")
 
+        # close slot
+        def _close_handler():
+            # without resetting the QtWebView widget, I get segfaults
+            # when closing this window
+            self.setCentralWidget(QtGui.QWidget())
+            self.close()
+        self._close_window.connect(_close_handler)
+
     ### Capturing Websocket Connections
 
     # For WebSockets, QtWebKit does not use the
@@ -552,5 +539,46 @@ class WebkitWindow(QtGui.QMainWindow):
     def setup_local_websockets(self, qwebpage):
         qwebpage.frameCreated.connect(lambda frame: self.setup_local_websockets_on_frame(frame))
 
-    def run_later(self, f, timeout=None):
+
+class WebkitWindow(object):
+
+    @classmethod
+    def run(self, handler, url="http://localhost", exit=True):
+        """Open a window displaying a single webkit instance.
+
+        handler must be an object implementing the NetworkHandler
+        interface (or deriving from it).
+
+        Navigate the webkit to url after opening it.
+
+        If exit is true, sys.exit after closing the window.
+        """
+        win = self(handler, url, exit)
+        return win._run()
+
+    @staticmethod
+    def run_later(f, timeout=None):
+        """Enqueue and run function f on the main thread."""
         QtCore.QTimer.singleShot(timeout or 0, f)
+
+    def __init__(self, handler, url, exit):
+        self._handler = handler
+        self._url = url
+        self._exit = exit
+
+    def _run(self):
+        app = QtGui.QApplication(sys.argv)
+        self._window = _WebkitWindow(self._handler, self._url)
+        self._window.show()
+
+        if getattr(self._handler, 'startup', None):
+            self.run_later(lambda:self._handler.startup(self))
+
+        if self._exit:
+            sys.exit(app.exec_())
+        else:
+            return app.exec_()
+
+    def close(self):
+        """Close this WebkitWindow and exit."""
+        self._window._close_window.emit()
