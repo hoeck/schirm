@@ -7,15 +7,21 @@ import email.parser
 import email.Message
 
 import chan
+import webkitwindow
 
 import utils
-from webserver import guess_type
 
 logger = logging.getLogger(__name__)
 
 STR_START = "\x1bX"
 STR_END = "\x1b\\"
 NEWLINE = "\n" # somehow required for 'flushing', tcflush and other ioctls didn't work :/
+
+def get_iframe_id(req_or_ws):
+    # url: http://<iframe-id>.localhost
+    m = re.match("(?P<iframe_id>.+)\.localhost", req_or_ws.url_netloc)
+    return m.group('iframe_id') if m else None
+
 
 class Iframes(object):
 
@@ -26,30 +32,14 @@ class Iframes(object):
 
     def request(self, req):
 
-        # http://<iframe-id>.localhost
-        (scheme, netloc, path, params, query, fragment) = urlparse.urlparse(req.data['path'])
-
         # use the subdomain to sandbox iframes and separate requests
-        m = re.match("(?P<iframe_id>.+)\.localhost", netloc)
-        iframe_id = m.group('iframe_id') if m else None
-        if iframe_id:
-            # transform the iframe path from a proxy path to a normal one
-            root = "http://%s.localhost" % iframe_id
-            req.data['path'] = req.data['path'][len(root):]
-
-        logger.debug('iframe %(iframe_id)r %(method)s %(path)r ' %
-                     {'iframe_id':iframe_id,
-                      'method':req.data.get('method'),
-                      'path':req.data['path']})
+        iframe = self.iframes.get(get_iframe_id(req))
 
         # dispatch
-        if iframe_id in self.iframes and req.data['path']:
+        if iframe:
             # may return messages to the calling terminal
-            res = self.iframes[iframe_id].request(req)
-            if isinstance(res, chan.Chan):
-                self.iframe_websocket_chans[res] = self.iframes[iframe_id]
-                return res
-            elif isinstance(res, dict):
+            res = iframe.request(req)
+            if isinstance(res, dict):
                 # message for the terminal emulator
                 return res
             elif res == None:
@@ -61,22 +51,23 @@ class Iframes(object):
             else:
                 assert False # invalid return value from Iframe.request
         else:
-            if req.data['method'] == 'HEAD' and \
-               re.match("http://[a-z]{10}/", req.data['path']):
-                # looks like a chromium HEAD request trying to determine
-                # whether the network is up -> ignore
-                return True
-            else:
-                return None
+            req.notfound()
 
-        req.notfound()
-
-    def websocket(self, ch, val):
-        iframe = self.iframe_websocket_chans.get(ch)
+    def websocket_connect(self, ws):
+        iframe = self.iframes.get(get_iframe_id(ws))
         if iframe:
-            iframe.websocket(ch, val)
+            iframe.websocket_connect(ws)
         else:
-            ch.close()
+            # unknown websocket
+            ws.close()
+
+    def websocket_receive(self, ws, data):
+        iframe = self.iframe_websockets.get(ws)
+        if iframe:
+            iframe.websocket_receive(ws, data)
+        else:
+            # unknown websocket
+            ws.close()
 
     # dispatch events produced by the termscreen state machine
     def dispatch(self, event):
@@ -108,6 +99,7 @@ class Iframes(object):
                 logger.warn('No iframe with id %r', iframe_id)
             return None
 
+
 class Iframe(object):
     """Represents an iframe line created inside a schirm terminal emulation."""
 
@@ -122,8 +114,8 @@ class Iframe(object):
         self.requests = {} # map of requests, waiting for responses from the client
         self.state = 'open'
 
-        self.root_document_req = None
-        self.send_chan = None # schirm -> iframe
+        self._root_document = None # a streaming response for the root document
+        self._websocket = None # schirm -> iframe websocket
         self.pending_commands = [] # enqueue commands made by the client before establishing the websocket connection with the iframe
 
         self.client = client
@@ -134,15 +126,15 @@ class Iframe(object):
         self.websocket_uri = 'ws://%s.localhost/schirm' % self.id
 
     def _command_send(self, command):
-        if self.send_chan:
+        if self._websocket:
             # connection established!
 
             # send pending comands first
             while self.pending_commands:
                 c = self.comm_commands_pending.pop(0)
-                self.send_chan.put(json.dumps(c))
+                self._websocket.send(json.dumps(c))
 
-            self.send_chan.put(json.dumps(command))
+            self._websocket.put(json.dumps(command))
         else:
             self.pending_commands.append(command)
 
@@ -158,12 +150,12 @@ class Iframe(object):
             self.resources.setdefault(None, []).append(data)
         elif self.state == 'document_requested':
             self.resources.setdefault(None, []).append(data)
-            # respons immediately
-            self.root_document_req.respond(data.encode('utf-8'), close=False)
+            # respond immediately
+            self._root_document.write(data.encode('utf-8'))
 
     def iframe_close(self):
         if self.state == 'document_requested':
-            self.root_document_req.respond('', close=True)
+            self._root_document.close()
         self.state = 'close'
 
     def iframe_leave(self):
@@ -175,16 +167,16 @@ class Iframe(object):
         self.iframe_close()
 
         self.state = None
-        if self.send_chan:
+        if self._websocket:
             # close open websockets
-            self.send_chan.close()
+            self._websocket.close()
         # must the screen keep the iframe-mode state too???
         #return "term.screen.iframeLeave();"
 
     def _send_message(self, data):
         """Send data to the iframe using the iframes websocket connection."""
-        if self.send_chan:
-            self.send_chan.put(data)
+        if self._websocket:
+            self._websocket.send(data)
         else:
             self.pre_open_queue.append(data)
 
@@ -198,7 +190,7 @@ class Iframe(object):
             name = "/" + name
 
         if mimetype is None:
-            mimetype = guess_type(name)
+            mimetype = webkitwindow.guess_type(name)
 
         self.resources[name] = {'body': data, 'content_type': mimetype}
 
@@ -214,7 +206,7 @@ class Iframe(object):
         m = email.Message.Message()
 
         # cgi-like: use the 'status' header to indicate which status
-        # the webserver should respond with
+        # the we should respond with
         http_status = "HTTP/1.1 %s\n" % header.get('Status', header.get('status', '200'))
 
         for k,v in header.items():
@@ -292,63 +284,52 @@ class Iframe(object):
         else:
             self._unknown(data)
 
-    # methods called by webserver to respond to http requests to the iframes subdomain ???
+    # methods called by parent terminal to respond to http requests to the iframes subdomain ???
     def request(self, req):
-        GET  = (req.data.get('method') == 'GET')
-        POST = (req.data.get('method') == 'POST')
-        path = req.data['path']
+        GET  = (req.method == 'GET')
+        POST = (req.method == 'POST')
 
         # routing
-        if GET and req.data['path'] == '/':
+        if GET and req.url_path == '/':
             # serve the root document regardless of the iframes state
-            self.root_document_req = req
-
             if self.state == 'open':
                 self.state = 'document_requested'
 
             data = ''.join(self.resources.get(None, []))
 
             logger.debug("getting iframe root document: %s", repr((self.state, utils.shorten(data))))
-            req.respond(data="\r\n".join(["HTTP/1.1 200 OK",
-                                          "Cache-Control: no-cache",
-                                          "Content-Type: text/html; charset=utf-8",
-                                          "",
-                                          data.encode('utf-8')]),
-                        close=(self.state != 'document_requested'))
+            msg = webkitwindow.Message(headers={'Cache-Control': 'no-cache',
+                                                'Content-Type': 'text/html; charset=utf-8'},
+                                       body=data)
+            req.respond(status=(200, 'OK'),
+                        message=msg,
+                        streaming=(self.state == 'document_requested'))
+
+            self._root_document = msg # use _root_document.write/.close when streaming
 
         # static and iframe-specific resources
-        elif GET and req.data['path'] in self.static_resources:
-            req.found_resource(self.static_resources[req.data['path']], modify_fn=lambda s: s % {'websocket_uri': self.websocket_uri,
-                                                                                                 'comm_uri': self.comm_path})
+        elif GET and req.url_path in self.static_resources:
+            req.found_resource(self.static_resources[req.url_path],
+                               module_name='schirm.resources',
+                               modify_fn=lambda s: s % {'websocket_uri': self.websocket_uri,
+                                                        'comm_uri': self.comm_path})
 
-        elif GET and req.data['path'] in self.resources:
-            req.found(**self.resources[req.data['path']])
+        elif GET and req.url_path in self.resources:
+            req.found(**self.resources[req.url_path])
 
-        # schirm websocket
-        ### TODO: what is in req['path'] ????
-        elif req.data['protocol'] == 'websocket' and req.data['path'] == '/schirm':
-            if self.state != None and not self.send_chan:
-                req.websocket_upgrade() # upgrade
-                self.send_chan = req.data['chan']
-                return req.data['in_chan'] # select from this channel
-            else:
-                # already established a schirm websocket
-                req.gone()
-
-        elif req.data['protocol'] == 'websocket':
-            # other websockets
-            req.notfound()
-
-        elif POST and req.data['path'] == self.comm_path:
+        elif POST and req.url_path == self.comm_path:
             # receive commands from the iframe via plain plain HTTP
+            req_bad = lambda msg="": req.respond((400, 'Bad Request'), webkitwindow.Message(body=msg))
+            req_ok  = lambda: req.respond((200, 'OK'), webkitwindow.Message())
+
             try:
-                data = json.loads(req.data['data'])
-            except ValueError:
-                data = {}
+                data = json.loads(req.message.body)
+            except ValueError, e:
+                req_bad("Invalid JSON: %r" % str(e))
+                return None
 
             if isinstance(data, dict):
                 cmd = data.get('command')
-                req.done()
 
                 if cmd == 'resize':
                     if data.get('height') == 'fullscreen':
@@ -359,21 +340,21 @@ class Iframe(object):
                             height = int(data.get('height'))
                         except:
                             height = 'fullscreen'
+                    req_ok()
                     return {'name': 'iframe_resize', 'iframe_id': self.id, 'height':height}
                 elif cmd == 'control-c': # TODO: return a 'msg' and decode in terminal.handlers.request
-                    #self.webserver.keypress({'name': 'C', 'control': True})
-                    pass
+                    #terminal.keypress({'name': 'C', 'control': True})
+                    req_ok()
                 elif cmd == 'control-d':
-                    #self.webserver.keypress({'name': 'D', 'control': True})
-                    pass
+                    #terminal.keypress({'name': 'D', 'control': True})
+                    req_ok()
                 elif cmd == 'control-z':
-                    #self.webserver.keypress({'name': 'Z', 'control': True})
-                    pass
+                    #terminal.keypress({'name': 'Z', 'control': True})
+                    req_ok()
                 else:
-                    #self.webserver.respond(req['id'])
-                    pass # ????
+                    req_bad("Invalid command: %r" % (cmd, ))
             else:
-                req.notfound()
+                req_bad("Not a dictionary: %r" % (data, ))
 
         else:
             if self.state == 'close':
@@ -381,15 +362,15 @@ class Iframe(object):
                 # to the terminal and keep the req around, waiting for
                 # a response from the terminal
 
-                header = dict(req.data['headers'])
+                header = dict(req.message.headers)
                 header.update({'x-schirm-request-id': str(req.id),
-                               'x-schirm-request-path': req.data['path'],
-                               'x-schirm-request-method': req.data['method']})
+                               'x-schirm-request-path': req.url_path,
+                               'x-schirm-request-method': req.method})
 
                 term_req = ''.join([STR_START,
                                     json.dumps(header),
                                     NEWLINE, NEWLINE,
-                                    req.data['data'] or "",
+                                    req.message.body or "",
                                     STR_END,
                                     # trailing newline required for flushing
                                     NEWLINE])
@@ -399,6 +380,23 @@ class Iframe(object):
             else:
                 req.notfound()
                 return False
+
+    def websocket_connect(self, ws):
+        # schirm websocket
+        if ws.url_path == '/schirm':
+            if self.state != None and not self._websocket:
+                ws.connected()
+                self._websocket = ws
+            else:
+                # already established a schirm websocket
+                ws.close()
+
+        else:
+            # other websockets: TODO implement
+            ws.close()
+
+    def websocket_receive(self, ws, data):
+        TODO
 
     def websocket(self, ch, val):
         # ???????????????????????????????????????

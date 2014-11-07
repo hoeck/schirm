@@ -4,12 +4,12 @@ Schirm
 A Linux compatible terminal emulator which exposes additional HTML
 rendering modes to client programs.
 
-Written in Python and JavaScript.
+Uses Python, PyQT and ClojureScript.
 
 Installing
 ==========
 
-Requires Python 2.7.
+Requires Python 2.7 and PyQT4
 
 
 Get the source:
@@ -20,8 +20,6 @@ Optionally install xsel (<https://github.com/kfish/xsel> or
 `apt-get install xsel`) to be able to paste the current X
 selection using Shift-Insert. Middle-click selection works without
 additional programs.
-
-Make sure that you have either chromium, chrome or firefox installed.
 
 Run:
 
@@ -83,11 +81,11 @@ Styling
 
 Place your own styles into `~/.schirm/user.css` and restart the terminal.
 See `schirm/resources/user.css` for the default stylesheet.
-In the terminal window, press F12 to open the chrome/firefox devtools
-or right click to open the browsers contextmenu.
-Right-clicking on the very left of the terminal window (first 25
-pixels) opens a contextmenu containing the `reload` item - use this to
-quickly restart the terminal without closing the window.
+
+In the terminal window, right click for the context menu and select
+`inspect` to open the webkit devtools. Right-click on the very left of
+the terminal window to open a context menu containing the `reload` item
+to restart the terminal
 
 Client API
 ==========
@@ -100,8 +98,9 @@ Missing Features/Defects
 
 - no terminal mouse click support
 - only 16 colors
-- UTF-8 only
-- slow Application mode
+- only UTF-8
+- slow Application mode (e.g. fullscreen ncurses apps)
+- `cat <1G file>` will bring everything to a halt
 - emulation glitches (e.g. when resizing htop)
 
 Similar Programs
