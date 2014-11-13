@@ -7,7 +7,6 @@ import logging
 import socket
 import subprocess
 import time
-import urlparse
 
 import pyte
 import utils
@@ -30,7 +29,7 @@ def roll_id():
 
 class Terminal(object):
 
-    clojurescript_repl_url = "http://localhost:9000"
+    clojurescript_repl_url = 'http://localhost:9000'
 
     static_resources = {
         '/term.html': 'term.html',
@@ -253,37 +252,25 @@ class Terminal(object):
                 self.respond_document(req)
 
         elif req.url.startswith(self.clojurescript_repl_url):
-            # TODO: use new req
-
             # proxy to the clojurescript repl
-            proxy_conn_args = {
+            proxy_args = {
                 'host':'localhost',
                 'port':9000,
+                'url': self.clojurescript_repl_url,
                 'req':req,
             }
-            if proxyconnection.probe(**proxy_conn_args):
-                self.clojurescript_proxy_connection = proxyconnection.ProxyTcpConnection(**proxy_conn_args)
+            if proxyconnection.probe(**proxy_args):
+                self.clojurescript_proxy_connection = proxyconnection.ProxyTcpConnection(**proxy_args)
             else:
                 # start clojurescript repl and try again
                 print "starting clojurescript repl"
                 subprocess.Popen('rlwrap lein trampoline cljsbuild repl-listen', cwd=os.path.join(os.path.dirname(__file__), '../cljs'), shell=True)
                 for i in range(32):
-                    if proxyconnection.probe(**proxy_conn_args):
-                        self.clojurescript_proxy_connection = proxyconnection.ProxyTcpConnection(**proxy_conn_args)
+                    if proxyconnection.probe(**proxy_args):
+                        self.clojurescript_proxy_connection = proxyconnection.ProxyTcpConnection(**proxy_args)
                         print "\nconnected!"
                         break
                     time.sleep(1)
-
-            if self.clojurescript_proxy_connection:
-                raw_requestline = "%s %s HTTP 1/1\r\n" % (req.data['method'],
-                                                          req.data['path'][len(self.clojurescript_repl_url):])
-                raw_proxy_req = ''.join([raw_requestline] +
-                                        req.data['raw_headers'] +
-                                        ['\r\n', req.data['data'] or ''])
-                self.clojurescript_proxy_connection.send(raw_proxy_req)
-            else:
-                print "not connected to cljs repl"
-                req.notfound()
 
         else:
             # dispatch the request to an iframe and provide a channel
@@ -295,7 +282,7 @@ class Terminal(object):
             elif res:
                 return res
             else:
-                logger.error("Could not handle request %r." % req)
+                logger.error("Could not handle request %r (%s %s)." % (req, req.method, req.url))
 
         return True
 
