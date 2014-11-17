@@ -23,8 +23,6 @@
 (defn append-readable-line [parent line]
   (let [line-element (screen/create-line (readable->line line))]
     (.appendChild parent line-element)
-    ;; lines are DIVs - no newline character required
-    ;;(.appendChild parent (.createTextNode js/document "\n"))
     line-element))
 
 (defn test-dom-line-op [line, expected, f]
@@ -35,10 +33,12 @@
           b (readable->line expected)]
       (if (= a b)
         :pass
-        [:fail
-         (list 'not= (-> line-element screen/read-line line->readable) expected)]))))
+        {:line line
+         :expected expected
+         :got (-> line-element screen/read-line line->readable)}))))
 
 (defn run-tests []
+  (set! (.-innerText (dom-utils/select 'pre)) "")
   [
    ;; insert
 
@@ -47,7 +47,7 @@
                      #(screen/line-insert % (into-styled-string "ABC") 0))
    (test-dom-line-op []
                      [["   ABC"]]
-                     #(screen/line-insert % (into-styled-string "ABC") 3))   
+                     #(screen/line-insert % (into-styled-string "ABC") 3))
    (test-dom-line-op [["A" :f-red]]
                      [["AB" :f-red]]
                      #(screen/line-insert % (into-styled-string "B" :f-red) 1))
@@ -68,50 +68,50 @@
    (test-dom-line-op [["ABC" :f-red] ["DEF" :f-blue]]
                      [["ABC" :f-red] ["xxDEF" :f-blue]]
                      #(screen/line-insert % (into-styled-string "xx" :f-blue) 3))
-   
+
    (test-dom-line-op [["ABC" :f-red] ["DEF" :f-blue]]
                      [["ABCxx" :f-red] ["DEF" :f-blue]]
                      #(screen/line-insert % (into-styled-string "xx" :f-red) 3))
    (test-dom-line-op [["ABC" :f-red] ["DEF" :f-blue]]
                      [["ABC" :f-red] ["xxDEF" :f-blue]]
                      #(screen/line-insert % (into-styled-string "xx" :f-blue) 3))
-   
+
    ;; remove
-   
+
    (test-dom-line-op [["ABC" :f-blue] ["DEF" :f-green] ["GHI" :f-red]]
                      [["AB" :f-blue] ["HI" :f-red]]
                      #(screen/line-remove % 2 5))
-   
+
    (test-dom-line-op [["ABC" :f-blue] ["DEF" :f-red]]
                      [["AB" :f-blue] ["F" :f-red]]
                      #(screen/line-remove % 2 3))
-   
+
    (test-dom-line-op [["ABC" :f-blue] ["DEF" :f-red]]
                      [["A" :f-blue]]
                      #(screen/line-remove % 1 5))
-   
+
    (test-dom-line-op [["ABC" :f-blue] ["DEF" :f-red]]
                      [["F" :f-red]]
                      #(screen/line-remove % 0 5))
-   
+
    (test-dom-line-op [["A" :f-blue] ["B" :f-red] ["C" :f-blue]]
                      [["AC" :f-blue]]
                      #(screen/line-remove % 1 1))
-   
+
    (test-dom-line-op [["ABC" :f-blue] ["D" :f-red] ["E" :f-bold] ["FG" :f-blue]]
                      [["ABCG" :f-blue]]
                      #(screen/line-remove % 3 3))
-   
+
    (test-dom-line-op [["AB" :f-blue] ["C" :f-blue :cursor] ["DEF" :f-blue]]
                      [["ABDEF" :f-blue]]
                      #(screen/line-remove % 2 1))
-   
+
    (test-dom-line-op [["ABDEF" :f-blue]]
                      [["ABCDEF" :f-blue]]
                      #(screen/line-insert % (into-styled-string "C" :f-blue) 2))
 
    ;; insert-overwrite
-   
+
    (test-dom-line-op [["ABC" :f-blue] ["DEF" :f-red]]
                      [["Axxx" :f-blue] ["EF" :f-red]]
                      #(screen/line-insert-overwrite % (into-styled-string "xxx" :f-blue) 1))
@@ -139,7 +139,7 @@
                      (fn [line] (screen/line-insert-overwrite line (into-styled-string "+", :f-red) 4)))
 
    ;; cursor
-   
+
    (test-dom-line-op [["ABCDEF" :f-blue]]
                      [["AB" :f-blue] ["C" :f-blue :cursor] ["DEF" :f-blue]]
                      #(screen/line-set-cursor % 2))

@@ -111,9 +111,7 @@
   "Create and return a line DOM element from a list of styled strings."
   [line]
   (let [line-element (.createElement js/document "div")]
-    (doseq [s (if (empty? line)
-                [(default-styled-string 1)]
-                line)]
+    (doseq [s line]
       (.appendChild line-element (create-segment s)))
     line-element))
 
@@ -128,7 +126,6 @@
   "Insert the styled-string into line at pos."
   [line styled-string pos]
   (let [line-len (-> line .-textContent count)
-        ;;ch (.-children line)
         [segment localpos] (if pos (dom-utils/element-at-pos line pos) [nil nil])]
     (if (nil? segment)
       ;; line empty / append beyond end -> fill with default style & append-at-end

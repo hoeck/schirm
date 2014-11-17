@@ -81,9 +81,9 @@
                                      line
                                      #(screen/line-remove % col n))
                  state)
-      "insert-line" (do (screen/insert-line screen (screen/create-line []) (nth args 0))
+      "insert-line" (do (screen/insert-line screen (screen/create-line [(screen/default-styled-string 1)]) (nth args 0))
                         state)
-      "append-line" (do (screen/append-line screen (screen/create-line []))
+      "append-line" (do (screen/append-line screen (screen/create-line [(screen/default-styled-string 1)]))
                         state)
       "append-many-lines" (let [lines (nth args 0 [])]
                             (screen/append-line screen (create-fragment-from-lines lines))
