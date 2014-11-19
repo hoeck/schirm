@@ -508,8 +508,8 @@
       (do
         ;; as there is no scrollback in this screen,
         ;; remove unneeded lines from the top
-        (dotimes [i (min (-> element .-children .-length)
-                           (-> line .-children .-length))]
+        (dotimes [i (min (-> element .-childNodes .-length)
+                         (-> line .-childNodes .-length))]
           (.removeChild element (.-firstChild element)))
         ;; insert the DocumentFragment
         (.appendChild element line)
