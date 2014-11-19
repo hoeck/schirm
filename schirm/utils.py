@@ -3,6 +3,7 @@ import Queue
 import logging
 import threading
 import subprocess
+import traceback
 
 try:
     import cProfile as profile_lib
@@ -91,3 +92,7 @@ def shorten(s, max=40, more='...'):
         return "%s%s" % (s[:max-len(more)], more)
     else:
         return s
+
+def shorttrace():
+    """Return a line:fn traceback for the bottom 3 stackframes."""
+    return ' > '.join('%s:%s' % (line,fn) for file, line, fn, code in traceback.extract_stack()[-4:][:-1])
