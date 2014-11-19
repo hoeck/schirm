@@ -1,3 +1,4 @@
+import itertools
 import array
 
 from pyte.screens import Char
@@ -66,7 +67,7 @@ def compact_insert_overwrites(insert_events, cols):
                 res.append((''.join(line_chars[prev_i:i]), char_attr_to_class(prev_a)))
             prev_i = i
             prev_a = a
-    res.append((''.join(line_chars[prev_i:i]), a))
+    res.append((''.join(line_chars[prev_i:i]), char_attr_to_class(a)))
 
     return res
 
@@ -78,7 +79,6 @@ def compile_appends(events, max_lines=256):
 
     Merge at most max_lines into a single append operation.
     """
-
     # a state machine to look for [append-line set-line-origin insert-overwrite*] event patterns
     res = []
     state = None
@@ -86,13 +86,17 @@ def compile_appends(events, max_lines=256):
     lines = []
     line_origin = None
     cols = None
-    for e in events:
+    height = None
+    event_terminator  = object() # unique event command to terminate the state machine
+    event_iter = itertools.chain(events, [(event_terminator, )])
+    for e in event_iter:
         cmd = e[0]
         if state is None:
             if cmd == 'append-line':
                 state = 'append'
                 cols = e[1]
-            else:
+                height = e[2]
+            elif cmd != event_terminator:
                 res.append(e)
         elif state == 'append':
             if cmd == 'set-line-origin':
@@ -100,7 +104,8 @@ def compile_appends(events, max_lines=256):
                 # In case of many appended lines, use the last
                 # set-line-origin as it increases anyway.
                 line_origin = e
-            elif cmd == 'insert-overwrite':
+            elif cmd == 'insert-overwrite' and e[1] == height:
+                # insert-overwrite of the last terminal line
                 group.append(e)
             else:
                 # end of the appended line
@@ -122,9 +127,11 @@ def compile_appends(events, max_lines=256):
 
                     if cmd == 'append-line':
                         cols = e[1]
+                        height = e[2]
                     else:
                         state = None
-                        res.append(e)
+                        if cmd != event_terminator:
+                            res.append(e)
 
     return res
 
@@ -216,7 +223,7 @@ class BrowserScreen(object):
     def append_line(self, columns):
         """Append a new line (increments the origin)."""
         self.total_lines += 1
-        self._append(('append-line', columns))
+        self._append(('append-line', columns, self.total_lines - self.line_origin - 1))
         self.add_line_origin(1) # total lines do not change as we increase the origin
 
     def remove_line(self, y):
