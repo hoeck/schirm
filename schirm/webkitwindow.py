@@ -67,19 +67,28 @@ class Message():
         self._close_fn = close_fn
 
     def write(self, data):
-        """Write data for a streaming response."""
+        """Write data for a streaming response.
+
+        Return True on success, False otherwise.
+        """
         if not self._write_fn:
             raise Exception("not a streaming response")
 
         if data:
-            self._write_fn(data)
+            return self._write_fn(data)
+
+        return False
 
     def close(self):
-        """Close the streaming response"""
+        """Close the streaming response.
+
+        Return True on success, False otherwise.
+        """
         if not self._write_fn:
             raise Exception("not a streaming response")
 
-        self._close_fn()
+        return self._close_fn()
+
 
 def _parse_url(obj, url):
     """Parse url and add the resulting parts as url_* attrs to obj."""
@@ -113,6 +122,10 @@ class Request():
         If streaming is True, initiate a streaming response. Stream
         data using the passed messages .write(data) method and end the
         request with .close().
+
+        Returns True when the reply was initiated successfully, False
+        if it failed (e.g. when the client has already closed the
+        connection).
         """
         assert isinstance(message, Message)
 
@@ -121,35 +134,58 @@ class Request():
             status_text = HTTP_STATUS.get(status, 'unknown')
         elif isinstance(status, (tuple, list)):
             status, status_text = status
+            status = int(status or 200)
+            status_text = str(status_text or 'unknown')
         else:
-            raise TypeError("status must be a number of tuple of (status, text), not: %r" % (status, ))
+            raise TypeError("status must be a number or tuple of (status, text), not: %r" % (status, ))
 
         if streaming:
-            self.fake_reply.fake_response.emit(status, status_text, message, True)
-            message._set_streaming(write_fn=lambda data: self.fake_reply.fake_response_write.emit(str(data)),
-                                   close_fn=lambda: self.fake_reply.fake_response_close.emit())
-            if message.body is not None:
-                message.write(message.body)
+            def _write_fn(data):
+                if self.fake_reply.aborted:
+                    return False
+                self.fake_reply.fake_response_write.emit(str(data))
+                return True
+
+            def _close_fn():
+                if self.fake_reply.aborted:
+                    return False
+                self.fake_reply.fake_response_close.emit()
+                return True
+
+            message._set_streaming(write_fn=_write_fn, close_fn=_close_fn)
+
+            if self.fake_reply.aborted:
+                return False
+            else:
+                self.fake_reply.fake_response.emit(status, status_text, message, True)
+                if message.body is not None:
+                    message.write(message.body)
+                return True
+
         else:
-            self.fake_reply.fake_response.emit(status, status_text, message, False)
+            if self.fake_reply.aborted:
+                return False
+            else:
+                self.fake_reply.fake_response.emit(status, status_text, message, False)
+                return True
 
     # response shortcuts
 
     def notfound(self, msg=""):
         """Respond with '404 Not Found' and an optional message."""
-        self.respond((404, 'Not Found'), Message({'Content-Type': 'text/plain'}, msg))
+        return self.respond((404, 'Not Found'), Message({'Content-Type': 'text/plain'}, msg))
 
     def gone(self, msg=""):
         """Respond with a '410 Gone' and an optional message."""
-        self.respond((404, 'Not Found'), Message({'Content-Type': 'text/plain'}, msg))
+        return self.respond((404, 'Not Found'), Message({'Content-Type': 'text/plain'}, msg))
 
     def redirect(self, url):
         """Respond with a 302 Found to url."""
-        self.respond((302, 'Found'), Message({'Location': url}))
+        return self.respond((302, 'Found'), Message({'Location': url}))
 
     def found(self, body, content_type="text/plain"):
         """Respond with a 200, data and content_type."""
-        self.respond((200, 'Found'), Message({"Content-Type": content_type}, body))
+        return self.respond((200, 'Found'), Message({"Content-Type": content_type}, body))
 
     def found_resource(self, path, module_name, content_type=None, modify_fn=None):
         """Respond with a 200 and a resource file loaded using pkgutil.get_data.
@@ -166,12 +202,12 @@ class Request():
         res_string = pkgutil.get_data(module_name, path)
         if modify_fn:
             res_string = modify_fn(res_string)
-        self.found(body=res_string, content_type=content_type or guess_type(path))
+        return self.found(body=res_string, content_type=content_type or guess_type(path))
 
     def found_file(self, path, content_type=None):
         """Respond with a 200 and the file at path, optionally using content_type."""
         with open(path) as f:
-            self.found(body=f.read(), content_type=content_type or guess_type(path))
+            return self.found(body=f.read(), content_type=content_type or guess_type(path))
 
 
 class WebSocket():
@@ -257,6 +293,7 @@ class AsyncNetworkHandler(QtCore.QObject):
     def __init__(self, network_handler):
         super(AsyncNetworkHandler, self).__init__()
         self._nh = network_handler
+        self._request.connect(self.request)
         self._connect.connect(self.connect)
         self._receive.connect(self.receive)
         self._close.connect(self.close)
@@ -316,7 +353,7 @@ class LocalDispatchNetworkAccessManager(QtNetwork.QNetworkAccessManager):
         # data is a QIODevice or None
         msg = Message(headers=headers, body=data and str(data.readAll()))
         reply = FakeReply(self, request, operation)
-        self.network_handler.request(Request(method=method, url=url, message=msg, fake_reply=reply)) # will .set_response the FakeReply to reply
+        self.network_handler._request.emit(Request(method=method, url=url, message=msg, fake_reply=reply)) # will .set_response the FakeReply to reply
         QtCore.QTimer.singleShot(0, lambda:self.finished.emit(reply))
         return reply
 
@@ -340,6 +377,9 @@ class FakeReply(QtNetwork.QNetworkReply):
         self._streaming = False
         self._content = None
         self._offset = 0
+
+        # know when to stop writing into the reply
+        self.aborted = False
 
         self.setRequest(request)
         self.setUrl(request.url())
@@ -387,7 +427,8 @@ class FakeReply(QtNetwork.QNetworkReply):
         self.finished.emit()
 
     def abort(self):
-        pass
+        self.aborted = True
+        self.finished.emit()
 
     def bytesAvailable(self):
         if isinstance(self._content, StringIO.StringIO):
@@ -426,7 +467,7 @@ class WebSocketBackend(QtCore.QObject):
     def __init__(self, network_handler):
         super(WebSocketBackend, self).__init__()
         self._connections = {}
-        self._network_handler = AsyncNetworkHandler(network_handler)
+        self._network_handler = network_handler
 
     @QtCore.pyqtSlot(str, result=int)
     def connect(self, url):
@@ -465,7 +506,7 @@ class _WebkitWindow(QtGui.QMainWindow):
 
     def __init__(self, network_handler, url=None):
         self.url = url or "http://localhost"
-        self.network_handler = network_handler
+        self.network_handler = AsyncNetworkHandler(network_handler)
         QtGui.QMainWindow.__init__(self)
         self.setup()
 
