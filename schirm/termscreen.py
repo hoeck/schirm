@@ -400,7 +400,7 @@ class TermScreen(pyte.Screen):
 
         top, bottom = self.margins
         if self.cursor.y == bottom:
-            if top == 0:
+            if top == 0 and bottom == (self.lines - 1):
                 # surplus lines move the scrollback if no margin is active
                 self.linecontainer.append_line(self.columns)
             else:
