@@ -191,15 +191,6 @@ class Terminal(object):
             else:
                 term_events.append(e)
 
-        # print '    # -- EVENTS --'
-        # for e in events:
-        #     if e[0] == 'append-many-lines':
-        #         print "    APPEND-MANY-LINES (%s)" % len(e[1])
-        #         for l in e[1]:
-        #             print "        %r" % (l, )
-        #     else:
-        #         print '    %r,' % (e,)
-
         self.websocket.send(json.dumps(term_events))
 
         return

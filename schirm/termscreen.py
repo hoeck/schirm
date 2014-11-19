@@ -298,49 +298,6 @@ class TermScreen(pyte.Screen):
             self._flush_events()
             self.linecontainer.leave_altbuf_mode()
 
-    # def draw(self, char):
-    #     """Display a character at the current cursor position and advance
-    #     the cursor if :data:`~pyte.modes.DECAWM` is set.
-    #
-    #     :param unicode char: a single character or string to display.
-    #     """
-    #
-    #
-    #     # Translating a given character.
-    #     if self.charset != 0 and 0: # commented out
-    #         # somehow, the latin 1 encoding done here is wrong,
-    #         # json.dumps does not correctly convert the resulting
-    #         # string
-    #         char = char.translate([self.g0_charset,
-    #                                self.g1_charset][self.charset])
-    #
-    #     # If this was the last column in a line and auto wrap mode is
-    #     # enabled, move the cursor to the next line. Otherwise replace
-    #     # characters already displayed with newly entered.
-    #     if self.cursor.x == self.columns:
-    #         if mo.DECAWM in self.mode:
-    #             self.linefeed()
-    #         else:
-    #             self.cursor.x -= 1
-    #
-    #     # Drawing on an IframeLine reverts it to a plain text Line.
-    #     if isinstance(self.linecontainer[self.cursor.y], IframeLine):
-    #         self.linecontainer[self.cursor.y] = self._create_line()
-    #
-    #     # If Insert mode is set, new characters move old characters to
-    #     # the right, otherwise terminal is in Replace mode and new
-    #     # characters replace old characters at cursor position.
-    #     if mo.IRM in self.mode:
-    #         self.insert_characters(1)
-    #
-    #     self.linecontainer[self.cursor.y] \
-    #         .replace_character(self.cursor.x,
-    #                            self.cursor.attrs._replace(data=char))
-    #
-    #     # .. note:: We can't use :meth:`cursor_forward()`, because that
-    #     #           way, we'll never know when to linefeed.
-    #     self.cursor.x += 1
-
     def draw_string(self, string):
         """Like draw, but for a whole string at once.
 
