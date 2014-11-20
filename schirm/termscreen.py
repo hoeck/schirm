@@ -524,13 +524,19 @@ class TermScreen(pyte.Screen):
             self.erase_in_line(type_of)
 
         else: # type_of == 2
-            # c) erase the whole display ->
-            # Push every visible line to the history == add blank
-            # lines until all current non-blank lines are above the
-            # top of the term window. (thats what xterm does and
-            # linux-term not, try using top in both term emulators and
-            # see what happens to the history)
-            self.linecontainer.add_line_origin(self.lines)
+            if mo.DECALTBUF in self.mode:
+                s = ' ' * self.columns
+                for line in range(self.lines):
+                    # erase the whole line
+                    self.linecontainer.insert_overwrite(line, 0, s, self.cursor.attrs)
+            else:
+                # c) erase the whole display ->
+                # Push every visible line to the history == add blank
+                # lines until all current non-blank lines are above the
+                # top of the term window. (thats what xterm does and
+                # linux-term not, try using top in both term emulators and
+                # see what happens to the history)
+                self.linecontainer.add_line_origin(self.lines)
 
     def string(self, string):
         if self.iframe_mode:
@@ -650,6 +656,8 @@ class SchirmStream(pyte.Stream):
         huge, escape-less substrings without having to go through the
         state-machinery (avoiding the function call overhead).
         """
+        print "FEED>", repr(bytes)
+
         string_chunksize = 8192
         stream_chunksize = 128
         src = bytes.decode('utf-8', 'ignore')
@@ -715,6 +723,7 @@ class SchirmStream(pyte.Stream):
     # I use my own dispatch function - I don't need multiple listeners.
     # Ignore the only flag too.
     def dispatch(self, event, *args, **kwargs):
+        print "E>", event, args
         (listener, only) = self.listeners[0] # ignore 'only'
         if self.listeners:
             handler = getattr(listener, event, None)
