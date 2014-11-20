@@ -656,8 +656,6 @@ class SchirmStream(pyte.Stream):
         huge, escape-less substrings without having to go through the
         state-machinery (avoiding the function call overhead).
         """
-        print "FEED>", repr(bytes)
-
         string_chunksize = 8192
         stream_chunksize = 128
         src = bytes.decode('utf-8', 'ignore')
@@ -723,7 +721,6 @@ class SchirmStream(pyte.Stream):
     # I use my own dispatch function - I don't need multiple listeners.
     # Ignore the only flag too.
     def dispatch(self, event, *args, **kwargs):
-        print "E>", event, args
         (listener, only) = self.listeners[0] # ignore 'only'
         if self.listeners:
             handler = getattr(listener, event, None)
