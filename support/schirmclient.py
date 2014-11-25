@@ -36,9 +36,11 @@ __all__ = ('enter', 'leave', 'close', 'frame', 'debug',
 
 import os
 import sys
+import cgi
 import fcntl
 import json
 import base64
+import urlparse
 from collections import namedtuple
 from contextlib import contextmanager
 
@@ -162,7 +164,7 @@ def resource(path, name=None, mimetype=''):
     if not name:
         _, name = os.path.split(path)
 
-    header = {'x-schirm-path': name}
+    header = {'X-Schirm-Path': name}
     if mimetype:
         header['Content-Type'] = mimetype
 
@@ -172,7 +174,7 @@ def resource(path, name=None, mimetype=''):
 def resource_data(data, name, mimetype=''):
     """Make the given data available as resource 'name' to the current iframe."""
 
-    header = {'x-schirm-path': name}
+    header = {'X-Schirm-Path': name}
     if mimetype:
         header['Content-Type'] = mimetype
 
@@ -222,13 +224,16 @@ def read_next(fd=None):
     header, body = _read_next_string(fd or sys.stdin.fileno()).split('\n',1)
     return json.loads(header), body
 
-def respond(requestid, header, body):
-    """Write a response to requestid to the schirm terminal.
+def respond(requestid, status, header, body):
+    """Write an HTTP response to requestid to the schirm terminal.
 
-    Response must be a http response.
+    status should be the status string, e.g. '200 OK'.
+    header a dict or list of tuples f header-key and value pairs.
+    body the data (string) of the response
     """
     h = dict(header)
-    h['x-schirm-request-id'] = requestid
+    h['X-Schirm-Request-Id'] = requestid
+    h['Status'] = status
     _write_request(h, body)
 
 def send(data):
@@ -236,5 +241,121 @@ def send(data):
 
     If data is a Python dict, json-encode it before sending.
     """
-    _write_request({'x-schirm-message':None},
+    _write_request({'X-Schirm-Message':None},
                    json.dumps(data) if isinstance(data, dict) else data)
+
+
+### WSGI
+
+def _wsgi_handle_request(request, application):
+
+    req_header, req_body = request
+    request_id = req_header['X-Schirm-Request-Id']
+    url = urlparse.urlparse(req_header['X-Schirm-Request-Path'])
+    method = req_header['X-Schirm-Request-Method']
+
+    environ = {
+        # The HTTP request method, such as "GET" or "POST".  This
+        # cannot ever be an empty string, and so is always required.
+        'REQUEST_METHOD': method,
+        # The initial portion of the request URL's "path" that
+        # corresponds to the application object, so that the
+        # application knows its virtual "location". This may be an
+        # empty string, if the application corresponds to the "root"
+        # of the server.
+        'SCRIPT_NAME': '',
+        # The remainder of the request URL's "path", designating the
+        # virtual "location" of the request's target within the
+        # application. This may be an empty string, if the request URL
+        # targets the application root and does not have a trailing
+        # slash.
+        'PATH_INFO': (url.path + ';' + url.params) if url.params else url.path,
+        # The portion of the request URL that follows the "?" , if
+        # any. May be empty or absent.
+        'QUERY_STRING': (url.query + '#' + url.fragment) if url.fragment else url.query,
+        # The contents of any Content-Type fields in the HTTP
+        # request. May be empty or absent.
+        'CONTENT_TYPE': req_header.get('Content-Type', None),
+        # The contents of any Content-Length fields in the HTTP
+        # request. May be empty or absent.
+        'CONTENT_LENGTH': req_header.get('Content-Type', None),
+        # When combined with SCRIPT_NAME and PATH_INFO , these
+        # variables can be used to complete the URL. Note, however,
+        # that HTTP_HOST , if present, should be used in preference to
+        # SERVER_NAME for reconstructing the request URL. See the URL
+        # Reconstruction section below for more detail. SERVER_NAME
+        # and SERVER_PORT can never be empty strings, and so are
+        # always required.
+        'SERVER_NAME': url.netloc.split(':',1)[0],
+        'SERVER_PORT': (url.netloc.split(':',1)[1:] or [None])[0],
+        'SERVER_PROTOCOL': 'HTTP/1.1',
+    }
+
+    # HTTP_ Variables
+    # Variables corresponding to the client-supplied HTTP request headers (i.e., variables whose names begin with "HTTP_" ). The presence or absence of these variables should correspond with the presence or absence of the appropriate HTTP header in the request.
+    for k,v in req_header.items():
+        if k.lower().startswith('x-schirm'):
+            pass
+        else:
+            environ['HTTP_%s' % k.upper().replace('-','_')] = v
+
+    environ.update({
+        'wsgi.input':        sys.stdin,
+        'wsgi.errors':       sys.stderr,
+        'wsgi.version':      (1, 0),
+        'wsgi.multithread':  False,
+        'wsgi.multiprocess': True,
+        'wsgi.run_once':     True,
+        'wsgi.url_scheme':  'http',
+        'schirm.request_id': request_id,
+    })
+
+    response = {'status':None, 'headers': None}
+
+    def start_response(status, response_headers, exc_info=None):
+        assert status, "status is missing"
+
+        if exc_info:
+            try:
+                if response['status']:
+                    # headers have already been send, raise and abort
+                    # otherwise, continue with the response
+                    raise exc_info[0], exc_info[1], exc_info[2]
+            finally:
+                exc_info = None     # avoid dangling circular ref
+
+        assert response['status'] == None, "start_response has been called already"
+
+        response['status']  = status
+        response['headers'] = response_headers
+
+        def write(data):
+            # Deprecated, intended only for use by older frameworks
+            # (https://www.python.org/dev/peps/pep-0333/#the-write-callable).
+            # The preferred method to provide response data is
+            # returning an iterator of strings from the call to
+            # application instead of calling this function.
+            raise NotImplementedError()
+
+        return write
+
+    result = application(environ, start_response)
+    # TODO: allow streaming responses
+    respond(request_id, response['status'], response['headers'], ''.join(result))
+
+def wsgi_run(app=None, resources={}, url='/', fullscreen=False, newline=True):
+    """Run WSGI application app in a frame."""
+    if not app:
+        import bottle
+        app = bottle.default_app()
+
+    with frame(newline=newline, fullscreen=fullscreen):
+        for name, (data, mimetype) in resources.items():
+            resource_data(data, name, mimetype)
+
+        print '<html><head><meta HTTP-EQUIV="Refresh" CONTENT="0; URL=%s"></head><body></body></html>' % cgi.escape(url, True)
+        close()
+
+        while True:
+            req = read_next()
+            _wsgi_handle_request(req, app)

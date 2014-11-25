@@ -195,32 +195,19 @@ class Iframe(object):
         self.resources[name] = {'body': data, 'content_type': mimetype}
 
     def _respond(self, header, body):
-        req_id = header.get('x-schirm-request-id')
-        req = self.requests.get(int(req_id))
+        req_id = int(header.pop('x-schirm-request-id'))
+        req = self.requests.get(req_id)
 
         if not req:
             # error, how to respond?
-            logger.error("Unknown request id: %r" % (header.get('x-schirm-request-id'), ))
+            logger.error("Unknown request id: %r" % (req_id, ))
             return
-
-        m = email.Message.Message()
 
         # cgi-like: use the 'status' header to indicate which status
         # the we should respond with
-        http_status = "HTTP/1.1 %s\n" % header.get('Status', header.get('status', '200'))
+        status = header.pop('Status', None) or header.pop('status', '200')
 
-        for k,v in header.items():
-            if k.lower() == 'status':
-                pass
-            elif k.lower().startswith('x-schirm'):
-                # x-schirm headers are used to communicate with the
-                # terminal
-                pass
-            else:
-                m[k] = v
-        m.set_payload(body)
-
-        req.respond(http_status + m.as_string()) # close ????
+        req.respond(status, webkitwindow.Message(header, body))
 
     def _debug(self, msg):
         # todo: this should go directly somewhere into the terminal
@@ -229,6 +216,12 @@ class Iframe(object):
 
     def _unknown(self, data):
         logger.error("unknown iframe request: %r" % (data,))
+
+    def _lowercase_headers(self, header_pairs):
+        """Lowercase all x-schirm-* keys of the header pairs (key, value)."""
+        return dict((k.lower() if k.lower().startswith('x-schirm') else k, v)
+                     for k,v
+                     in header_pairs)
 
     def _parse_string_request(self, data):
         # the request
@@ -252,14 +245,14 @@ class Iframe(object):
             else:
                 header = {}
 
-            return header, data[header_end_pos+1:]
+            return self._lowercase_headers(header.items()), data[header_end_pos+1:]
 
         else:
             # RFC 821 Message
             fp = email.parser.FeedParser()
             fp.parse(data)
             m = fp.close()
-            return dict(m.items()), m.get_payload()
+            return self._lowercase_headers(m.items()), m.get_payload()
 
     def iframe_string(self, data):
         # decode a string coming from the client, interpret it according to the current state
@@ -276,7 +269,7 @@ class Iframe(object):
                                     mimetype=header.get('content-type', header.get('Content-Type')),
                                     data=body)
         elif 'x-schirm-request-id' in header:
-            self._respond(int(header['x-schirm-request']), header, body)
+            self._respond(header, body)
         elif 'x-schirm-message' in header:
             self._send_message(header['x-schirm-message'] or body)
         elif 'x-schirm-debug' in header:
@@ -363,9 +356,9 @@ class Iframe(object):
                 # a response from the terminal
 
                 header = dict(req.message.headers)
-                header.update({'x-schirm-request-id': str(req.id),
-                               'x-schirm-request-path': req.url_path,
-                               'x-schirm-request-method': req.method})
+                header.update({'X-Schirm-Request-Id': str(req.id),
+                               'X-Schirm-Request-Path': req.url_path,
+                               'X-Schirm-Request-Method': req.method})
 
                 term_req = ''.join([STR_START,
                                     json.dumps(header),
