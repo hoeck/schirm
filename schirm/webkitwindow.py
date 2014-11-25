@@ -37,7 +37,7 @@ class Message():
     def __init__(self, headers={}, body=None):
         self.headers = {}
         for k,v in headers.items():
-            assert isinstance(k, str), "header keys must be strings, not: %r" % (k, )
+            assert isinstance(k, basestring), "header keys must be strings, not: %r" % (k, )
 
             if isinstance(v, unicode):
                 v = v.decode('utf-8')
@@ -131,11 +131,14 @@ class Request():
 
         status = status or 200
         if isinstance(status, (int, long)):
-            status_text = HTTP_STATUS.get(status, 'unknown')
+            status_text = HTTP_STATUS.get(status, '')
         elif isinstance(status, (tuple, list)):
             status, status_text = status
             status = int(status or 200)
-            status_text = str(status_text or 'unknown')
+            status_text = str(status_text or '')
+        elif isinstance(status, basestring):
+            status, status_text = status.split(' ', 1)
+            status = int(status)
         else:
             raise TypeError("status must be a number or tuple of (status, text), not: %r" % (status, ))
 
