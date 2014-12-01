@@ -5,6 +5,7 @@ import logging
 import base64
 import email.parser
 import email.Message
+import traceback
 
 import chan
 import webkitwindow
@@ -75,7 +76,8 @@ class Iframes(object):
 
         Use the iframe_id o identify the iframe objects
 
-        May return a tuple denoting an term screen client event or None
+        May return a list of tuples denoting one or more term screen
+        client event or None
         """
         name, iframe_id = event[:2]
         args = event[2:]
@@ -84,15 +86,21 @@ class Iframes(object):
             # create a new iframe, switch terminal into 'iframe_document_mode'
             logger.debug("iframe-enter %r", event)
             self.iframes[iframe_id] = Iframe(iframe_id, self.client)
-            return event
+            return [event]
         elif name == 'iframe-resize':
-            return event
+            return [event]
         else:
             f = self.iframes.get(iframe_id)
             if f:
                 event_method = getattr(f, name.replace('-', '_'))
                 if event_method:
-                    return event_method(*args)
+                    try:
+                        return event_method(*args)
+                    except:
+                        print "Error while calling iframe method %r, args: %r" % (event_method, args)
+                        traceback.print_stack()
+                        traceback.print_exc()
+
                 else:
                     logger.error('Unknown iframe event method: %r', name)
             else:
@@ -214,6 +222,26 @@ class Iframe(object):
         # window like other schirm error messages
         print msg
 
+    def _set_frame_options(self, args):
+        # set iframe options (e.g. resizing, url)
+        assert isinstance(args, dict)
+
+        screen_commands = []
+
+        # change the frames URL
+        if 'url' in args and self.state == 'close':
+            url = urlparse.urlsplit(args['url'])
+            iframe_url = urlparse.urlunsplit((
+                'http://',
+                '%s.localhost' % self.id,
+                url.path,
+                url.query,
+                url.fragment
+            ))
+            screen_commands.append(('iframe-set-url', self.id, iframe_url))
+
+        return screen_commands
+
     def _unknown(self, data):
         logger.error("unknown iframe request: %r" % (data,))
 
@@ -235,6 +263,8 @@ class Iframe(object):
                 _p = data.find('\r\n\r\n')
                 if _p > 0:
                     header_end_pos = _p
+                else:
+                    header_end_pos = len(data)
 
             if header_end_pos > 0:
                 try:
@@ -264,6 +294,7 @@ class Iframe(object):
         # x-schirm-request-id .. request id to identify the response
         # x-schirm-send .. send this string or the body via the schirm websocket
         # x-schirm-debug .. write this string or the body to the emulators process stdout
+        # x-schirm-frame-options .. set iframe options (resizing, url, )
         if 'x-schirm-path' in header:
             self._register_resource(name=header['x-schirm-path'],
                                     mimetype=header.get('content-type', header.get('Content-Type')),
@@ -274,6 +305,9 @@ class Iframe(object):
             self._send_message(header['x-schirm-message'] or body)
         elif 'x-schirm-debug' in header:
             self._debug(header['x-schirm-debug'] or body)
+        elif 'x-schirm-frame-options' in header:
+            # may return commands to the screen in the browser
+            return self._set_frame_options(json.loads(body))
         else:
             self._unknown(data)
 

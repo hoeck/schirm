@@ -58,21 +58,26 @@ ALT_BUFFER_MODE = "1049" # save cursor and use alternative buffer (without scrol
 # primitives
 def _set_mode_str(mode_id, cookie=None):
     return ''.join([MODE_PRIV, mode_id] +
-                   [';' + s[i:i+4] for i in range(0, len(cookie or ''), 4)] +
+                   [';' + cookie[i:i+4] for i in range(0, len(cookie or ''), 4)] +
                    [SET_MODE])
 
 def _reset_mode_str(mode_id):
     return ''.join([MODE_PRIV, mode_id, RESET_MODE])
 
-def _write_request(header, body, out=sys.stdout):
+@contextmanager
+def _terminal_str(out=sys.stdout):
+    out.write(STR_START)
     try:
-        out.write(STR_START)
-        out.write(json.dumps(header))
-        out.write("\n\n")
-        out.write(base64.b64encode(body))
+        yield
     finally:
         out.write(STR_END)
         out.flush()
+
+def _write_request(header, body, out=sys.stdout):
+    with _terminal_str():
+        out.write(json.dumps(header))
+        out.write("\n\n")
+        out.write(base64.b64encode(body))
 
 def enter():
     """Enter the frame mode.
@@ -134,8 +139,28 @@ def get_fdin():
             return os.open(os.ctermid(), os.O_RDONLY)
 
 @contextmanager
-def frame(newline=True, fullscreen=False):
-    """Enter frame mode, leaving it on return or exceptions."""
+def frame(newline=True, fullscreen=False, url=None, resources={}):
+    """Enter frame mode, leaving it on return or exceptions.
+
+    When in frame mode, all data send to the terminal may be written
+    to the current frame (depending on the url parameter). Responses
+    to HTTP requests from the frame or Websocket messages can be
+    issued with the `respond` or `send` methods.
+
+    Use fullscreen=True to use the whole terminal screen, hiding the
+    other terminal contents and the scrollback.
+
+    newline=True emits a newline after leaving the frame mode so that
+    the shell prompt appears on a new line and doesn't overwrite the
+    previous frame.
+
+    When url is not None, it must be a url path string that gets
+    loaded in the new frame.
+    When url is None, the frames is opened for writing. Anything send
+    to the terminal is put into it until `close()` is called.
+
+    resources should be a dictionary of urlpath:(data, mimetype) items.
+    """
     if not isaschirm():
         raise Exception("Not connected to the schirm terminal.")
 
@@ -145,6 +170,15 @@ def frame(newline=True, fullscreen=False):
             out.write(_set_mode_str(ALT_BUFFER_MODE))
             out.flush()
         enter()
+
+        for name, (data, mimetype) in resources.items():
+            resource_data(data, name, mimetype)
+
+        if url:
+            close()
+            _write_request(header={'x-schirm-frame-options': True},
+                           body=json.dumps({'url': url}))
+
         yield get_fdin()
     finally:
         leave(newline=newline)
@@ -343,19 +377,18 @@ def _wsgi_handle_request(request, application):
     # TODO: allow streaming responses
     respond(request_id, response['status'], response['headers'], ''.join(result))
 
-def wsgi_run(app=None, resources={}, url='/', fullscreen=False, newline=True):
-    """Run WSGI application app in a frame."""
+def wsgi_run(app=None, fullscreen=False, newline=True, resources={}, url='/'):
+    """Run WSGI application app in a frame.
+
+    see `frame` for more documentation.
+    """
+    assert url, "url must not be empty"
+
     if not app:
         import bottle
         app = bottle.default_app()
 
-    with frame(newline=newline, fullscreen=fullscreen):
-        for name, (data, mimetype) in resources.items():
-            resource_data(data, name, mimetype)
-
-        print '<html><head><meta HTTP-EQUIV="Refresh" CONTENT="0; URL=%s"></head><body></body></html>' % cgi.escape(url, True)
-        close()
-
+    with frame(newline=newline, fullscreen=fullscreen, url=url, resources={}):
         while True:
             req = read_next()
             _wsgi_handle_request(req, app)

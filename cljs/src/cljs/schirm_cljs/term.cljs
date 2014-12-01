@@ -126,6 +126,11 @@
                         (.setTimeout js/window #(screen/auto-scroll screen))
                         state)
 
+      "iframe-set-url" (let [[iframe-id url] args
+                             iframe (.getElementById js/document iframe-id)]
+                         (set! (.-src iframe) url)
+                         state)
+
       ;; debug
       "start-clojurescript-repl" (do (repl/connect "http://localhost:9000/repl")
                                      state)

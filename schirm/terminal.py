@@ -186,8 +186,8 @@ class Terminal(object):
         for e in events:
             if e[0].startswith("iframe-"):
                 res = self.iframes.dispatch(e)
-                if res is not None:
-                    term_events.append(res)
+                if res:
+                    term_events.extend(res)
             else:
                 term_events.append(e)
 
