@@ -6,4 +6,4 @@ def index(name):
     return bottle.template('<b>Hello {{name}}</b>!', name=name)
 
 if __name__ == '__main__':
-    schirmclient.wsgi_run(url='/hello/schirm', fullscreen=True)
+    schirmclient.wsgi_run(bottle.app(), url='/hello/schirm', fullscreen=True)

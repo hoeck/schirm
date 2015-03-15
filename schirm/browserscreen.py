@@ -335,6 +335,8 @@ class BrowserScreen(object):
     def iframe_enter(self, iframe_id, line):
         self._update_total_lines(line)
         self._append(('iframe-enter', iframe_id, line))
+        if self._alt_mode:
+            self._append(('iframe-resize', iframe_id, 'fullscreen'))
 
     def iframe_close(self, iframe_id):
         self._append(('iframe-close', iframe_id))
