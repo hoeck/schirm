@@ -297,7 +297,6 @@
        <pre class=\"terminal-line-container\"></pre>
      </div>
      <pre class=\"terminal-alt-container\"></pre>
-     <div class=\"terminal-alt-iframe-container\"></div>
    </div>")
 
 (defn -append-missing-lines [screen pos]
