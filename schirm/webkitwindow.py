@@ -503,6 +503,22 @@ class WebSocketBackend(QtCore.QObject):
         self.onmessage.emit(id, data)
 
 
+class CustomQWebPage(QtWebKit.QWebPage):
+
+    """QWebPage subclass to be able to implement shouldInterruptJavaScript.
+
+    See http://doc.qt.io/qt-4.8/qwebpage.html#shouldInterruptJavaScript
+
+    TODO:
+      - allow for customization
+      - custom settings for each created iframe
+    """
+
+    @QtCore.pyqtSlot(result=bool)
+    def shouldInterruptJavaScript(self):
+        return False
+
+
 class _WebkitWindow(QtGui.QMainWindow):
 
     _close_window = QtCore.pyqtSignal()
@@ -520,7 +536,7 @@ class _WebkitWindow(QtGui.QMainWindow):
         horizontalLayout.setObjectName("horizontalLayout")
         webView = QtWebKit.QWebView(centralwidget)
         webView.setObjectName("webView")
-        webpage = QtWebKit.QWebPage()
+        webpage = CustomQWebPage()
 
         # set the custom NAM
         nam = LocalDispatchNetworkAccessManager()
