@@ -1,11 +1,11 @@
 import sys
 import os
-import pkgutil
 import Queue
 import StringIO
 import urlparse
 import mimetypes
 import pkgutil
+import itertools
 
 try:
     from PyQt4 import QtCore, QtGui, QtWebKit, QtNetwork
@@ -470,12 +470,13 @@ class WebSocketBackend(QtCore.QObject):
     def __init__(self, network_handler):
         super(WebSocketBackend, self).__init__()
         self._connections = {}
+        self._ids = itertools.count()
         self._network_handler = network_handler
 
     @QtCore.pyqtSlot(str, result=int)
     def connect(self, url):
         """Create a websocket connection."""
-        id = max(self._connections.keys() or [0]) + 1
+        id = self._ids.next()
         ws = WebSocket(str(url), self, id)
         self._connections[id] = ws
         QtCore.QTimer.singleShot(0, lambda: self._network_handler._connect.emit(ws)) #??????
@@ -509,21 +510,49 @@ class CustomQWebPage(QtWebKit.QWebPage):
 
     See http://doc.qt.io/qt-4.8/qwebpage.html#shouldInterruptJavaScript
 
+    Additionally provides a configurable javascript console message
+    handler, possible values:
+
+        'print'  .. print the console message to stdout (the default)
+        function .. call function on each message with a dict of
+                    message, line_number and source_id keys
+        None     .. do nothing
+
+    The underlying javaScriptConsoleMessage method will be called for
+    console.log() calls, ignoring everything but the first args and
+    for javascript errors.
+
     TODO:
-      - allow for customization
+      - allow for customization of shouldInterruptJavaScript
       - custom settings for each created iframe
+      - implement the other javascript* handlers (alert, prompt, confirm
     """
+
+    def __init__(self, console_message='print'):
+        self._console_message = console_message
+        QtWebKit.QWebPage.__init__(self)
 
     @QtCore.pyqtSlot(result=bool)
     def shouldInterruptJavaScript(self):
         return False
+
+    def javaScriptConsoleMessage(self, message, lineNumber, sourceID):
+        if self._console_message == 'print':
+            print 'js-console: {} ({}:{})'.format(message, sourceID, lineNumber)
+        elif self._console_message:
+            self._console_message({'message': str(message),
+                                   'line_number': str(lineNumber),
+                                   'source_id': str(sourceID)})
+        else:
+            pass
 
 
 class _WebkitWindow(QtGui.QMainWindow):
 
     _close_window = QtCore.pyqtSignal()
 
-    def __init__(self, network_handler, url=None):
+    def __init__(self, network_handler, url=None, console_message='print'):
+        self._console_message = console_message
         self.url = url or "http://localhost"
         self.network_handler = AsyncNetworkHandler(network_handler)
         QtGui.QMainWindow.__init__(self)
@@ -536,7 +565,7 @@ class _WebkitWindow(QtGui.QMainWindow):
         horizontalLayout.setObjectName("horizontalLayout")
         webView = QtWebKit.QWebView(centralwidget)
         webView.setObjectName("webView")
-        webpage = CustomQWebPage()
+        webpage = CustomQWebPage(console_message=self._console_message)
 
         # set the custom NAM
         nam = LocalDispatchNetworkAccessManager()
@@ -582,7 +611,88 @@ class _WebkitWindow(QtGui.QMainWindow):
     # QNetworkAccessManager. Thus we 'intercept' WebSocket connection
     # attempts by adding our own implementation of the WebSocket
     # interface to the javascript window context of each new frame.
-    websocket_js = pkgutil.get_data(__name__, 'websocket.js')
+
+    websocket_js = """
+/**
+ * Provide a Websocket interface that uses a QT object (_wsExt)
+ * instead of the network to be able to proxy the websocket
+ * communication.
+ */
+(function() {
+
+    // pass the local interfacing object via window globals
+    var wsExt = window._wsExt;
+    window._wsExt = undefined;
+
+    window.WebSocket = function(url) {
+        var self = this, connId;
+
+        self.CONNECTING = 0; // The connection has not yet been established.
+        self.OPEN       = 1; // The WebSocket connection is established and communication is possible.
+        self.CLOSING    = 2; // The connection is going through the closing handshake.
+        self.CLOSED     = 4; // The connection has been closed or could not be opened.
+
+        self.url = url;
+        self.readyState = self.CONNECTING;
+        self.extensions = "";
+        self.protocol = "";
+
+        self.onopen = undefined;
+        self.onmessage = undefined;
+        self.onerror = undefined;
+        self.onclose = undefined;
+
+        self.send = function(data) {
+            wsExt.send_to_server(connId, data);
+        };
+
+        self.close = function(code, reason) {
+            if (self.readyState === self.CLOSING || self.readyState === self.CLOSED) {
+                // nothing
+            } else if (self.readyState === self.OPEN) {
+                self.readyState = self.CLOSING;
+                wsExt.close(connId);
+                if (self.onclose) {
+                    self.onclose();
+                }
+            } else {
+                self.readyState == CLOSED;
+            }
+        };
+
+        // register callbacks on the Qt side
+
+        wsExt.onopen.connect(function(id) {
+            if (id === connId) {
+                self.readyState = self.OPEN;
+                if (self.onopen) {
+                    self.onopen();
+                }
+            }
+        });
+
+        wsExt.onmessage.connect(function(id, data) {
+            if (id === connId) {
+                if (self.onmessage) {
+                    self.onmessage({data:data});
+                }
+            }
+        });
+
+        wsExt.onclose.connect(function(id) {
+            if (id === connId) {
+                self.readyState = self.CLOSED;
+                if (self.onclose) {
+                    self.onclose();
+                }
+            }
+        });
+
+        // init
+        connId = wsExt.connect(url);
+    };
+})();
+"""
 
     def setup_local_websockets_on_frame(self, qwebframe):
         def _load_js(f=qwebframe, js=self.websocket_js, websocket_backend=self.websocket_backend):
@@ -603,7 +713,7 @@ class _WebkitWindow(QtGui.QMainWindow):
 class WebkitWindow(object):
 
     @classmethod
-    def run(self, handler, url="http://localhost", exit=True):
+    def run(self, handler, url="http://localhost", exit=True, console_message='print'):
         """Open a window displaying a single webkit instance.
 
         handler must be an object implementing the NetworkHandler
@@ -611,9 +721,13 @@ class WebkitWindow(object):
 
         Navigate the webkit to url after opening it.
 
+        console_message ('print', function that receives a dict or
+        None) controls how to deal with javascript console messages,
+        see CustomQWebPage.
+
         If exit is true, sys.exit after closing the window.
         """
-        win = self(handler, url, exit)
+        win = self(handler, url, exit, console_message)
         return win._run()
 
     @staticmethod
@@ -621,14 +735,15 @@ class WebkitWindow(object):
         """Enqueue and run function f on the main thread."""
         QtCore.QTimer.singleShot(timeout or 0, f)
 
-    def __init__(self, handler, url, exit):
+    def __init__(self, handler, url, exit, console_message):
         self._handler = handler
         self._url = url
         self._exit = exit
+        self._console_message = console_message
 
     def _run(self):
         app = QtGui.QApplication(sys.argv)
-        self._window = _WebkitWindow(self._handler, self._url)
+        self._window = _WebkitWindow(self._handler, self._url, self._console_message)
         self._window.show()
 
         if getattr(self._handler, 'startup', None):
