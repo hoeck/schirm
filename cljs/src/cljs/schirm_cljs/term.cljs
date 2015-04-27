@@ -121,7 +121,7 @@
 
       "iframe-resize" (let [[iframe-id height] args
                             iframe (.getElementById js/document iframe-id)
-                            height-style (if (==  height "fullscreen") "100%" (str height))]
+                            height-style (if (==  height "fullscreen") "100%" (format "%spx" height))]
                         (when iframe (-> iframe .-style .-height (set! height-style)))
                         (.setTimeout js/window #(screen/auto-scroll screen))
                         state)

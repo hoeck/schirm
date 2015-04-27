@@ -158,7 +158,7 @@ var schirm = (function(schirm) {
             newHeight = getElementHeight(height) + vScrollbarHeight + bodyMargin;
         } else if (height === undefined) {
             // auto-resize the body
-            newHeight = document.body.clientHeight + vScrollbarHeight + bodyMargin;
+            newHeight = document.body.scrollHeight + vScrollbarHeight + bodyMargin;
         }
 
         if (resizePrevHeight !== newHeight) {

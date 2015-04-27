@@ -1,4 +1,5 @@
 import re
+import cgi
 import json
 import urlparse
 import logging
@@ -6,6 +7,7 @@ import base64
 import email.parser
 import email.Message
 import traceback
+import HTMLParser # is there anything that *isn't* in the stdlib?
 
 import chan
 import webkitwindow
@@ -22,6 +24,72 @@ def get_iframe_id(req_or_ws):
     # url: http://<iframe-id>.localhost
     m = re.match("(?P<iframe_id>.+)\.localhost", req_or_ws.url_netloc)
     return m.group('iframe_id') if m else None
+
+
+def instrument_html(html_string):
+    """Inject schirm resize code as <script> into an HTML string.
+
+    Try to find a nice position (before the first <script> tag, before
+    </body> or at the end of the document) for the script snippet.
+
+    Return the modified HTML string.
+    """
+
+    class InstrumentingParser(HTMLParser.HTMLParser):
+
+        def __init__(self):
+            HTMLParser.HTMLParser.__init__(self)
+            self._script_injected = False
+            self._result = []
+
+        def _inject_script_or_skip(self):
+            if not self._script_injected:
+                self._result.append('<script type="text/javascript" src="schirm.js"></script>')
+                self._result.append('<script type="text/javascript">schirm.ready(function() { setTimeout(schirm.resize, 0); })</script>')
+                self._script_injected = True
+
+        def handle_startendtag(self, tag, attr):
+            self._result.append('<{} {} />'.format(tag, ' '.join('{}="{}"'.format(k,cgi.escape(v, True)) for k,v in attrs)))
+
+        def handle_starttag(self, tag, attrs):
+            if tag == 'script':
+                # insert before the first <script> tag
+                self._inject_script_or_skip()
+
+            self._result.append('<{} {}>'.format(tag, ' '.join('{}="{}"'.format(k,cgi.escape(v, True)) for k,v in attrs)))
+
+        def handle_endtag(self, tag):
+            if tag == 'body':
+                # insert before the body is closed
+                self._inject_script_or_skip()
+
+            self._result.append('</{}>'.format(tag))
+
+        def handle_charref(self, name):
+            self._result.append('&#{};'.format(name))
+
+        def handle_entityref(self, name):
+            self._result.append('&{};'.format(name))
+
+        def handle_data(self, data):
+            self._result.append(data)
+
+        def handle_comment(self, data):
+            self._result.append('<!--{}-->'.format(data))
+
+        def handle_decl(self, decl):
+            self._result.append('<!doctype {}>'.format(decl))
+
+        def handle_pi(self, data):
+            self._result.append('<? {}>'.format(data))
+
+        def unknown_decl(self, data):
+            self._result.append('<![{}]]>'.format(data))
+
+    p = InstrumentingParser()
+    p.feed(html_string)
+    p._inject_script_or_skip()
+    return ''.join(p._result)
 
 
 class Iframes(object):
@@ -122,6 +190,10 @@ class Iframe(object):
         self.requests = {} # map of requests, waiting for responses from the client
         self.state = 'open'
 
+        # a set of urls (to HTML documents) that need to be
+        # instrumented with the schirm javascript on the next request
+        self.instrument_urls = set()
+
         self._root_document = None # a streaming response for the root document
         self._websocket = None # schirm -> iframe websocket
         self.pending_commands = [] # enqueue commands made by the client before establishing the websocket connection with the iframe
@@ -215,6 +287,10 @@ class Iframe(object):
         # the we should respond with
         status = header.pop('Status', None) or header.pop('status', '200')
 
+        if req.url in self.instrument_urls:
+            self.instrument_urls.remove(req.url)
+            body = instrument_html(body)
+
         req.respond(status, webkitwindow.Message(header, body))
 
     def _debug(self, msg):
@@ -239,6 +315,9 @@ class Iframe(object):
                 url.fragment
             ))
             screen_commands.append(('iframe-set-url', self.id, iframe_url))
+
+            # todo: only instrument when e.g. size argument to frame is 'auto'
+            self.instrument_urls.add(iframe_url)
 
         return screen_commands
 

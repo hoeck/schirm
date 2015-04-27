@@ -47,7 +47,9 @@ iframe {
     /* transparent border to allow setting a border for focused
      * iframes (.focus class) */
     border: 1px solid transparent;
-    box-sizing: border-box;
+    box-sizing: content-box;
+    /* start with a small iframe, resizing it later */
+    height: 1px;
 }
 
 body {
