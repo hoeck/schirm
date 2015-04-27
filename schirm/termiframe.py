@@ -308,7 +308,7 @@ class Iframe(object):
         if 'url' in args and self.state == 'close':
             url = urlparse.urlsplit(args['url'])
             iframe_url = urlparse.urlunsplit((
-                'http://',
+                'http',
                 '%s.localhost' % self.id,
                 url.path,
                 url.query,
