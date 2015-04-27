@@ -1,4 +1,5 @@
 import os
+import base64
 import Queue
 import logging
 import threading
@@ -96,3 +97,7 @@ def shorten(s, max=40, more='...'):
 def shorttrace():
     """Return a line:fn traceback for the bottom 3 stackframes."""
     return ' > '.join('%s:%s' % (line,fn) for file, line, fn, code in traceback.extract_stack()[-4:][:-1])
+
+def roll_id(size=8):
+    """Return a base64 encoded random number of size bytes."""
+    return base64.b32encode(os.urandom(size)).lower().strip('=')

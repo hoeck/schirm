@@ -17,16 +17,16 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from UserList import UserList
-import os
 import logging
 import re
-import base64
 import pkgutil
 
 import pyte
 from pyte.screens import Char, Margins, Cursor
 from pyte import modes as mo, graphics as g, charsets as cs, control as ctrl
+
 import browserscreen
+import utils
 
 logger = logging.getLogger(__name__)
 
@@ -564,7 +564,7 @@ class TermScreen(pyte.Screen):
 
     def _next_iframe_id(self):
         # unique random id to hide the terminals url
-        return base64.b32encode(os.urandom(35)).lower()
+        return utils.roll_id()
 
     def _insert_iframe_line(self):
         self.linecontainer.iframe_enter(self.iframe_id, self.cursor.y)

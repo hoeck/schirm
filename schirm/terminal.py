@@ -24,9 +24,6 @@ def get_config_file_contents(filename):
         with open(config) as f:
             return f.read()
 
-def roll_id():
-    return base64.b32encode(os.urandom(35)).lower()
-
 class Terminal(object):
 
     clojurescript_repl_url = 'http://localhost:9000'
@@ -42,7 +39,7 @@ class Terminal(object):
     @classmethod
     def create_url(self, id=None):
         """Return a non-guessable localhost subdomain url for this terminal."""
-        return "http://%s.localhost" % (id or roll_id())
+        return "http://%s.localhost" % (id or utils.roll_id())
 
     def __init__(self, client, size=(80,25), url=None, start_clojurescript_repl=False):
         self.client = client
