@@ -110,10 +110,20 @@
 
       ;; iframe
       "iframe-enter" (let [[iframe-id pos] args
+                           menu-thumb (dom-utils/create-element
+                                       "div"
+                                       {:class ["iframe-menu-thumb"]
+                                        :inner-text "close"
+                                        :title "close"
+                                        :iframe-id iframe-id})
                            iframe (create-iframe iframe-id)]
                        (screen/update-line screen pos
                                            (fn [l]
                                              (set! (.-innerHTML l) "")
+                                             ;; make the line position:relative so the close div
+                                             ;; appears on the upper left over the iframe
+                                             (-> l .-classList (.add "iframe-line"))
+                                             (.appendChild l menu-thumb)
                                              (.appendChild l iframe)
                                              (.focus iframe)))
                        (.addEventListener iframe "webkitTransitionEnd" #(screen/auto-scroll screen))
@@ -220,6 +230,24 @@
    container
    #(put! ws-send (.stringify js/JSON (clj->js {:name "paste_selection" :string %})))))
 
+(defn setup-iframe-menu-thumb
+  "The iframe-menu-thumb provides control over applications running in frame mode.
+
+  Analogous to control flow keyboard shortcuts, it is able to 'close'
+  the iframe (making the app to leave frame mode) or to 'kill' the app
+  by sending SIGINT (CTRL-C)."
+  [ws-send screens]
+  (let [a 1]
+    (doseq [s screens]
+      (.addEventListener (.-element s)
+                         "click"
+                         (fn [e]
+                           (let [target (-> e .-target)]
+                             (when (-> target .-classList (.contains "iframe-menu-thumb"))
+                               (let [iframe-id (-> target .-iframeId)
+                                     message (clj->js {:name "iframe_request_close" :iframe_id iframe-id})]
+                                 (put! ws-send (.stringify js/JSON message))))))))))
+
 (defn setup-terminal []
   (let [ws-send  (chan)
         ws-recv (chan)
@@ -232,6 +260,7 @@
                 #(screen/auto-scroll (nth screens 0) true))
     (setup-word-select screens)
     (setup-iframe-focus)
+    (setup-iframe-menu-thumb ws-send screens)
     (setup-right-click container ws-send)
     (setup-resize container ws-send screens)
     (setup-websocket ws-url ws-send ws-recv)))

@@ -43,6 +43,18 @@ pre.terminal-alt-container {
     /* height: 100%; */
 }
 
+
+.iframe-line {
+    position:relative;
+}
+
+.iframe-menu-thumb {
+    position:absolute;
+    top:0;
+    right:0;
+    width:3em;
+}
+
 iframe {
     /* transparent border to allow setting a border for focused
      * iframes (.focus class) */

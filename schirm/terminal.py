@@ -292,13 +292,22 @@ class Terminal(object):
         self.screen.iframe_resize(iframe_id, height)
         self.render()
 
+    def iframe_request_close(self, iframe_id):
+        """Request leaving iframe mode by sending SIGINT (CTRL-C).
+
+        Triggered via a click on the close button (iframe-menu-thumb)
+        as the iframe may not respond to keypresses.
+        """
+        self.keypress({u'control': True, u'code': 67, u'name': u'C', u'shift': False, u'alt': False, u'string': u''})
+
     valid_msg_names = set(['keypress',
                            'resize',
                            'paste_selection',
-                           'iframe_resize'])
+                           'iframe_resize',
+                           'iframe_request_close'])
 
     def dispatch_msg(self, msg):
-        """Dispatch websocket messages."""
+        """Dispatch websocket messages coming from the terminal UI."""
         name = msg.get('name')
         if name in self.valid_msg_names:
             msg.pop('name')

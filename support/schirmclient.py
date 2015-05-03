@@ -250,13 +250,29 @@ def _read_next_string(fd):
             else:
                 current.append(ch)
 
-def read_next(fd=None):
+def read_next(fd=None, interrupt='exit'):
     """Read and decode requests from the given filedescriptor (defaults to stdin).
 
-    Returns a header dict and a message body.
+    Returns a header dict and a message body on success.
+
+    interrupt defines what should happen when the user presses CTRL-C or
+    hits the iframes close button (terminal sends SIGINT, Python
+    raises a KeyboardInterrupt).
+    Possible values are:
+        'exit'   .. (default) calls sys.exit(0)
+        None     .. passes the KeyboardException on
+        callable .. called with no arg, return it result
     """
-    header, body = _read_next_string(fd or sys.stdin.fileno()).split('\n',1)
-    return json.loads(header), body
+    try:
+        header, body = _read_next_string(fd or sys.stdin.fileno()).split('\n',1)
+        return json.loads(header), body
+    except KeyboardInterrupt, e:
+        if interrupt == 'exit':
+            sys.exit(0)
+        elif interrupt == None:
+            raise
+        else:
+            return interrupt()
 
 def respond(requestid, status, header, body):
     """Write an HTTP response to requestid to the schirm terminal.
