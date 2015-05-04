@@ -52,7 +52,16 @@ pre.terminal-alt-container {
     position:absolute;
     top:0;
     right:0;
-    width:3em;
+    width:2em;
+    height:2em;
+    /* svg */
+    fill: #4b4b4b;
+    fill-opacity:0.2;
+}
+
+.iframe-menu-thumb:hover {
+    fill: #4b4b4b;
+    fill-opacity:0.8;
 }
 
 iframe {

@@ -52,6 +52,13 @@
       :src uri
       :id id})))
 
+(def iframe-menu-thumb-svg "<svg class=\"iframe-menu-thumb\">
+  <g transform=\"scale(2) translate(-23.625,-584.43734)\">
+    <path
+       d=\"m 25.643378,584.49888 -1.966539,1.96766 2.976292,2.97629 -3.028131,3.02814 1.967666,1.96653 3.027003,-3.02701 2.925578,2.92446 1.967666,-1.96767 -2.925578,-2.92445 2.873738,-2.87373 -1.967665,-1.96655 -2.872612,2.87262 z\"/>
+  </g>
+</svg>")
+
 (defn invoke-screen-method [state scrollback-screen alt-screen msg]
   (let [[meth & args] msg
         screen (if (:alt-mode state) alt-screen scrollback-screen)]
@@ -110,12 +117,7 @@
 
       ;; iframe
       "iframe-enter" (let [[iframe-id pos] args
-                           menu-thumb (dom-utils/create-element
-                                       "div"
-                                       {:class ["iframe-menu-thumb"]
-                                        :inner-text "close"
-                                        :title "close"
-                                        :iframe-id iframe-id})
+                           menu-thumb (dom-utils/create-element-from-string iframe-menu-thumb-svg)
                            iframe (create-iframe iframe-id)]
                        (screen/update-line screen pos
                                            (fn [l]
@@ -242,10 +244,16 @@
       (.addEventListener (.-element s)
                          "click"
                          (fn [e]
-                           (let [target (-> e .-target)]
-                             (when (-> target .-classList (.contains "iframe-menu-thumb"))
-                               (let [iframe-id (-> target .-iframeId)
-                                     message (clj->js {:name "iframe_request_close" :iframe_id iframe-id})]
+                           (let [target (-> e .-target)
+                                 line? #(and (-> % .-classList)
+                                             (-> % .-classList (.contains "iframe-line")))]
+                             ;; TODO: after qtwebkit update, check whether svg elements support .-classList!
+                             (when (and (or (-> target .-tagName (== "svg"))
+                                            (-> target .-tagName (== "path")))
+                                        (or (-> target .-parentElement line?)
+                                            (-> target .-parentElement .-parentElement line?)
+                                            (-> target .-parentElement .-parentElement .-parentElement line?)))
+                               (let [message (clj->js {:name "iframe_request_close"})]
                                  (put! ws-send (.stringify js/JSON message))))))))))
 
 (defn setup-terminal []

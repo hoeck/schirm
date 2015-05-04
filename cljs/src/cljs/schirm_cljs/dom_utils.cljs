@@ -70,6 +70,10 @@
       (aset e (camelcasify (name k)) v))
     e))
 
+(defn create-element-from-string [string]
+  (-> (create-element "div" {:inner-html string})
+      .-firstChild))
+
 (defn char-size
   "Compute the size of an 'X' in element.
 

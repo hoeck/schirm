@@ -292,7 +292,7 @@ class Terminal(object):
         self.screen.iframe_resize(iframe_id, height)
         self.render()
 
-    def iframe_request_close(self, iframe_id):
+    def iframe_request_close(self):
         """Request leaving iframe mode by sending SIGINT (CTRL-C).
 
         Triggered via a click on the close button (iframe-menu-thumb)
