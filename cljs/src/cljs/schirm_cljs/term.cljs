@@ -125,11 +125,16 @@
                                              ;; make the line position:relative so the close div
                                              ;; appears on the upper left over the iframe
                                              (-> l .-classList (.add "iframe-line"))
+                                             (-> l .-classList (.add "iframe-line-active"))
                                              (.appendChild l menu-thumb)
                                              (.appendChild l iframe)
                                              (.focus iframe)))
                        (.addEventListener iframe "webkitTransitionEnd" #(screen/auto-scroll screen))
                        state)
+
+      "iframe-leave" (do (doseq [l (array-seq (.querySelectorAll js/document ".iframe-line-active"))]
+                           (-> l .-classList (.remove "iframe-line-active")))
+                         state)
 
       "iframe-resize" (let [[iframe-id height] args
                             iframe (.getElementById js/document iframe-id)

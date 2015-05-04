@@ -250,8 +250,10 @@ class Iframe(object):
         if self._websocket:
             # close open websockets
             self._websocket.close()
-        # must the screen keep the iframe-mode state too???
-        #return "term.screen.iframeLeave();"
+
+        # to enable mode-dependend styles (e.g. iframe-menu-thumb) the
+        # screen is keeping the iframe-mode state too
+        return [('iframe-leave', )]
 
     def _send_message(self, data):
         """Send data to the iframe using the iframes websocket connection."""

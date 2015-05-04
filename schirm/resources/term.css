@@ -54,6 +54,7 @@ pre.terminal-alt-container {
     right:0;
     width:2em;
     height:2em;
+    display:none;
     /* svg */
     fill: #4b4b4b;
     fill-opacity:0.2;
@@ -62,6 +63,10 @@ pre.terminal-alt-container {
 .iframe-menu-thumb:hover {
     fill: #4b4b4b;
     fill-opacity:0.8;
+}
+
+.iframe-line-active .iframe-menu-thumb {
+    display:block;
 }
 
 iframe {
