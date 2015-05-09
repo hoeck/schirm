@@ -70,13 +70,6 @@
     vertical-align:top;
 }
 
-/* focused iframe */
-
-iframe.focus {
-    border: 1px solid #ddf;
-    box-shadow: 0px 0px 5px #eef, inset 0px 0px 5px #eef;
-}
-
 /* min scrollbar */
 
 body {
