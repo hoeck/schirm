@@ -25,9 +25,16 @@ def get_iframe_id(req_or_ws):
     m = re.match("(?P<iframe_id>.+)\.localhost", req_or_ws.url_netloc)
     return m.group('iframe_id') if m else None
 
+# <script> tags injected into iframes to provide interoperability
+# between the frame and the surrounding terminal (resizing, key
+# handlers, communication-websocket, ...)
+IFRAME_SCRIPT = ('<script type="text/javascript" src="schirm.js"></script>'
+                 '<script type="text/javascript">schirm.initFrame()</script>')
 
 def instrument_html(html_string):
-    """Inject schirm resize code as <script> into an HTML string.
+    """Inject schirm frame init code as <script> into an HTML string.
+
+    See IFRAME_SCRIPTS.
 
     Try to find a nice position (before the first <script> tag, before
     </body> or at the end of the document) for the script snippet.
@@ -44,8 +51,7 @@ def instrument_html(html_string):
 
         def _inject_script_or_skip(self):
             if not self._script_injected:
-                self._result.append('<script type="text/javascript" src="schirm.js"></script>')
-                self._result.append('<script type="text/javascript">schirm.ready(function() { setTimeout(schirm.resize, 0); })</script>')
+                self._result.append(IFRAME_SCRIPT)
                 self._script_injected = True
 
         def handle_startendtag(self, tag, attr):
@@ -450,15 +456,15 @@ class Iframe(object):
                             height = 'fullscreen'
                     req_ok()
                     return {'name': 'iframe_resize', 'iframe_id': self.id, 'height':height}
-                elif cmd == 'control-c': # TODO: return a 'msg' and decode in terminal.handlers.request
-                    #terminal.keypress({'name': 'C', 'control': True})
+                elif cmd == 'control-c':
                     req_ok()
+                    return {u'name': u'keypress', u'key': 'control-c'}
                 elif cmd == 'control-d':
-                    #terminal.keypress({'name': 'D', 'control': True})
                     req_ok()
+                    return {u'name': u'keypress', u'key': 'control-d'}
                 elif cmd == 'control-z':
-                    #terminal.keypress({'name': 'Z', 'control': True})
                     req_ok()
+                    return {u'name': u'keypress', u'key': 'control-z'}
                 else:
                     req_bad("Invalid command: %r" % (cmd, ))
             else:

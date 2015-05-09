@@ -128,6 +128,12 @@ class Terminal(object):
     # websocket IPC
 
     def keypress(self, key):
+        if key == 'control-c':
+            key = {u'control': True, u'code': 67, u'name': u'C', u'shift': False, u'alt': False, u'string': u''}
+        elif key == 'control-d':
+            key = {u'control': True, u'code': 68, u'name': u'D', u'shift': False, u'alt': False, u'string': u''}
+        elif key == 'control-z':
+            key = {u'control': True, u'code': 90, u'name': u'Z', u'shift': False, u'alt': False, u'string': u''}
         keycode = self.decode_keypress(key)
         self.client.write(keycode)
 
@@ -298,7 +304,7 @@ class Terminal(object):
         Triggered via a click on the close button (iframe-menu-thumb)
         as the iframe may not respond to keypresses.
         """
-        self.keypress({u'control': True, u'code': 67, u'name': u'C', u'shift': False, u'alt': False, u'string': u''})
+        self.keypress('control-c')
 
     valid_msg_names = set(['keypress',
                            'resize',

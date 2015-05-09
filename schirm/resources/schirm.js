@@ -191,6 +191,31 @@ var schirm = (function(schirm) {
         window.addEventListener('resize', resizeHandler);
     };
 
+    // register a global key listener for the terminal
+    // control-flow-commands (CTRL-C, CTRL-D, CTRL-Z)
+    schirm.registerTerminalKeyHandlers = function() {
+        window.addEventListener('keydown', function(e) {
+            if (e.ctrlKey) {
+                var keyName = String.fromCharCode(e.keyCode);
+                if (keyName === 'C') {
+                    schirm.POST('schirm', JSON.stringify({command:'control-c'}))
+                    return true;
+                } else if (keyName === 'D') {
+                    schirm.POST('schirm', JSON.stringify({command:'control-d'}))
+                    return true;
+                } else if (keyName === 'Z') {
+                    schirm.POST('schirm', JSON.stringify({command:'control-z'}))
+                    return true;
+                }
+            }
+        });
+    };
+
+    schirm.initFrame = function() {
+        schirm.registerTerminalKeyHandlers();
+        setTimeout(schirm.resize, 0);
+    };
+
     schirm.ready = function(f) {
         document.addEventListener('readystatechange', function() {
             if (document.readyState == "complete") {

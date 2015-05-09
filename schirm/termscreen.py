@@ -28,6 +28,8 @@ from pyte import modes as mo, graphics as g, charsets as cs, control as ctrl
 import browserscreen
 import utils
 
+from termiframe import IFRAME_SCRIPT
+
 logger = logging.getLogger(__name__)
 
 # id for the iframe modes:
@@ -570,9 +572,8 @@ class TermScreen(pyte.Screen):
         self.linecontainer.iframe_enter(self.iframe_id, self.cursor.y)
 
     def _iframe_close_document(self):
-        # add some html to the iframe document for registering ctr-c and ctrl-d key handlers
-        iframe_close_snippet = pkgutil.get_data('schirm.resources', 'iframe_close_snippet.html')
-        self.linecontainer.iframe_write(self.iframe_id, iframe_close_snippet)
+        # add some script to iframes that handles resizing, default key events, ...
+        self.linecontainer.iframe_write(self.iframe_id, IFRAME_SCRIPT)
         self.linecontainer.iframe_close(self.iframe_id)
 
     def iframe_set_mode(self, mode_id, cookie):
