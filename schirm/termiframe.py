@@ -343,26 +343,30 @@ class Iframe(object):
         if data.lstrip().startswith("{"):
             # JSON + body string
             header_end_pos = 0
+            body_start_pos = 0
             _p = data.find("\n\n")
             if _p > 0:
                 header_end_pos = _p
+                body_start_pos = _p + 2
             else:
                 _p = data.find('\r\n\r\n')
                 if _p > 0:
                     header_end_pos = _p
+                    body_start_pos = _p + 4
                 else:
                     header_end_pos = len(data)
+                    body_start_pos = header_end_pos
 
             if header_end_pos > 0:
                 try:
                     header = json.loads(data[:header_end_pos])
                 except ValueError, e:
-                    logger.debug("Error while parsing JSON header in iframe %s:\n%s" % (self.iframe_id, str(e)))
+                    logger.debug("Error while parsing JSON header in iframe %s:\n%s" % (self.id, str(e)))
                     header = {}
             else:
                 header = {}
 
-            return self._lowercase_headers(header.items()), data[header_end_pos+1:]
+            return self._lowercase_headers(header.items()), data[body_start_pos:]
 
         else:
             # RFC 821 Message
