@@ -31,7 +31,7 @@
     :license: Simplified BSD License
 """
 
-__all__ = ('enter', 'leave', 'close', 'frame', 'debug',
+__all__ = ('enter', 'leave', 'close', 'frame', 'debug', 'terminal_echo',
            'resource', 'resource_data', 'read_next', 'respond', 'send')
 
 import os
@@ -40,6 +40,7 @@ import cgi
 import fcntl
 import json
 import base64
+import termios
 import urlparse
 from collections import namedtuple
 from contextlib import contextmanager
@@ -79,6 +80,36 @@ def _write_request(header, body, out=sys.stdout):
         out.write("\n\n")
         out.write(base64.b64encode(body))
 
+def terminal_echo(enable):
+    """Control printing of input characters and return the previous echo setting.
+
+    Does nothing and returns None in case neither stdin or stdout are
+    connected to a terminal.
+
+    see also 'man termios'
+    """
+
+    # TODO: what about get_fdin (see frame)???
+    if sys.stdin.isatty():
+        fd = sys.stdin
+    elif sys.stdout.isatty():
+        fd = sys.stdout
+    else:
+        return None
+
+    # tcsetattr, C-API :/
+    iflag, oflag, cflag, lflag, ispeed, ospeed, cc = termios.tcgetattr(fd)
+
+    # keep prev echo setting around
+    echo_state = bool(lflag & termios.ECHO)
+
+    if echo_state != enable:
+        termios.tcsetattr(fd,
+                          termios.TCSANOW,
+                          [iflag, oflag, cflag, (lflag | termios.ECHO) if enable else (lflag & ~termios.ECHO), ispeed, ospeed, cc])
+
+    return echo_state
+
 def enter():
     """Enter the frame mode.
 
@@ -90,7 +121,11 @@ def enter():
     javascript document.load() handler. Call leave() to go back to
     normal terminal emulation mode.
 
-    See also the frame() contextmanager.
+    You must ensure that the terminal echo is disabled before entering
+    frame mode (see terminal_echo and frame).
+
+    See also the frame() contextmanager which handles leave and echo
+    state automatically.
     """
     out = sys.stdout
     out.write(_set_mode_str(mode_id=DOCUMENT_MODE,
@@ -160,9 +195,17 @@ def frame(newline=True, fullscreen=False, url=None, resources={}):
     to the terminal is put into it until `close()` is called.
 
     resources should be a dictionary of urlpath:(data, mimetype) items.
+
+    Turns echo off during frame mode as otherwise the echoed iframe
+    request strings that are written to the terminal by the emulator
+    would interfere with the responses printed to it the application
+    running in frame mode.
     """
     if not isaschirm():
         raise Exception("Not connected to the schirm terminal.")
+
+    # turn echo off so that requests do not interfere with responses
+    echo = terminal_echo(False)
 
     try:
         if fullscreen:
@@ -186,6 +229,9 @@ def frame(newline=True, fullscreen=False, url=None, resources={}):
             out = sys.stdout
             out.write(_reset_mode_str(ALT_BUFFER_MODE))
             out.flush()
+
+        # restore previous echo setting
+        terminal_echo(echo)
 
 def resource(path, name=None, mimetype=''):
     """Make the resource name available to the current iframe.
