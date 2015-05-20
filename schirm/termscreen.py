@@ -314,9 +314,11 @@ class TermScreen(pyte.Screen):
             if self.iframe_mode == 'document':
                 self.linecontainer.iframe_write(self.iframe_id, string)
             else:
-                # ignore all writes to closed documents:
-                # those are echo writes of input to the terminal
-                pass
+                # non-string writes to the terminal - useful for frame app debugging
+                # TODO: print them within the terminal (popup?, menu?,
+                # panel?) to help debugging the application
+                print ">", string
+
         else:
             if mo.IRM in self.mode:
                 # move existing chars to the right before inserting string
