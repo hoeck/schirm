@@ -171,7 +171,7 @@ class Iframes(object):
                     try:
                         return event_method(*args)
                     except:
-                        print "Error while calling iframe method %r, args: %r" % (event_method, args)
+                        print "Error while calling iframe method %r, args: %s" % (event_method, (repr(args)[:800] + '...') if len(repr(args)) > 800 else repr(args))
                         traceback.print_stack()
                         traceback.print_exc()
 
