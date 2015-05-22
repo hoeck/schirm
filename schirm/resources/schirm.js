@@ -213,7 +213,17 @@ var schirm = (function(schirm) {
 
     schirm.initFrame = function() {
         schirm.registerTerminalKeyHandlers();
-        setTimeout(schirm.resize, 0);
+
+        if (!document.body) {
+            schirm.ready(function() {
+                if (resizePrevHeight === undefined) {
+                    // only resize if it has not been called manually in the iframe
+                    schirm.resize();
+                }
+            });
+        } else {
+            schirm.resize();
+        }
     };
 
     schirm.ready = function(f) {
