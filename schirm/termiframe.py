@@ -296,7 +296,6 @@ class Iframe(object):
         status = header.pop('Status', None) or header.pop('status', '200')
 
         if req.url in self.instrument_urls:
-            self.instrument_urls.remove(req.url)
             body = instrument_html(body)
 
         req.respond(status, webkitwindow.Message(header, body))
