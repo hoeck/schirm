@@ -480,9 +480,15 @@ class Iframe(object):
                 # to the terminal and keep the req around, waiting for
                 # a response from the terminal
 
+                req_path = req.url_path
+                if req.url_query:
+                    req_path += '?' + req.url_query
+                if req.url_fragment:
+                    req_path += '#' + req.url_fragment
+
                 header = dict(req.message.headers)
                 header.update({'X-Schirm-Request-Id': str(req.id),
-                               'X-Schirm-Request-Path': req.url_path,
+                               'X-Schirm-Request-Path': req_path,
                                'X-Schirm-Request-Method': req.method})
 
                 term_req = ''.join([STR_START,
