@@ -124,8 +124,10 @@ var schirm = (function(schirm) {
     // ask the iframes parent to resize the current iframe
     var resizePrevHeight;
     schirm.resize = function(height) {
+        var newHeight;
 
         // fullscreen option
+
         if (height === 'fullscreen') {
             // either use console.log or POST to a special URL
             if (0) {
@@ -140,23 +142,19 @@ var schirm = (function(schirm) {
 
         // pixel height options
 
-        // todo: what happens if the style is not using px?
-        var bodyStyle = getComputedStyle(document.body);
-        var bodyMargin = parseInt(bodyStyle.marginTop) + parseInt(bodyStyle.marginBottom);
-
-        var vScrollbarHeight = 0;
-        if (vScrollbarRequired(document.body, bodyMargin)) {
-            vScrollbarHeight = getVScrollbarHeight();
-        }
-
-        var newHeight;
         if ((typeof height) === 'number') {
+            // todo: what happens if the style is not using px?
+            // todo: some refactoring
+            var bodyStyle = getComputedStyle(document.body);
+            var bodyMargin = parseInt(bodyStyle.marginTop) + parseInt(bodyStyle.marginBottom);
+            var vScrollbarHeight = 0;
+            if (vScrollbarRequired(document.body, bodyMargin)) {
+                vScrollbarHeight = getVScrollbarHeight();
+            }
             newHeight = height + vScrollbarHeight + bodyMargin;
-        } else if ((typeof height) === 'object') {
-            newHeight = getElementHeight(height) + vScrollbarHeight + bodyMargin;
         } else if (height === undefined) {
             // auto-resize the body
-            newHeight = document.body.scrollHeight + vScrollbarHeight + bodyMargin;
+            newHeight = document.documentElement.clientHeight;
         }
 
         if (resizePrevHeight !== newHeight) {
