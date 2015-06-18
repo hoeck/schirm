@@ -468,6 +468,11 @@ class Iframe(object):
                 elif cmd == 'control-z':
                     req_ok()
                     return {u'name': u'keypress', u'key': 'control-z'}
+                elif cmd == 'ping':
+                    # this command allows the iframe to check whether
+                    # its alive when not, Iframes.request will respond
+                    # with a 404 notfound upon accessing comm_path
+                    req_ok()
                 else:
                     req_bad("Invalid command: %r" % (cmd, ))
             else:

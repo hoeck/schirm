@@ -98,7 +98,7 @@ var schirm = (function(schirm) {
     }
 
     // simple get and post
-    var request = function(method, uri, data, success) {
+    var request = function(method, uri, data, success, error) {
         var req = new XMLHttpRequest();
         req.open(method, uri, true);
         req.send(data);
@@ -107,21 +107,14 @@ var schirm = (function(schirm) {
                 if (req.status === 200) {
                     (success || function() {})(req.responseText);
                 } else {
-                    // nothing
+                    (error || function() {})(req.status);
                 }
             }
         };
     }
 
-    schirm.GET  = function (uri, data, success) { request('GET', uri, data, success); };
-    schirm.POST = function (uri, data, success) { request('POST', uri, data, success); };
-
-    function getElementHeight(e) {
-        var style = getComputedStyle(e);
-        var margin = parseInt(style.marginTop) + parseInt(style.marginBottom);
-        return Math.max(e.scrollHeight, e.clientHeight) + margin;
-    }
-    schirm.getElementHeight = getElementHeight;
+    schirm.GET  = function (uri, data, success, error) { request('GET', uri, data, success, error); };
+    schirm.POST = function (uri, data, success, error) { request('POST', uri, data, success, error); };
 
     // ask the iframes parent to resize the current iframe
     var resizePrevHeight;
@@ -210,6 +203,25 @@ var schirm = (function(schirm) {
             }
         });
     };
+
+    // check whether the terminal is still in iframe mode
+    // invoke callback with a bool as the answer
+    var isDead = false;
+    schirm.ping = function(cb) {
+        // cache the result once the ping returns an error, as there
+        // is no way to return into this iframes frame mode ever
+        if (isDead) {
+            cb(false);
+        } else {
+            schirm.POST('schirm',
+                        JSON.stringify({command:'ping'}),
+                        function() { cb(true); },
+                        function() {
+                            isDead = true;
+                            cb(false);
+                        });
+        }
+    }
 
     schirm.initFrame = function() {
         schirm.registerTerminalKeyHandlers();
