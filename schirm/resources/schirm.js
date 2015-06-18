@@ -2,6 +2,11 @@
 
 var schirm = (function(schirm) {
 
+    if (schirm.resize) {
+        // already defined
+        return schirm;
+    }
+
     // IPC
     var webSocketUri = "%(websocket_uri)s";
     var commUri = "%(comm_uri)s";
