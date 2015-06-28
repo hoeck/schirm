@@ -551,10 +551,11 @@ class _WebkitWindow(QtGui.QMainWindow):
 
     _close_window = QtCore.pyqtSignal()
 
-    def __init__(self, network_handler, url=None, console_message='print'):
+    def __init__(self, network_handler, url=None, console_message='print', no_focus_classname=None):
         self._console_message = console_message
         self.url = url or "http://localhost"
         self.network_handler = AsyncNetworkHandler(network_handler)
+        self.no_focus_classname = no_focus_classname
         QtGui.QMainWindow.__init__(self)
         self.setup()
 
@@ -577,6 +578,9 @@ class _WebkitWindow(QtGui.QMainWindow):
         self.websocket_backend = WebSocketBackend(self.network_handler)
         self.setup_local_websockets(webpage)
         webView.setPage(webpage)
+
+        # implement the custom focus rule for iframes
+        self.setup_micro_focus_handler(webpage)
 
         horizontalLayout.addWidget(webView)
         horizontalLayout.setContentsMargins(0, 0, 0, 0)
@@ -709,11 +713,32 @@ class _WebkitWindow(QtGui.QMainWindow):
     def setup_local_websockets(self, qwebpage):
         qwebpage.frameCreated.connect(lambda frame: self.setup_local_websockets_on_frame(frame))
 
+    def setup_micro_focus_handler(self, qwebpage):
+        """Allow defining IFRAMEs that can't be focused.
+
+        All iframes that have a css class of `.no_focus_classname` set
+        will pass their (keyboard) focus back to their parent.
+        """
+
+        def _steal_focus_from_frame():
+            p = qwebpage.currentFrame().parentFrame()
+            if p:
+                # blindly assume that .findAllElements and childFrames
+                # return things in the *same* order
+                for e,f in zip(p.findAllElements('iframe'), p.childFrames()):
+                    if f.hasFocus() and self.no_focus_classname in list(e.classes()):
+                        # TODO: break circles in case `p` is trying to
+                        #       assign the focus back to `f`
+                        p.setFocus()
+
+        if self.no_focus_classname:
+            qwebpage.microFocusChanged.connect(_steal_focus_from_frame)
+
 
 class WebkitWindow(object):
 
     @classmethod
-    def run(self, handler, url="http://localhost", exit=True, console_message='print'):
+    def run(self, handler, url="http://localhost", exit=True, console_message='print', no_focus_classname=None):
         """Open a window displaying a single webkit instance.
 
         handler must be an object implementing the NetworkHandler
@@ -725,9 +750,15 @@ class WebkitWindow(object):
         None) controls how to deal with javascript console messages,
         see CustomQWebPage.
 
+        no_focus_classname should be a css classname that, when set on
+        an iframe element, will prevent this element from being
+        focused permanently - it will pass the focus back to its
+        parent iframe. Use None (the default) to turn this feature
+        off.
+
         If exit is true, sys.exit after closing the window.
         """
-        win = self(handler, url, exit, console_message)
+        win = self(handler, url, exit, console_message, no_focus_classname)
         return win._run()
 
     @staticmethod
@@ -735,15 +766,16 @@ class WebkitWindow(object):
         """Enqueue and run function f on the main thread."""
         QtCore.QTimer.singleShot(timeout or 0, f)
 
-    def __init__(self, handler, url, exit, console_message):
+    def __init__(self, handler, url, exit, console_message, no_focus_classname):
         self._handler = handler
         self._url = url
         self._exit = exit
         self._console_message = console_message
+        self._no_focus_classname = no_focus_classname
 
     def _run(self):
         app = QtGui.QApplication(sys.argv)
-        self._window = _WebkitWindow(self._handler, self._url, self._console_message)
+        self._window = _WebkitWindow(self._handler, self._url, self._console_message, self._no_focus_classname)
         self._window.show()
 
         if getattr(self._handler, 'startup', None):

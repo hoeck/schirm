@@ -180,10 +180,23 @@ def render_text(text):
     print style
     print """
 <style> body { margin:0 } </style>
-<iframe class="content" sandbox="allow-same-origin" src="x"></iframe>
+
+<!--
+webkitwindow-no-focus will remove the focus from this iframe, allowing
+CTRL-C in the parent frame to return back to the main terminal context
+-->
+<iframe class="content webkitwindow-no-focus" sandbox="allow-same-origin" src="x"></iframe>
+
 <script type="text/javascript" src="schirm.js"></script>
 <script type="text/javascript">
-schirm.ready(function() { schirm.resize(document.getElementsByClassName('content')[0].contentDocument.body); });
+schirm.ready(function() {
+    var iframe = document.getElementsByClassName('content')[0];
+
+    iframe.onload = function() {
+        schirm.resize(iframe.contentDocument.documentElement.clientHeight);
+    };
+    iframe.onload();
+});
 </script>
 """
 
