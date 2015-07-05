@@ -4,13 +4,12 @@ Schirm
 A Linux compatible terminal emulator which exposes additional HTML
 rendering modes to client programs.
 
-Uses Python, PyQT and ClojureScript.
+![Demo](https://raw.githubusercontent.com/hoeck/schirm/master/doc/demo.gif)
 
 Installing
 ==========
 
-Requires Python 2.7 and PyQT4
-
+Requires Python 2.7 and PyQT4 (and ClojureScript for development).
 
 Get the source:
 
