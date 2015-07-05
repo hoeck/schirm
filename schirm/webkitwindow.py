@@ -538,11 +538,13 @@ class CustomQWebPage(QtWebKit.QWebPage):
 
     def javaScriptConsoleMessage(self, message, lineNumber, sourceID):
         if self._console_message == 'print':
-            print 'js-console: {} ({}:{})'.format(message, sourceID, lineNumber)
+            print u'js-console: {} ({}:{})'.format(unicode(message),
+                                                   unicode(sourceID),
+                                                   unicode(lineNumber)).encode('utf-8', 'ignore')
         elif self._console_message:
-            self._console_message({'message': str(message),
-                                   'line_number': str(lineNumber),
-                                   'source_id': str(sourceID)})
+            self._console_message({'message': unicode(message),
+                                   'line_number': unicode(lineNumber),
+                                   'source_id': unicode(sourceID)})
         else:
             pass
 
@@ -550,6 +552,7 @@ class CustomQWebPage(QtWebKit.QWebPage):
 class _WebkitWindow(QtGui.QMainWindow):
 
     _close_window = QtCore.pyqtSignal()
+    _set_zoom_factor = QtCore.pyqtSignal(float)
 
     def __init__(self, network_handler, url=None, console_message='print', no_focus_classname=None):
         self._console_message = console_message
@@ -559,13 +562,14 @@ class _WebkitWindow(QtGui.QMainWindow):
         QtGui.QMainWindow.__init__(self)
         self.setup()
 
+        self._set_zoom_factor.connect(self.zoom_factor)
+
     def setup(self):
         centralwidget = QtGui.QWidget()
         centralwidget.setObjectName("centralwidget")
         horizontalLayout = QtGui.QHBoxLayout(centralwidget)
         horizontalLayout.setObjectName("horizontalLayout")
-        webView = QtWebKit.QWebView(centralwidget)
-        webView.setObjectName("webView")
+        self.webview = QtWebKit.QWebView(centralwidget)
         webpage = CustomQWebPage(console_message=self._console_message)
 
         # set the custom NAM
@@ -577,16 +581,16 @@ class _WebkitWindow(QtGui.QMainWindow):
         # -> catch them in the javascript directly
         self.websocket_backend = WebSocketBackend(self.network_handler)
         self.setup_local_websockets(webpage)
-        webView.setPage(webpage)
+        self.webview.setPage(webpage)
 
         # implement the custom focus rule for iframes
         self.setup_micro_focus_handler(webpage)
 
-        horizontalLayout.addWidget(webView)
+        horizontalLayout.addWidget(self.webview)
         horizontalLayout.setContentsMargins(0, 0, 0, 0)
         self.setCentralWidget(centralwidget)
 
-        webView.setUrl(QtCore.QUrl(self.url))
+        self.webview.setUrl(QtCore.QUrl(self.url))
 
         # setup webkit
         gs = QtWebKit.QWebSettings.globalSettings()
@@ -734,6 +738,15 @@ class _WebkitWindow(QtGui.QMainWindow):
         if self.no_focus_classname:
             qwebpage.microFocusChanged.connect(_steal_focus_from_frame)
 
+    @QtCore.pyqtSlot(float)
+    def zoom_factor(self, zf=None):
+        """Get or set the zoom factor for the embedded webview."""
+        if zf == None:
+            return self.webview.zoomFactor()
+        else:
+            assert isinstance(zf, float)
+            self.webview.setZoomFactor(zf)
+
 
 class WebkitWindow(object):
 
@@ -789,3 +802,11 @@ class WebkitWindow(object):
     def close(self):
         """Close this WebkitWindow and exit."""
         self._window._close_window.emit()
+
+    def zoom_factor(self, zoom_factor=None):
+        """Get or set the zoom factor."""
+        if zoom_factor == None:
+            return self._window.zoom_factor()
+        else:
+            assert isinstance(zoom_factor, (int, long, float))
+            self._window._set_zoom_factor.emit(float(zoom_factor))

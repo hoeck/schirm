@@ -44,8 +44,15 @@ class SchirmHandler(object):
     def startup(self, window):
         signal.signal(signal.SIGINT, signal.SIG_DFL) # exit on CTRL-C
 
+        # collection of methods to control the webkit window
+        class _WindowControl:
+
+            @staticmethod
+            def zoom_factor(*args, **kwargs):
+                return window.zoom_factor(*args, **kwargs)
+
         def _thread():
-            self._startup_fn()
+            self._startup_fn(_WindowControl)
             window.close()
 
         utils.create_thread(_thread)
@@ -74,7 +81,8 @@ def setup_and_dispatch(server_chan,
                        use_pty,
                        cmd,
                        start_clojurescript_repl=False,
-                       initial_request=None):
+                       initial_request=None,
+                       window_control=None):
 
     # client process (pty or plain process)
     client = terminalio.AsyncResettableTerminal(
@@ -85,7 +93,8 @@ def setup_and_dispatch(server_chan,
     # terminal
     term = terminal.Terminal(client,
                              url=terminal_url,
-                             start_clojurescript_repl=start_clojurescript_repl)
+                             start_clojurescript_repl=start_clojurescript_repl,
+                             window_control=window_control)
 
     if initial_request:
         term.request(initial_request)
@@ -137,7 +146,7 @@ def run(use_pty=True, cmd=None, start_clojurescript_repl=False):
 
     terminal_url = terminal.Terminal.create_url()
 
-    def run_emulation():
+    def run_emulation(window_control):
         req = None
         while True:
             res, req = setup_and_dispatch(server_chan=server_chan,
@@ -145,7 +154,8 @@ def run(use_pty=True, cmd=None, start_clojurescript_repl=False):
                                           use_pty=use_pty,
                                           terminal_url=terminal_url,
                                           start_clojurescript_repl=start_clojurescript_repl,
-                                          initial_request=req)
+                                          initial_request=req,
+                                          window_control=window_control)
             if res == 'reload':
                 pass
             else:

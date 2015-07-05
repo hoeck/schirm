@@ -154,7 +154,8 @@ var schirm = (function(schirm) {
             newHeight = height + vScrollbarHeight + bodyMargin;
         } else if (height === undefined) {
             // auto-resize the body
-            newHeight = document.documentElement.clientHeight;
+            // +1 to adjust for rounding errors in clientHeight when using browser zoom
+            newHeight = document.documentElement.clientHeight + 1;
         }
 
         if (resizePrevHeight !== newHeight) {

@@ -38,7 +38,9 @@
   (->> [(when (:shift key) :shift),
         (when (:control key) :control),
         (when (:alt key ) :alt),
-        (string/lower-case (when-let [k (or (:name key) (.fromCharCode js/String (:code key)))] (keyword k)))]
+        (string/lower-case (when-let [k (or (:name key)
+                                            (and (not= (:string key) "") (:string key))
+                                            (.fromCharCode js/String (:code key)))] (keyword k)))]
        (filter identity)))
 
 (defn handle-key-down [chords env key]
@@ -59,7 +61,6 @@
           (:name key)
           (do (send-key key)
               true)
-
           :else false
           )))
 
@@ -84,7 +85,7 @@
                        :shift (.-shiftKey e)
                        :alt (.-altKey e)
                        :control (.-ctrlKey e)}]
-              (if (and (:string key) (not @key-down-processed))
+              (if (and (:string key) (not @key-down-processed) (not (handle-key-down chords env key)))
                 (do ((:send-key env) key)
                     true)
                 false))))

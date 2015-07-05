@@ -41,14 +41,19 @@ class Terminal(object):
         """Return a non-guessable localhost subdomain url for this terminal."""
         return "http://%s.localhost" % (id or utils.roll_id())
 
-    def __init__(self, client, size=(80,25), url=None, start_clojurescript_repl=False):
+    def __init__(self, client, size=(80,25), url=None, start_clojurescript_repl=False, window_control=None):
         self.client = client
         self.size = size
         self._start_clojurescript_repl = start_clojurescript_repl
-        self.reset()
+
+        # SchirmHandler._WindowControl, to have access to
+        # webkitwindow functionality such as setting the zoom
+        self._window_control = window_control
 
         # unique random id to hide the terminals url
         self.url = url or self.create_url()
+
+        self.reset()
 
     def reset(self):
         # set up the terminal emulation:
@@ -306,11 +311,28 @@ class Terminal(object):
         """
         self.keypress('control-c')
 
+    def zoom_increase(self):
+        if self._window_control:
+            zf = self._window_control.zoom_factor()
+            self._window_control.zoom_factor(zf*1.1)
+
+    def zoom_decrease(self):
+        if self._window_control:
+            zf = self._window_control.zoom_factor()
+            self._window_control.zoom_factor(zf*0.9)
+
+    def zoom_default(self):
+        if self._window_control:
+            self._window_control.zoom_factor(1.0)
+
     valid_msg_names = set(['keypress',
                            'resize',
                            'paste_selection',
                            'iframe_resize',
-                           'iframe_request_close'])
+                           'iframe_request_close',
+                           'zoom_increase',
+                           'zoom_decrease',
+                           'zoom_default'])
 
     def dispatch_msg(self, msg):
         """Dispatch websocket messages coming from the terminal UI."""

@@ -159,20 +159,27 @@
                ;; paste the primary x selection using `xsel`
                (send {:name "paste_selection"}))
              [:control :v]
-             (fn [{:keys [send]}] (copy-n-paste-hack/key-paste #(send {:name "paste_selection" :string %})))
+             (fn [{:keys [send]}] (copy-n-paste-hack/key-paste #(send {:name "paste_selection" :string %})) true)
              ;; scrolling
              [:shift :page_up]   (fn [env] (screen/scroll :page-up)   true)
              [:shift :page_down] (fn [env] (screen/scroll :page-down) true)
              [:shift :home] (fn [env] (screen/scroll :top)    true)
              [:shift :end]  (fn [env] (screen/scroll :bottom) true)
              ;; browsers have space and shift-space bound to scroll page down/up
-             [:space] (fn [{:keys [send-key]}] (send-key {:string " "}) true)
-             [:shift :space] (fn [{:keys [send-key]}] (send-key {:string " "}) true)
+             [:space] (fn [{:keys [send-key]}] (send-key {:string " "}))
+             [:shift :space] (fn [{:keys [send-key]}] (send-key {:string " "}))
              ;; ignore F12 as this opens the browsers devtools
-             [:F12] (fn [env] false)})
+             [:F12] (fn [env] false)
+             ;; zoom
+             [:control :+] (fn [{:keys [send]}] (send {:name "zoom_increase"}))
+             [:control :-] (fn [{:keys [send]}] (send {:name "zoom_decrease"}))
+             [:control :0] (fn [{:keys [send]}] (send {:name "zoom_default"}))})
 
 (defn setup-keys [send-chan send-callback]
-  (let [send (fn [message] (put! send-chan (.stringify js/JSON (clj->js message))))
+  (let [send (fn [message]
+               (put! send-chan (.stringify js/JSON (clj->js message)))
+               ;; return true to indicate successful chord-handling
+               true)
         send-key (fn [key]
                    (when send-callback (send-callback))
                    (let [message {:name :keypress :key key}]
@@ -208,6 +215,7 @@
                        #(word-select/select-word % s))))
 
 (defn setup-iframe-focus []
+  ;;; TODO: automatically focus active iframes
   (.addEventListener js/window "focus" (fn []
                                          (when-let [e (-> js/document (.querySelector "iframe.focus"))]
                                            (-> e .-classList (.remove "focus")))))
