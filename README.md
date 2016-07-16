@@ -117,6 +117,12 @@ Similar Programs
 - <https://github.com/chjj/tty.js> ([actual terminal emulator here](https://raw.github.com/chjj/tty.js/master/static/term.js))
 - <http://mister-muffin.de/scriptreplay/VT100.js> (Frank Bi's unmaintained terminal emulator, outdated by now)
 - <https://github.com/s-macke/jor1k/blob/master/js/terminal.js> (from jor1k, the JavaScript OpenRISC emulator)
+- <https://github.com/shockone/black-screen>: built on electron, blends shell features (e.g. autocompletion) into the terminal, aims to be VT100 compatible
+- <https://github.com/substack/exterminate>: nodejs, runs in chrome, VT100, web features such as image and html display
+- <https://github.com/CGamesPlay/hterminal>: electron, alpha, augments commands such as ls and git status, uses fish shell, special HTerminal protocol for extensions
+- <https://github.com/sedwards2009/extraterm>: electron, typescriptm codemirror for displaying, solid emulation based on term.js
+- <https://github.com/PerBothner/DomTerm>: terminal emulation in JS, Server or GUI in Java, extension via escape sequences
+- <https://github.com/zeit/hyperterm>: electron, focus on emulation and plugin-like extensions
 
 Licence
 =======
