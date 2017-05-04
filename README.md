@@ -123,6 +123,7 @@ Similar Programs
 - <https://github.com/sedwards2009/extraterm>: electron, typescriptm codemirror for displaying, solid emulation based on term.js
 - <https://github.com/PerBothner/DomTerm>: terminal emulation in JS, Server or GUI in Java, extension via escape sequences
 - <https://github.com/zeit/hyperterm>: electron, focus on emulation and plugin-like extensions
+- <https://github.com/vshatskyi/black-screen>: electron, integrates with the actual shell to e.g. provide an autocompletion popup
 
 Licence
 =======
